@@ -10,4 +10,5 @@ dist/
 apps/android/local.properties
 apps/android/app/google-services.json
 apps/android/**/google-services.json
-apps/android/**/*.json
+apps/android/**/*service-account*.json
+apps/android/**/*firebase*.json
