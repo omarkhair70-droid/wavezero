@@ -18,11 +18,15 @@ android {
 }
 
 dependencies {
+    val media3Version = "1.10.1"
+
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
+    implementation("androidx.media3:media3-datasource:$media3Version")
 
-    // TODO: Android Media3 integration: add androidx.media3 ExoPlayer, session,
-    // datasource, and cache modules when the playback adapter is implemented.
+    testImplementation("junit:junit:4.13.2")
 }
