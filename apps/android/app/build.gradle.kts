@@ -36,7 +36,9 @@ android {
 }
 
 dependencies {
-    val media3Version = "1.10.1"
+    // Media3 1.10.x requires compileSdk 36. Keep 1.6.1 until the Android
+    // Gradle Plugin and compileSdk are upgraded together in a dedicated change.
+    val media3Version = "1.6.1"
 
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.activity:activity-compose:1.9.3")
