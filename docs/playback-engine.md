@@ -22,8 +22,16 @@ Core modules:
 
 ## Android Playback Path
 
-TODO: Android Media3 integration will adapt `PrefetchDecision` into Media3
-preload/cache operations while ExoPlayer owns actual decoding and playback.
+Phase 0B adds a real Android playback proof with Kotlin, Jetpack Compose, and
+AndroidX Media3 ExoPlayer. ExoPlayer owns HLS loading, decoding, buffering, and
+audio output. The Android `AudioPlayerManager` exposes state and metrics to
+Compose while keeping the demo track source isolated for later API replacement.
+
+The Rust core remains the playback brain for deterministic queue and prefetch
+decisions. Android will pass track, queue, cache, and network snapshots through a
+future UniFFI/JNI boundary, then translate `PrefetchDecision` outputs into Media3
+preload/cache behavior. See `docs/android-playback-proof.md` for the Phase 0B
+boundary and metrics details.
 
 ## Future iOS Playback Path
 
