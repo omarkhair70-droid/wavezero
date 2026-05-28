@@ -1,0 +1,7 @@
+name = "wavezero-edge-worker"
+main = "src/index.ts"
+compatibility_date = "2026-05-28"
+
+[[r2_buckets]]
+binding = "MANIFEST_BUCKET"
+bucket_name = "wavezero-audio"

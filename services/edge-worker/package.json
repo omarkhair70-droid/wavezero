@@ -1,0 +1,15 @@
+{
+  "name": "wavezero-edge-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev src/index.ts",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260501.0",
+    "typescript": "^5.8.0",
+    "wrangler": "^4.0.0"
+  }
+}

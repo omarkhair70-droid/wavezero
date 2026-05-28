@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "crates/wavezero-core",
+]
+exclude = [
+    "services/api",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://example.com/wavezero"
+
+[workspace.dependencies]
+wavezero-core = { path = "crates/wavezero-core" }
