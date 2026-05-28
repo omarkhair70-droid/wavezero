@@ -1,8 +1,15 @@
+import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.firebase.appdistribution")
 }
+
+val firebaseAppId: String? = providers.gradleProperty("firebaseAppId")
+    .orElse(providers.environmentVariable("FIREBASE_APP_ID"))
+    .orNull
 
 android {
     namespace = "com.wavezero.player"
@@ -14,6 +21,17 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+    }
+
+    buildTypes {
+        getByName("debug") {
+            firebaseAppDistribution {
+                artifactType = "APK"
+                groups = "internal-testers"
+                releaseNotes = "WaveZero Android debug build for internal Media3 playback proof testing."
+                firebaseAppId?.let { appId = it }
+            }
+        }
     }
 }
 
