@@ -6,6 +6,7 @@ class PlaybackMetrics {
     this.bufferCount = 0,
     this.isPlaying = false,
     this.currentPositionMs = 0,
+    this.durationMs,
     this.playbackError,
     this.sessionId,
     this.attemptId = 0,
@@ -32,6 +33,7 @@ class PlaybackMetrics {
   final int bufferCount;
   final bool isPlaying;
   final int currentPositionMs;
+  final int? durationMs;
   final String? playbackError;
   final String? sessionId;
   final int attemptId;
@@ -61,6 +63,8 @@ class PlaybackMetrics {
     int? bufferCount,
     bool? isPlaying,
     int? currentPositionMs,
+    int? durationMs,
+    bool clearDurationMs = false,
     String? playbackError,
     bool clearPlaybackError = false,
     String? sessionId,
@@ -98,6 +102,7 @@ class PlaybackMetrics {
       bufferCount: bufferCount ?? this.bufferCount,
       isPlaying: isPlaying ?? this.isPlaying,
       currentPositionMs: currentPositionMs ?? this.currentPositionMs,
+      durationMs: clearDurationMs ? null : durationMs ?? this.durationMs,
       playbackError:
           clearPlaybackError ? null : playbackError ?? this.playbackError,
       sessionId: sessionId ?? this.sessionId,
@@ -136,6 +141,7 @@ class PlaybackMetrics {
       'bufferCount': bufferCount,
       'isPlaying': isPlaying,
       'currentPositionMs': currentPositionMs,
+      'durationMs': durationMs,
       'playbackError': playbackError,
       'sessionId': sessionId,
       'attemptId': attemptId,
@@ -172,6 +178,7 @@ class PlaybackMetrics {
       bufferCount: _readInt(json['bufferCount']) ?? 0,
       isPlaying: json['isPlaying'] == true,
       currentPositionMs: _readInt(json['currentPositionMs']) ?? 0,
+      durationMs: _readInt(json['durationMs']),
       playbackError: json['playbackError'] as String?,
       sessionId: json['sessionId'] as String?,
       attemptId: _readInt(json['attemptId']) ?? 0,
