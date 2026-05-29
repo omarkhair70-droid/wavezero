@@ -125,22 +125,34 @@ Outcome:
 - Duplicate Play taps during startup no longer create fake attempts.
 - Wi-Fi and 4G baseline testing has started.
 
+### Phase 0H — Startup Speed Optimization
+
+Status: Completed
+
+Outcome:
+
+- Media3 prepare starts during Load Track.
+- Play becomes a fast `playWhenReady` command when the player is already ready.
+- Wi-Fi and 4G tap-to-audio results improved to around half a second in manual testing.
+- Notification, background playback, and duplicate Play guard behavior were preserved.
+
 ## Next Phases
 
-### Phase 0H — Startup Speed Optimization
+### Phase 0H.1 — Preload Metrics
 
 Status: In progress
 
 Goal:
 
-Reduce first-play startup latency by preparing the Media3 player during Load Track instead of waiting until Play.
+Measure the hidden preload work moved from Play to Load Track by Phase 0H.
 
 Scope:
 
-- Call Media3 `prepare()` during `loadTrack`.
-- Keep Play as a fast `playWhenReady` command when the player is already ready.
-- Preserve notification, background playback, and duplicate Play guard behavior.
-- Compare before/after Wi-Fi and 4G metrics using `tapToFirstAudioMs`, `tapToReadyMs`, and `startupBufferMs`.
+- Add `preparedBeforePlay` to show whether the player was ready before Play.
+- Add `loadToManifestMs` to measure Load Track to HLS manifest completion.
+- Add `loadToReadyMs` to measure Load Track to Media3 ready.
+- Add `prebufferCount` and `prebufferMs` to separate pre-Play buffering from Play-time startup buffering.
+- Expose preload metrics through Flutter and tests.
 
 Non-goals:
 

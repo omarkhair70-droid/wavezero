@@ -19,6 +19,11 @@ void main() {
       rebufferCount: 1,
       rebufferMs: 40,
       totalBufferMs: 130,
+      preparedBeforePlay: true,
+      loadToManifestMs: 55,
+      loadToReadyMs: 75,
+      prebufferCount: 1,
+      prebufferMs: 70,
       lastEvent: 'playing',
       trackTitle: 'Title',
       trackUrl: 'https://example.test/stream.m3u8',
@@ -29,8 +34,15 @@ void main() {
     expect(metrics.toJson()['startupBufferMs'], 90);
     expect(metrics.toJson()['rebufferCount'], 1);
     expect(metrics.toJson()['totalBufferMs'], 130);
+    expect(metrics.toJson()['preparedBeforePlay'], isTrue);
+    expect(metrics.toJson()['loadToManifestMs'], 55);
+    expect(metrics.toJson()['loadToReadyMs'], 75);
+    expect(metrics.toJson()['prebufferCount'], 1);
+    expect(metrics.toJson()['prebufferMs'], 70);
     expect(metrics.toDisplayText(), contains('tapToFirstAudioMs: 20'));
     expect(metrics.toDisplayText(), contains('startupBufferMs: 90'));
+    expect(metrics.toDisplayText(), contains('preparedBeforePlay: true'));
+    expect(metrics.toDisplayText(), contains('loadToReadyMs: 75'));
     expect(metrics.toDisplayText(), contains('trackTitle: Title'));
   });
 
@@ -46,6 +58,11 @@ void main() {
       'rebufferCount': 1.0,
       'rebufferMs': 33.0,
       'totalBufferMs': 124.0,
+      'preparedBeforePlay': true,
+      'loadToManifestMs': 51.0,
+      'loadToReadyMs': 72.0,
+      'prebufferCount': 1.0,
+      'prebufferMs': 66.0,
       'sessionId': 'native-session',
       'lastEvent': 'error',
     });
@@ -60,6 +77,11 @@ void main() {
     expect(metrics.rebufferCount, 1);
     expect(metrics.rebufferMs, 33);
     expect(metrics.totalBufferMs, 124);
+    expect(metrics.preparedBeforePlay, isTrue);
+    expect(metrics.loadToManifestMs, 51);
+    expect(metrics.loadToReadyMs, 72);
+    expect(metrics.prebufferCount, 1);
+    expect(metrics.prebufferMs, 66);
     expect(metrics.sessionId, 'native-session');
     expect(metrics.lastEvent, 'error');
   });

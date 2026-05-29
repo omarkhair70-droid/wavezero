@@ -3,6 +3,7 @@ package com.wavezero.player.playback
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlaybackMetricsMapTest {
@@ -25,6 +26,11 @@ class PlaybackMetricsMapTest {
             rebufferCount = 1,
             rebufferMs = 40L,
             totalBufferMs = 130L,
+            preparedBeforePlay = true,
+            loadToManifestMs = 55L,
+            loadToReadyMs = 75L,
+            prebufferCount = 1,
+            prebufferMs = 70L,
             lastEvent = "playing",
             trackTitle = "Title",
             trackUrl = "https://example.test/stream.m3u8",
@@ -48,6 +54,11 @@ class PlaybackMetricsMapTest {
         assertEquals(1, map["rebufferCount"])
         assertEquals(40L, map["rebufferMs"])
         assertEquals(130L, map["totalBufferMs"])
+        assertEquals(true, map["preparedBeforePlay"])
+        assertEquals(55L, map["loadToManifestMs"])
+        assertEquals(75L, map["loadToReadyMs"])
+        assertEquals(1, map["prebufferCount"])
+        assertEquals(70L, map["prebufferMs"])
         assertEquals("playing", map["lastEvent"])
         assertEquals("Title", map["trackTitle"])
         assertEquals("https://example.test/stream.m3u8", map["trackUrl"])
@@ -58,6 +69,10 @@ class PlaybackMetricsMapTest {
         var nowMs = 1_000L
         val tracker = PlaybackMetricsTracker(nowMs = { nowMs })
         tracker.loadTrack("Loaded", "https://example.test/loaded.m3u8")
+        tracker.markBufferingStarted()
+        nowMs += 50L
+        tracker.markBufferingEnded()
+        tracker.markReady()
         tracker.markPlayTapped()
         nowMs += 100L
         tracker.markPlaying(positionMs = 42L)
@@ -77,6 +92,11 @@ class PlaybackMetricsMapTest {
         assertEquals(0, reset.rebufferCount)
         assertEquals(0L, reset.rebufferMs)
         assertEquals(0L, reset.totalBufferMs)
+        assertFalse(reset.preparedBeforePlay)
+        assertNull(reset.loadToManifestMs)
+        assertNull(reset.loadToReadyMs)
+        assertEquals(0, reset.prebufferCount)
+        assertEquals(0L, reset.prebufferMs)
     }
 
     @Test
@@ -121,5 +141,38 @@ class PlaybackMetricsMapTest {
         assertEquals(1, rebufferEnded.rebufferCount)
         assertEquals(150L, rebufferEnded.rebufferMs)
         assertEquals(400L, rebufferEnded.totalBufferMs)
+    }
+
+    @Test
+    fun metricsTrackPreloadManifestReadyAndPrebufferBeforePlay() {
+        var nowMs = 1_000L
+        val tracker = PlaybackMetricsTracker(nowMs = { nowMs })
+        tracker.loadTrack("Loaded", "https://example.test/loaded.m3u8")
+
+        tracker.markBufferingStarted()
+        nowMs += 200L
+        val prebufferEnded = tracker.markBufferingEnded()
+        assertEquals(1, prebufferEnded.prebufferCount)
+        assertEquals(200L, prebufferEnded.prebufferMs)
+        assertEquals(0, prebufferEnded.bufferCount)
+        assertEquals(0L, prebufferEnded.startupBufferMs)
+
+        nowMs += 100L
+        val manifest = tracker.markManifestLoaded(loadDurationMs = 90L)
+        assertEquals(90L, manifest.manifestLoadMs)
+        assertEquals(300L, manifest.loadToManifestMs)
+
+        nowMs += 150L
+        val ready = tracker.markReady()
+        assertTrue(ready.preparedBeforePlay)
+        assertEquals(450L, ready.loadToReadyMs)
+        assertNull(ready.tapToReadyMs)
+
+        nowMs += 1_000L
+        val attempt = tracker.markPlayTapped()
+        assertEquals(1, attempt.attemptId)
+        assertEquals(0, attempt.bufferCount)
+        assertEquals(200L, attempt.prebufferMs)
+        assertTrue(attempt.preparedBeforePlay)
     }
 }
