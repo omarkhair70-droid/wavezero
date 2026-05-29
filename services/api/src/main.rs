@@ -63,6 +63,7 @@ enum CatalogAudioCodec {
     AacLc,
     Opus,
     Flac,
+    Mp3,
 }
 
 #[derive(Debug, Serialize)]
@@ -355,6 +356,7 @@ impl From<&CatalogTrackAsset> for TrackAssetResponse {
                 CatalogAudioCodec::AacLc => "aac_lc",
                 CatalogAudioCodec::Opus => "opus",
                 CatalogAudioCodec::Flac => "flac",
+                CatalogAudioCodec::Mp3 => "mp3",
             }
             .to_string(),
             bitrate_kbps: asset.bitrate_kbps,
@@ -383,6 +385,7 @@ impl From<CatalogAudioCodec> for AudioCodec {
             CatalogAudioCodec::AacLc => AudioCodec::AacLc,
             CatalogAudioCodec::Opus => AudioCodec::Opus,
             CatalogAudioCodec::Flac => AudioCodec::Flac,
+            CatalogAudioCodec::Mp3 => AudioCodec::Mp3,
         }
     }
 }
@@ -408,8 +411,8 @@ mod tests {
     #[test]
     fn dev_catalog_fixture_loads_real_playable_track() {
         let catalog = CatalogStore::from_dev_fixture();
-        assert_eq!(catalog.artists.len(), 2);
-        assert_eq!(catalog.tracks.len(), 2);
+        assert_eq!(catalog.artists.len(), 3);
+        assert_eq!(catalog.tracks.len(), 3);
 
         let track = catalog
             .find_track("track-apple-bipbop-hls")
@@ -418,7 +421,25 @@ mod tests {
 
         assert_eq!(track.title, "Apple BipBop HLS Demo");
         assert!(asset.manifest_url.ends_with("prog_index.m3u8"));
-        assert_eq!(track.to_core_track().primary_asset().unwrap().manifest_url, asset.manifest_url);
+        assert_eq!(
+            track.to_core_track().primary_asset().unwrap().manifest_url,
+            asset.manifest_url
+        );
+    }
+
+    #[test]
+    fn dev_catalog_fixture_loads_local_real_mp3_track() {
+        let catalog = CatalogStore::from_dev_fixture();
+        let track = catalog
+            .find_track("track-local-real-song")
+            .expect("local real track exists");
+        let asset = track.primary_asset().expect("local real track has primary asset");
+        let core_track = track.to_core_track();
+        let core_asset = core_track.primary_asset().expect("core local asset exists");
+
+        assert_eq!(track.title, "Local Real Song");
+        assert_eq!(asset.manifest_url, "http://192.168.1.7:8090/song.mp3");
+        assert_eq!(core_asset.codec, AudioCodec::Mp3);
     }
 
     #[test]
@@ -433,5 +454,20 @@ mod tests {
 
         assert_eq!(track.artist_name.as_deref(), Some("WaveZero Labs"));
         assert_eq!(track.primary_asset.as_ref().unwrap().codec, "aac_lc");
+    }
+
+    #[test]
+    fn catalog_response_includes_local_real_song_mp3_asset() {
+        let catalog = CatalogStore::from_dev_fixture();
+        let response = catalog.response();
+        let track = response
+            .tracks
+            .iter()
+            .find(|track| track.id == "track-local-real-song")
+            .expect("local real track response exists");
+
+        assert_eq!(track.artist_name.as_deref(), Some("Local Lab"));
+        assert_eq!(track.primary_asset.as_ref().unwrap().codec, "mp3");
+        assert_eq!(track.primary_asset.as_ref().unwrap().bitrate_kbps, 128);
     }
 }
