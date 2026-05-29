@@ -48,30 +48,40 @@ Outcome:
 - Flutter can command load/play/pause/stop/retry/reset/metrics through the bridge.
 - Metrics model now includes richer bridge fields including session, attempt, timing, event, track title, and URL.
 
+### Phase 0E — Developer Distribution Automation
+
+Status: Completed
+
+Outcome:
+
+- Android and Flutter local development scripts were added.
+- Flutter Android host can build and install locally.
+- Firebase App Distribution documentation exists without committing credentials.
+- Stable Rust CI checks run on GitHub Actions.
+
 ## Next Phases
 
-### Phase 0E — Developer Distribution Automation
+### Phase 0E.1 — Flutter Android Toolchain Upgrade
 
 Status: In progress
 
 Goal:
 
-Make development and testing faster without manually creating and sharing APK files every time.
+Keep the Flutter Android host ahead of Flutter's dependency validation warnings without changing playback behavior.
 
 Scope:
 
-- Document Android Studio Run and Wireless Debugging workflow.
-- Add Windows helper scripts for Android debug assemble/install, Firebase debug upload, Flutter Android run, and local environment checks.
-- Stabilize Firebase App Distribution debug upload workflow without committing secrets.
-- Add stable Rust CI checks.
-- Document Android and Flutter CI as future work until the local build path is verified without committed Gradle wrapper binaries or secrets.
+- Upgrade the Flutter Android host Android Gradle Plugin to a Flutter-supported version.
+- Upgrade the Flutter Android host Kotlin plugin to a Flutter-supported version.
+- Keep Flutter Android repository resolution and build output path stable.
+- Verify `flutter run` still installs and launches the Flutter host on a real Android device.
 
 Non-goals:
 
-- No Google Play release automation yet.
-- No production signing setup yet.
-- No playback behavior changes.
-- No feature expansion.
+- No Media3 upgrade.
+- No playback logic changes.
+- No UI/feature expansion.
+- No production signing.
 
 ### Phase 0F — Background Playback and Media Session
 
@@ -157,42 +167,3 @@ Scope:
 ### Phase 4 — iOS Native Adapter
 
 Goal:
-
-Add iOS playback using the same architecture.
-
-Scope:
-
-- Swift/AVFoundation playback adapter.
-- Flutter command UI on iOS.
-- Control Center and lock-screen controls.
-- iOS route/interruption handling.
-- Metrics parity with Android where possible.
-
-### Phase 5 — Premium Product UX
-
-Goal:
-
-Move from proof to product.
-
-Scope:
-
-- Home.
-- Search.
-- Library.
-- Player screen.
-- Artist and album screens.
-- Offline/download strategy.
-- Account and settings flows.
-
-## Development Loop
-
-Default development should not require manual APK sharing.
-
-Preferred loops:
-
-1. Android Studio Run or Wireless Debugging for daily device testing.
-2. `flutter run` for Flutter host testing once Flutter is installed locally.
-3. Firebase App Distribution for sharing tester builds.
-4. GitHub Actions for stable Rust checks and, later, Android/Flutter build plus tester upload automation after local tooling is verified.
-
-Manual APK generation should be used only when needed for debugging or temporary sharing.
