@@ -146,30 +146,41 @@ Outcome:
 - Flutter displays the preload metrics.
 - Android and Flutter tests cover the preload metrics contract.
 
+### Phase 0I — Real Player UX
+
+Status: Completed
+
+Outcome:
+
+- The Flutter proof screen became a real player shell.
+- The UI includes a now-playing card, artwork placeholder, progress slider, main playback controls, diagnostics panel, and mini-player strip.
+- Native seek support is available through the Flutter/Android bridge.
+- Metrics remain visible and copyable from the player UI.
+
 ## Next Phases
 
-### Phase 0I — Real Player UX
+### Phase 0I.1 — Player UX Polish and Seek Reliability
 
 Status: In progress
 
 Goal:
 
-Replace the proof-style metrics screen with a real player shell while preserving native playback and measurement.
+Polish the first real player shell and prevent seek activity from being counted as normal rebuffering.
 
 Scope:
 
-- Add a premium now-playing card with artwork placeholder, track title, status, and artist/proof label.
-- Add a player progress slider and time labels.
-- Add native seek support through the Flutter/Android bridge.
-- Add Play/Pause, Retry, and Stop controls in a player layout.
-- Keep metrics available behind an expandable diagnostics panel.
-- Add a bottom mini-player strip.
+- Track seek attempts with `seekCount` and `lastSeekToMs`.
+- Track seek-induced buffering separately with `seekBufferMs`.
+- Avoid incrementing `rebufferCount` for buffering caused immediately by seek.
+- Clamp native seek targets to known media duration when available.
+- Keep diagnostics able to show the difference between true rebuffering and seek buffering.
+- Keep Play/Pause, notification controls, and background playback unchanged.
 
 Non-goals:
 
+- No queue or playlist model yet.
 - No production artwork pipeline yet.
 - No backend catalog work yet.
-- No queue or playlist model yet.
 
 ### Phase 1 — Real Catalog API
 
