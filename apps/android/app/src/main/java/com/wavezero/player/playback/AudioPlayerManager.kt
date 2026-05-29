@@ -228,9 +228,16 @@ class AudioPlayerManager(
     }
 
     fun seekTo(positionMs: Long) {
-        val safePosition = positionMs.coerceAtLeast(0L)
+        val durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+        val safePosition = if (durationMs == null) {
+            positionMs.coerceAtLeast(0L)
+        } else {
+            positionMs.coerceIn(0L, durationMs)
+        }
+        publish(metricsTracker.markSeekStarted(safePosition))
         player.seekTo(safePosition)
         publish(metricsTracker.markPosition(player.currentPosition))
+        startPositionUpdates()
     }
 
     fun resetMetrics() {
