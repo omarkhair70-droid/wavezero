@@ -5,8 +5,8 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $FlutterDir = Join-Path $RepoRoot "apps\flutter\wavezero_app"
 $AndroidPackageName = "com.wavezero.flutter"
 $ApkCandidates = @(
-    Join-Path $FlutterDir "build\app\outputs\flutter-apk\app-debug.apk",
-    Join-Path $FlutterDir "android\app\build\outputs\apk\debug\app-debug.apk"
+    (Join-Path -Path $FlutterDir -ChildPath "build\app\outputs\flutter-apk\app-debug.apk"),
+    (Join-Path -Path $FlutterDir -ChildPath "android\app\build\outputs\apk\debug\app-debug.apk")
 )
 
 $Flutter = Get-Command flutter -ErrorAction SilentlyContinue
@@ -44,16 +44,16 @@ function Install-And-Launch-DebugApk {
         exit 1
     }
 
-    Write-Warning "flutter run failed after build. Falling back to adb install + launch."
+    Write-Warning "flutter run failed after build. Falling back to debug APK install and launch."
     Write-Host "Installing debug APK fallback: $($Apk.FullName)"
-    & $Adb.Source install -r $Apk.FullName
+    & $Adb.Source "install" "-r" $Apk.FullName
     if ($LASTEXITCODE -ne 0) {
         Write-Error "adb install fallback failed with exit code $LASTEXITCODE."
         exit $LASTEXITCODE
     }
 
     Write-Host "Launching $AndroidPackageName"
-    & $Adb.Source shell monkey -p $AndroidPackageName 1
+    & $Adb.Source "shell" "monkey" "-p" $AndroidPackageName "1"
     if ($LASTEXITCODE -ne 0) {
         Write-Error "adb launch fallback failed with exit code $LASTEXITCODE."
         exit $LASTEXITCODE
