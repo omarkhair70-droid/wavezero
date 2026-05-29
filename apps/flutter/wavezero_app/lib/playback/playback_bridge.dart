@@ -16,6 +16,8 @@ abstract class PlaybackBridge {
 
   Future<void> retry();
 
+  Future<void> seekTo(int positionMs);
+
   Future<void> resetMetrics();
 
   Future<PlaybackMetrics> metricsSnapshot();
@@ -54,6 +56,12 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
   Future<void> retry() => _invokeVoid('retry');
 
   @override
+  Future<void> seekTo(int positionMs) => _invokeVoid(
+        'seekTo',
+        <String, Object?>{'positionMs': positionMs},
+      );
+
+  @override
   Future<void> resetMetrics() => _invokeVoid('resetMetrics');
 
   @override
@@ -65,9 +73,7 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
       final metrics = PlaybackMetrics.fromJson(
         result ?? const <Object?, Object?>{},
       );
-      if (_lastBridgeError == null) {
-        return metrics;
-      }
+      if (_lastBridgeError == null) return metrics;
       return metrics.copyWith(playbackError: _lastBridgeError);
     } on MissingPluginException catch (error) {
       return _errorMetrics('Android playback bridge is not available: $error');
@@ -99,6 +105,7 @@ class MockPlaybackBridge implements PlaybackBridge {
   PlaybackMetrics _metrics = const PlaybackMetrics(
     appScreenReadyMs: 42,
     manifestLoadMs: 128,
+    durationMs: 180000,
     sessionId: 'mock-session',
     lastEvent: 'mock_ready',
   );
@@ -114,6 +121,7 @@ class MockPlaybackBridge implements PlaybackBridge {
     _loadedUrl = url;
     _metrics = _metrics.copyWith(
       currentPositionMs: 0,
+      durationMs: 180000,
       attemptId: 0,
       trackTitle: title,
       trackUrl: url,
@@ -133,7 +141,6 @@ class MockPlaybackBridge implements PlaybackBridge {
       tapToReadyMs: _metrics.tapToReadyMs ?? 72,
       tapToIsPlayingMs: _metrics.tapToIsPlayingMs ?? 96,
       tapToPositionAdvanceMs: _metrics.tapToPositionAdvanceMs ?? 128,
-      bufferCount: _metrics.bufferCount,
       isPlaying: true,
       currentPositionMs: _metrics.currentPositionMs + 250,
       attemptId: _metrics.attemptId + 1,
@@ -181,9 +188,22 @@ class MockPlaybackBridge implements PlaybackBridge {
   }
 
   @override
+  Future<void> seekTo(int positionMs) async {
+    final duration = _metrics.durationMs;
+    final safePosition = duration == null
+        ? positionMs
+        : positionMs.clamp(0, duration).toInt();
+    _metrics = _metrics.copyWith(
+      currentPositionMs: safePosition,
+      lastEvent: 'position',
+    );
+  }
+
+  @override
   Future<void> resetMetrics() async {
     _metrics = PlaybackMetrics(
       appScreenReadyMs: _metrics.appScreenReadyMs,
+      durationMs: _metrics.durationMs,
       sessionId: _metrics.sessionId,
       trackTitle: _loadedTitle,
       trackUrl: _loadedUrl,
