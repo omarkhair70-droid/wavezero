@@ -31,6 +31,9 @@ class PlaybackMetricsMapTest {
             loadToReadyMs = 75L,
             prebufferCount = 1,
             prebufferMs = 70L,
+            seekCount = 2,
+            seekBufferMs = 35L,
+            lastSeekToMs = 12_000L,
             lastEvent = "playing",
             trackTitle = "Title",
             trackUrl = "https://example.test/stream.m3u8",
@@ -59,6 +62,9 @@ class PlaybackMetricsMapTest {
         assertEquals(75L, map["loadToReadyMs"])
         assertEquals(1, map["prebufferCount"])
         assertEquals(70L, map["prebufferMs"])
+        assertEquals(2, map["seekCount"])
+        assertEquals(35L, map["seekBufferMs"])
+        assertEquals(12_000L, map["lastSeekToMs"])
         assertEquals("playing", map["lastEvent"])
         assertEquals("Title", map["trackTitle"])
         assertEquals("https://example.test/stream.m3u8", map["trackUrl"])
@@ -76,6 +82,7 @@ class PlaybackMetricsMapTest {
         tracker.markPlayTapped()
         nowMs += 100L
         tracker.markPlaying(positionMs = 42L)
+        tracker.markSeekStarted(targetPositionMs = 5_000L)
         tracker.markBufferingStarted()
         nowMs += 50L
         tracker.markBufferingEnded()
@@ -97,6 +104,9 @@ class PlaybackMetricsMapTest {
         assertNull(reset.loadToReadyMs)
         assertEquals(0, reset.prebufferCount)
         assertEquals(0L, reset.prebufferMs)
+        assertEquals(0, reset.seekCount)
+        assertEquals(0L, reset.seekBufferMs)
+        assertNull(reset.lastSeekToMs)
     }
 
     @Test
@@ -174,5 +184,29 @@ class PlaybackMetricsMapTest {
         assertEquals(0, attempt.bufferCount)
         assertEquals(200L, attempt.prebufferMs)
         assertTrue(attempt.preparedBeforePlay)
+    }
+
+    @Test
+    fun seekBufferDoesNotIncrementRebufferCount() {
+        var nowMs = 1_000L
+        val tracker = PlaybackMetricsTracker(nowMs = { nowMs })
+        tracker.loadTrack("Loaded", "https://example.test/loaded.m3u8")
+        tracker.markPlayTapped()
+        tracker.markReady()
+        tracker.markPlaying(positionMs = 1_000L)
+        tracker.markPosition(positionMs = 1_250L)
+
+        val seekStarted = tracker.markSeekStarted(targetPositionMs = 30_000L)
+        assertEquals(1, seekStarted.seekCount)
+        assertEquals(30_000L, seekStarted.lastSeekToMs)
+
+        tracker.markBufferingStarted()
+        nowMs += 300L
+        val seekEnded = tracker.markBufferingEnded()
+
+        assertEquals(0, seekEnded.rebufferCount)
+        assertEquals(0L, seekEnded.rebufferMs)
+        assertEquals(0L, seekEnded.totalBufferMs)
+        assertEquals(300L, seekEnded.seekBufferMs)
     }
 }
