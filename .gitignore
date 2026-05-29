@@ -12,3 +12,10 @@ apps/android/app/google-services.json
 apps/android/**/google-services.json
 apps/android/**/*service-account*.json
 apps/android/**/*firebase*.json
+
+# Flutter local/generated files.
+apps/flutter/wavezero_app/.dart_tool/
+apps/flutter/wavezero_app/.flutter-plugins
+apps/flutter/wavezero_app/.flutter-plugins-dependencies
+apps/flutter/wavezero_app/android/local.properties
+apps/flutter/wavezero_app/build/
