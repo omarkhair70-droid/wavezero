@@ -168,32 +168,22 @@ Outcome:
 - Buffering caused immediately by seek no longer inflates `rebufferCount`.
 - Native seek targets are clamped to known media duration when available.
 
-## Next Phases
-
 ### Phase 1A — Real Catalog API Foundation
 
-Status: In progress
+Status: Completed
 
-Goal:
+Outcome:
 
-Introduce the backend catalog contract that will replace hardcoded demo tracks in the Flutter player.
+- A development catalog fixture now contains artists, tracks, artwork URLs, durations, and stream assets.
+- API routes exist for `/catalog`, `/artists`, `/artists/:id`, `/tracks`, `/tracks/:id`, and `/tracks/:id/manifest`.
+- API responses include artist names, artwork URLs, primary assets, and stream URLs.
+- The API was verified locally through `/health`, `/catalog`, and `/tracks/track-apple-bipbop-hls/manifest`.
 
-Scope:
-
-- Add a development catalog fixture with artists, tracks, artwork URLs, durations, and stream assets.
-- Add `/catalog`, `/artists`, `/artists/:id`, `/tracks`, `/tracks/:id`, and `/tracks/:id/manifest` API routes.
-- Include artist names, artwork URLs, primary assets, and stream URLs in API responses.
-- Keep the Rust core `Track`/`TrackAsset` model as the deterministic playback manifest foundation.
-- Keep Flutter playback still using the local demo track until the next client integration phase.
-
-Non-goals:
-
-- No database yet.
-- No auth/user library yet.
-- No Flutter catalog client integration yet.
-- No production storage or signed URLs yet.
+## Next Phases
 
 ### Phase 1B — Flutter Catalog Client Integration
+
+Status: In progress
 
 Goal:
 
@@ -202,6 +192,28 @@ Load the first playable track into the Flutter player from the API catalog contr
 Scope:
 
 - Add a small Flutter catalog client.
-- Fetch `/catalog` or `/tracks/:id/manifest` from a configurable dev API base URL.
+- Fetch `/tracks/:id/manifest` from a configurable dev API base URL.
 - Load title, stream URL, duration, artist, and artwork into the player screen.
 - Keep native playback controlled through the existing MethodChannel bridge.
+- Keep local demo fallback behavior if the API is unavailable.
+- Allow the dev runner to pass `WAVEZERO_API_BASE_URL` into Flutter with `--dart-define`.
+
+Non-goals:
+
+- No catalog browsing UI yet.
+- No search yet.
+- No database-backed production catalog yet.
+- No authentication or user library yet.
+
+### Phase 1C — Catalog List UI
+
+Goal:
+
+Show real catalog tracks inside the Flutter app and let the user choose which catalog track to load.
+
+Scope:
+
+- Fetch `/catalog` from the API.
+- Render a simple track list with title, artist, and artwork.
+- Load the selected track into the existing player shell.
+- Preserve background playback, notification controls, and metrics.
