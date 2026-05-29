@@ -70,8 +70,14 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+$FlutterRunArgs = @("run")
+if (-not [string]::IsNullOrWhiteSpace($env:WAVEZERO_API_BASE_URL)) {
+    Write-Host "Using WaveZero API base URL: $env:WAVEZERO_API_BASE_URL"
+    $FlutterRunArgs += "--dart-define=WAVEZERO_API_BASE_URL=$env:WAVEZERO_API_BASE_URL"
+}
+
 Write-Host "Starting Flutter on Android. Select a device if prompted."
-& $Flutter.Source run
+& $Flutter.Source @FlutterRunArgs
 if ($LASTEXITCODE -ne 0) {
     Install-And-Launch-DebugApk
 }
