@@ -52,6 +52,8 @@ Outcome:
 
 ### Phase 0E — Developer Distribution Automation
 
+Status: In progress
+
 Goal:
 
 Make development and testing faster without manually creating and sharing APK files every time.
@@ -59,14 +61,16 @@ Make development and testing faster without manually creating and sharing APK fi
 Scope:
 
 - Document Android Studio Run and Wireless Debugging workflow.
-- Stabilize Firebase App Distribution debug upload workflow.
-- Add CI checks for Rust, Android, and Flutter where tooling is available.
-- Add future CI path for automatically building and distributing debug tester builds.
+- Add Windows helper scripts for Android debug assemble/install, Firebase debug upload, Flutter Android run, and local environment checks.
+- Stabilize Firebase App Distribution debug upload workflow without committing secrets.
+- Add stable Rust CI checks.
+- Document Android and Flutter CI as future work until the local build path is verified without committed Gradle wrapper binaries or secrets.
 
 Non-goals:
 
 - No Google Play release automation yet.
 - No production signing setup yet.
+- No playback behavior changes.
 - No feature expansion.
 
 ### Phase 0F — Background Playback and Media Session
@@ -189,6 +193,6 @@ Preferred loops:
 1. Android Studio Run or Wireless Debugging for daily device testing.
 2. `flutter run` for Flutter host testing once Flutter is installed locally.
 3. Firebase App Distribution for sharing tester builds.
-4. GitHub Actions for automated checks and, later, automated tester build uploads.
+4. GitHub Actions for stable Rust checks and, later, Android/Flutter build plus tester upload automation after local tooling is verified.
 
 Manual APK generation should be used only when needed for debugging or temporary sharing.

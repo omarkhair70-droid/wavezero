@@ -19,3 +19,9 @@ apps/flutter/wavezero_app/.flutter-plugins
 apps/flutter/wavezero_app/.flutter-plugins-dependencies
 apps/flutter/wavezero_app/android/local.properties
 apps/flutter/wavezero_app/build/
+
+# Never commit generated Gradle wrapper binaries or Firebase secret files.
+**/gradle/wrapper/gradle-wrapper.jar
+**/google-services.json
+**/*service-account*.json
+**/*firebase*.json
