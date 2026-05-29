@@ -191,32 +191,22 @@ Outcome:
 - The dev runner can pass `WAVEZERO_API_BASE_URL` into Flutter with `--dart-define`.
 - Manual testing verified the Android app loading the catalog manifest from the local Rust API.
 
-## Next Phases
-
 ### Phase 1C — Catalog List UI
 
-Status: In progress
+Status: Completed
 
-Goal:
+Outcome:
 
-Show real catalog tracks inside the Flutter app and let the user choose which catalog track to load.
+- Flutter fetches `/catalog` from the API.
+- The app renders catalog tracks with title, artist, artwork, duration, and selected state.
+- Tapping a catalog track loads that track manifest into the existing player shell.
+- Manual testing verified selecting and playing the second catalog track from Android.
 
-Scope:
-
-- Fetch `/catalog` from the API.
-- Parse catalog track summaries with title, artist, duration, artwork, and primary asset metadata.
-- Render a simple track list with title, artist, duration, and artwork.
-- Load the selected track manifest into the existing player shell.
-- Preserve background playback, notification controls, seek, and metrics.
-
-Non-goals:
-
-- No search yet.
-- No queue or playlist model yet.
-- No database-backed production catalog yet.
-- No authentication or user library yet.
+## Next Phases
 
 ### Phase 1D — Search and Catalog Polish
+
+Status: In progress
 
 Goal:
 
@@ -225,6 +215,27 @@ Make the catalog browsing surface more useful before expanding into queue/librar
 Scope:
 
 - Add local catalog search/filtering in Flutter.
-- Improve selected/playing track states.
-- Add empty/error/loading UI polish for catalog browsing.
-- Keep native playback and metrics unchanged.
+- Improve selected-track refresh and reload behavior.
+- Add empty/loading/search-result copy for catalog browsing.
+- Show asset metadata such as codec and bitrate in catalog rows.
+- Make seeded development tracks easier to distinguish during manual testing.
+- Keep native playback, background playback, notification controls, seek, and metrics unchanged.
+
+Non-goals:
+
+- No queue or playlist model yet.
+- No database-backed production catalog yet.
+- No authentication or user library yet.
+
+### Phase 1E — Queue Foundation
+
+Goal:
+
+Introduce the first queue model after catalog selection is stable.
+
+Scope:
+
+- Add a simple in-memory Flutter queue state.
+- Add next/previous controls in the Flutter player shell.
+- Keep the native playback bridge as the playback execution layer.
+- Keep catalog and metrics intact.
