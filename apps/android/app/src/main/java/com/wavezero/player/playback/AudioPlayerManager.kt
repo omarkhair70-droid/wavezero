@@ -80,6 +80,7 @@ class AudioPlayerManager(
                 }
 
                 Player.STATE_READY -> {
+                    playCommandInFlight = false
                     publish(metricsTracker.markBufferingEnded())
                     publish(metricsTracker.markReady())
                     mutablePlaybackState.value = PlaybackState(
@@ -166,9 +167,10 @@ class AudioPlayerManager(
         player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         mutablePlaybackState.value = PlaybackState(
-            status = PlaybackStatus.Ready,
+            status = PlaybackStatus.Buffering,
             trackTitle = currentTrackTitle,
         )
+        player.prepare()
     }
 
     fun play() {
@@ -180,7 +182,11 @@ class AudioPlayerManager(
 
         playCommandInFlight = true
         publish(metricsTracker.markPlayTapped())
-        player.prepare()
+        if (player.playbackState == Player.STATE_READY) {
+            publish(metricsTracker.markReady())
+        } else {
+            player.prepare()
+        }
         player.playWhenReady = true
         startPositionUpdates()
     }
