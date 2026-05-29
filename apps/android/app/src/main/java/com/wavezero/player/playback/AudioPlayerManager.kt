@@ -53,7 +53,7 @@ class AudioPlayerManager(
         exoPlayer.setHandleAudioBecomingNoisy(true)
     }
 
-    private val mediaSession: MediaSession? = if (enableMediaSession) {
+    val mediaSession: MediaSession? = if (enableMediaSession) {
         MediaSession.Builder(appContext, player)
             .setId(MEDIA_SESSION_ID)
             .build()

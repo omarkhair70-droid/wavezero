@@ -22,7 +22,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,10 +32,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.wavezero.player.playback.AudioPlayerManager
 import com.wavezero.player.playback.PlaybackMetrics
 import com.wavezero.player.playback.PlaybackState
 import com.wavezero.player.playback.PlaybackStatus
+import com.wavezero.player.playback.WaveZeroPlaybackSession
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,7 +51,7 @@ class MainActivity : ComponentActivity() {
 fun WaveZeroApp(appStartedAtMs: Long) {
     val context = LocalContext.current.applicationContext
     val manager = remember {
-        AudioPlayerManager(
+        WaveZeroPlaybackSession.getOrCreate(
             context = context,
             appStartedAtMs = appStartedAtMs,
         )
@@ -62,10 +61,6 @@ fun WaveZeroApp(appStartedAtMs: Long) {
 
     LaunchedEffect(manager) {
         manager.markScreenReady()
-    }
-
-    DisposableEffect(manager) {
-        onDispose { manager.release() }
     }
 
     MaterialTheme {
