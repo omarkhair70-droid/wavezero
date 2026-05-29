@@ -22,6 +22,9 @@ class PlaybackMetrics {
     this.loadToReadyMs,
     this.prebufferCount = 0,
     this.prebufferMs = 0,
+    this.seekCount = 0,
+    this.seekBufferMs = 0,
+    this.lastSeekToMs,
     this.lastEvent,
     this.trackTitle,
     this.trackUrl,
@@ -49,6 +52,9 @@ class PlaybackMetrics {
   final int? loadToReadyMs;
   final int prebufferCount;
   final int prebufferMs;
+  final int seekCount;
+  final int seekBufferMs;
+  final int? lastSeekToMs;
   final String? lastEvent;
   final String? trackTitle;
   final String? trackUrl;
@@ -86,6 +92,10 @@ class PlaybackMetrics {
     bool clearLoadToReadyMs = false,
     int? prebufferCount,
     int? prebufferMs,
+    int? seekCount,
+    int? seekBufferMs,
+    int? lastSeekToMs,
+    bool clearLastSeekToMs = false,
     String? lastEvent,
     String? trackTitle,
     String? trackUrl,
@@ -127,6 +137,10 @@ class PlaybackMetrics {
           clearLoadToReadyMs ? null : loadToReadyMs ?? this.loadToReadyMs,
       prebufferCount: prebufferCount ?? this.prebufferCount,
       prebufferMs: prebufferMs ?? this.prebufferMs,
+      seekCount: seekCount ?? this.seekCount,
+      seekBufferMs: seekBufferMs ?? this.seekBufferMs,
+      lastSeekToMs:
+          clearLastSeekToMs ? null : lastSeekToMs ?? this.lastSeekToMs,
       lastEvent: lastEvent ?? this.lastEvent,
       trackTitle: trackTitle ?? this.trackTitle,
       trackUrl: trackUrl ?? this.trackUrl,
@@ -157,6 +171,9 @@ class PlaybackMetrics {
       'loadToReadyMs': loadToReadyMs,
       'prebufferCount': prebufferCount,
       'prebufferMs': prebufferMs,
+      'seekCount': seekCount,
+      'seekBufferMs': seekBufferMs,
+      'lastSeekToMs': lastSeekToMs,
       'lastEvent': lastEvent,
       'trackTitle': trackTitle,
       'trackUrl': trackUrl,
@@ -194,6 +211,9 @@ class PlaybackMetrics {
       loadToReadyMs: _readInt(json['loadToReadyMs']),
       prebufferCount: _readInt(json['prebufferCount']) ?? 0,
       prebufferMs: _readInt(json['prebufferMs']) ?? 0,
+      seekCount: _readInt(json['seekCount']) ?? 0,
+      seekBufferMs: _readInt(json['seekBufferMs']) ?? 0,
+      lastSeekToMs: _readInt(json['lastSeekToMs']),
       lastEvent: json['lastEvent'] as String?,
       trackTitle: json['trackTitle'] as String?,
       trackUrl: json['trackUrl'] as String?,

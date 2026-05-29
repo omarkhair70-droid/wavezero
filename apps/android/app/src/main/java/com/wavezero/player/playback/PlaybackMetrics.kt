@@ -24,6 +24,9 @@ data class PlaybackMetrics(
     val loadToReadyMs: Long? = null,
     val prebufferCount: Int = 0,
     val prebufferMs: Long = 0,
+    val seekCount: Int = 0,
+    val seekBufferMs: Long = 0,
+    val lastSeekToMs: Long? = null,
     val lastEvent: String = "initialized",
     val trackTitle: String = DemoTrack.title,
     val trackUrl: String = DemoTrack.hlsUrl,
@@ -50,6 +53,9 @@ data class PlaybackMetrics(
         "loadToReadyMs" to loadToReadyMs,
         "prebufferCount" to prebufferCount,
         "prebufferMs" to prebufferMs,
+        "seekCount" to seekCount,
+        "seekBufferMs" to seekBufferMs,
+        "lastSeekToMs" to lastSeekToMs,
         "lastEvent" to lastEvent,
         "trackTitle" to trackTitle,
         "trackUrl" to trackUrl,
@@ -66,6 +72,7 @@ class PlaybackMetricsTracker(
     private var isBuffering = false
     private var bufferStartedAtMs: Long? = null
     private var bufferPhase: BufferPhase? = null
+    private var lastSeekAtMs: Long? = null
     private var metrics = PlaybackMetrics()
 
     fun snapshot(): PlaybackMetrics = metrics
@@ -82,6 +89,7 @@ class PlaybackMetricsTracker(
         isBuffering = false
         bufferStartedAtMs = null
         bufferPhase = null
+        lastSeekAtMs = null
         return update("track_loaded") {
             copy(
                 tapToFirstAudioMs = null,
@@ -103,6 +111,9 @@ class PlaybackMetricsTracker(
                 loadToReadyMs = null,
                 prebufferCount = 0,
                 prebufferMs = 0,
+                seekCount = 0,
+                seekBufferMs = 0,
+                lastSeekToMs = null,
                 trackTitle = title,
                 trackUrl = hlsUrl,
             )
@@ -181,12 +192,25 @@ class PlaybackMetricsTracker(
         copy(isPlaying = false, currentPositionMs = positionMs.coerceAtLeast(0))
     }
 
+    fun markSeekStarted(targetPositionMs: Long): PlaybackMetrics {
+        lastSeekAtMs = nowMs()
+        return update("seek_started") {
+            copy(
+                seekCount = seekCount + 1,
+                lastSeekToMs = targetPositionMs.coerceAtLeast(0),
+                playbackError = null,
+            )
+        }
+    }
+
     fun markBufferingStarted(): PlaybackMetrics {
         if (!isBuffering) {
+            val startedAt = nowMs()
             isBuffering = true
-            bufferStartedAtMs = nowMs()
+            bufferStartedAtMs = startedAt
             bufferPhase = when {
                 playTappedAtMs == null -> BufferPhase.Prebuffer
+                isRecentSeek(startedAt) -> BufferPhase.Seek
                 positionAdvanceObserved || metrics.currentPositionMs > playStartPositionMs -> BufferPhase.Rebuffer
                 else -> BufferPhase.Startup
             }
@@ -194,6 +218,7 @@ class PlaybackMetricsTracker(
             return update("buffering_started") {
                 when (bufferPhase) {
                     BufferPhase.Prebuffer -> copy(prebufferCount = prebufferCount + 1)
+                    BufferPhase.Seek -> this
                     BufferPhase.Rebuffer -> copy(
                         bufferCount = bufferCount + 1,
                         rebufferCount = rebufferCount + 1,
@@ -221,6 +246,7 @@ class PlaybackMetricsTracker(
         return update("buffering_ended") {
             when (phase) {
                 BufferPhase.Prebuffer -> copy(prebufferMs = prebufferMs + durationMs)
+                BufferPhase.Seek -> copy(seekBufferMs = seekBufferMs + durationMs)
                 BufferPhase.Startup -> copy(
                     startupBufferMs = startupBufferMs + durationMs,
                     totalBufferMs = totalBufferMs + durationMs,
@@ -274,6 +300,7 @@ class PlaybackMetricsTracker(
         isBuffering = false
         bufferStartedAtMs = null
         bufferPhase = null
+        lastSeekAtMs = null
         return update("metrics_reset") {
             copy(
                 tapToFirstAudioMs = null,
@@ -294,6 +321,9 @@ class PlaybackMetricsTracker(
                 loadToReadyMs = null,
                 prebufferCount = 0,
                 prebufferMs = 0,
+                seekCount = 0,
+                seekBufferMs = 0,
+                lastSeekToMs = null,
             )
         }
     }
@@ -306,6 +336,8 @@ class PlaybackMetricsTracker(
 
     private fun elapsedSinceTrackLoad(): Long? = trackLoadedAtMs?.let { (nowMs() - it).coerceAtLeast(0) }
 
+    private fun isRecentSeek(nowMs: Long): Boolean = lastSeekAtMs?.let { nowMs - it <= SEEK_BUFFER_WINDOW_MS } == true
+
     private fun update(eventName: String, block: PlaybackMetrics.() -> PlaybackMetrics): PlaybackMetrics {
         metrics = metrics.block().copy(lastEvent = eventName)
         return metrics
@@ -313,7 +345,12 @@ class PlaybackMetricsTracker(
 
     private enum class BufferPhase {
         Prebuffer,
+        Seek,
         Startup,
         Rebuffer,
+    }
+
+    private companion object {
+        const val SEEK_BUFFER_WINDOW_MS = 2_000L
     }
 }

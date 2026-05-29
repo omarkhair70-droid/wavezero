@@ -123,6 +123,8 @@ class MockPlaybackBridge implements PlaybackBridge {
       currentPositionMs: 0,
       durationMs: 180000,
       attemptId: 0,
+      seekCount: 0,
+      seekBufferMs: 0,
       trackTitle: title,
       trackUrl: url,
       lastEvent: 'track_loaded',
@@ -131,6 +133,7 @@ class MockPlaybackBridge implements PlaybackBridge {
       clearTapToReadyMs: true,
       clearTapToIsPlayingMs: true,
       clearTapToPositionAdvanceMs: true,
+      clearLastSeekToMs: true,
     );
   }
 
@@ -195,6 +198,8 @@ class MockPlaybackBridge implements PlaybackBridge {
         : positionMs.clamp(0, duration).toInt();
     _metrics = _metrics.copyWith(
       currentPositionMs: safePosition,
+      seekCount: _metrics.seekCount + 1,
+      lastSeekToMs: safePosition,
       lastEvent: 'position',
     );
   }
