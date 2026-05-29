@@ -59,50 +59,59 @@ Outcome:
 - Firebase App Distribution documentation exists without committing credentials.
 - Stable Rust CI checks run on GitHub Actions.
 
+### Phase 0E.1 — Flutter Android Toolchain Upgrade
+
+Status: Completed
+
+Outcome:
+
+- Flutter Android host Android Gradle Plugin was upgraded to a Flutter-supported version.
+- Flutter Android host Kotlin plugin was upgraded to a Flutter-supported version.
+- Flutter Android repository resolution and build output path remain stable.
+
 ## Next Phases
 
-### Phase 0E.1 — Flutter Android Toolchain Upgrade
+### Phase 0F — Background Playback and Media Session
 
 Status: In progress
 
 Goal:
 
-Keep the Flutter Android host ahead of Flutter's dependency validation warnings without changing playback behavior.
+Turn Android playback from foreground-only proof toward real music-app operating-system integration while preserving the Flutter command UI.
 
 Scope:
 
-- Upgrade the Flutter Android host Android Gradle Plugin to a Flutter-supported version.
-- Upgrade the Flutter Android host Kotlin plugin to a Flutter-supported version.
-- Keep Flutter Android repository resolution and build output path stable.
-- Verify `flutter run` still installs and launches the Flutter host on a real Android device.
-
-Non-goals:
-
-- No Media3 upgrade.
-- No playback logic changes.
-- No UI/feature expansion.
-- No production signing.
-
-### Phase 0F — Background Playback and Media Session
-
-Goal:
-
-Turn Android playback from foreground proof into a real music-app playback service.
-
-Scope:
-
-- Add Media3 `MediaSessionService` or equivalent service structure.
-- Add notification controls.
-- Add lock-screen controls.
-- Handle audio focus.
-- Handle Bluetooth/headset route changes.
-- Handle noisy-device events.
+- Add a Media3 `MediaSession` around the shared ExoPlayer instance.
+- Add music audio attributes and Android audio-focus handling.
+- Handle noisy-device events through ExoPlayer's built-in becoming-noisy handling.
+- Prepare native and Flutter host manifests for media playback foreground-service permissions.
 - Preserve Flutter as the command UI.
 
 Non-goals:
 
 - No iOS yet.
 - No catalog backend dependency.
+- No production notification artwork.
+- No full queue model yet.
+
+### Phase 0F.1 — Foreground Media Playback Service
+
+Goal:
+
+Promote playback into a real Android foreground media playback service with notification and lock-screen controls.
+
+Scope:
+
+- Add Media3 `MediaSessionService` or equivalent service structure.
+- Add notification controls.
+- Add lock-screen controls.
+- Keep Flutter as the command surface.
+- Verify screen-off playback and pause/resume from system controls.
+
+Non-goals:
+
+- No streaming backend dependency.
+- No iOS yet.
 
 ### Phase 0G — Accurate Metrics System
 

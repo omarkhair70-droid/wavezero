@@ -59,6 +59,7 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-datasource:$media3Version")
+    implementation("androidx.media3:media3-session:$media3Version")
 
     testImplementation("junit:junit:4.13.2")
 }

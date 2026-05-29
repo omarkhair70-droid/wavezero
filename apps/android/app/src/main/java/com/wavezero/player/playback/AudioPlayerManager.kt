@@ -3,8 +3,10 @@ package com.wavezero.player.playback
 import android.content.Context
 import android.os.SystemClock
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -12,6 +14,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import androidx.media3.session.MediaSession
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,6 +31,7 @@ class AudioPlayerManager(
     context: Context,
     hlsUrl: String = DemoTrack.hlsUrl,
     private val appStartedAtMs: Long = SystemClock.elapsedRealtime(),
+    enableMediaSession: Boolean = true,
 ) {
     private val managerJob = SupervisorJob()
     private val scope = CoroutineScope(managerJob + Dispatchers.Main.immediate)
@@ -36,7 +40,26 @@ class AudioPlayerManager(
     private var currentTrackTitle: String = DemoTrack.title
     private var currentHlsUrl: String = hlsUrl
 
-    private val player: ExoPlayer = ExoPlayer.Builder(context).build()
+    private val appContext = context.applicationContext
+
+    private val player: ExoPlayer = ExoPlayer.Builder(appContext).build().also { exoPlayer ->
+        exoPlayer.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(),
+            /* handleAudioFocus = */ true,
+        )
+        exoPlayer.setHandleAudioBecomingNoisy(true)
+    }
+
+    private val mediaSession: MediaSession? = if (enableMediaSession) {
+        MediaSession.Builder(appContext, player)
+            .setId(MEDIA_SESSION_ID)
+            .build()
+    } else {
+        null
+    }
 
     private val mutablePlaybackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = mutablePlaybackState.asStateFlow()
@@ -119,7 +142,7 @@ class AudioPlayerManager(
     }
 
     init {
-        player.setMediaItem(MediaItem.fromUri(currentHlsUrl))
+        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         player.addListener(playerListener)
         player.addAnalyticsListener(analyticsListener)
@@ -135,7 +158,7 @@ class AudioPlayerManager(
         positionJob?.cancel()
         player.stop()
         player.clearMediaItems()
-        player.setMediaItem(MediaItem.fromUri(currentHlsUrl))
+        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         mutablePlaybackState.value = PlaybackState(
             status = PlaybackStatus.Ready,
@@ -170,7 +193,7 @@ class AudioPlayerManager(
     fun stop() {
         player.stop()
         player.clearMediaItems()
-        player.setMediaItem(MediaItem.fromUri(currentHlsUrl))
+        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
         positionJob?.cancel()
         publish(metricsTracker.resetForStop())
         mutablePlaybackState.value = PlaybackState(
@@ -199,6 +222,7 @@ class AudioPlayerManager(
         positionJob?.cancel()
         player.removeListener(playerListener)
         player.removeAnalyticsListener(analyticsListener)
+        mediaSession?.release()
         player.release()
         managerJob.cancel()
     }
@@ -213,11 +237,22 @@ class AudioPlayerManager(
         }
     }
 
+    private fun mediaItemFor(title: String, hlsUrl: String): MediaItem = MediaItem.Builder()
+        .setUri(hlsUrl)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setArtist(DemoTrack.artist)
+                .build(),
+        )
+        .build()
+
     private fun publish(nextMetrics: PlaybackMetrics) {
         mutableMetrics.value = nextMetrics
     }
 
     private companion object {
         const val POSITION_UPDATE_MS = 250L
+        const val MEDIA_SESSION_ID = "wavezero-playback"
     }
 }
