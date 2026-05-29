@@ -179,33 +179,23 @@ Outcome:
 - API responses include artist names, artwork URLs, primary assets, and stream URLs.
 - The API was verified locally through `/health`, `/catalog`, and `/tracks/track-apple-bipbop-hls/manifest`.
 
-## Next Phases
-
 ### Phase 1B — Flutter Catalog Client Integration
 
-Status: In progress
+Status: Completed
 
-Goal:
+Outcome:
 
-Load the first playable track into the Flutter player from the API catalog contract instead of the hardcoded demo track.
+- Flutter can fetch `/tracks/:id/manifest` from a configurable dev API base URL.
+- The player loads title, stream URL, duration, artist, and artwork from the API manifest.
+- Local demo fallback remains available when the API is unavailable.
+- The dev runner can pass `WAVEZERO_API_BASE_URL` into Flutter with `--dart-define`.
+- Manual testing verified the Android app loading the catalog manifest from the local Rust API.
 
-Scope:
-
-- Add a small Flutter catalog client.
-- Fetch `/tracks/:id/manifest` from a configurable dev API base URL.
-- Load title, stream URL, duration, artist, and artwork into the player screen.
-- Keep native playback controlled through the existing MethodChannel bridge.
-- Keep local demo fallback behavior if the API is unavailable.
-- Allow the dev runner to pass `WAVEZERO_API_BASE_URL` into Flutter with `--dart-define`.
-
-Non-goals:
-
-- No catalog browsing UI yet.
-- No search yet.
-- No database-backed production catalog yet.
-- No authentication or user library yet.
+## Next Phases
 
 ### Phase 1C — Catalog List UI
+
+Status: In progress
 
 Goal:
 
@@ -214,6 +204,27 @@ Show real catalog tracks inside the Flutter app and let the user choose which ca
 Scope:
 
 - Fetch `/catalog` from the API.
-- Render a simple track list with title, artist, and artwork.
-- Load the selected track into the existing player shell.
-- Preserve background playback, notification controls, and metrics.
+- Parse catalog track summaries with title, artist, duration, artwork, and primary asset metadata.
+- Render a simple track list with title, artist, duration, and artwork.
+- Load the selected track manifest into the existing player shell.
+- Preserve background playback, notification controls, seek, and metrics.
+
+Non-goals:
+
+- No search yet.
+- No queue or playlist model yet.
+- No database-backed production catalog yet.
+- No authentication or user library yet.
+
+### Phase 1D — Search and Catalog Polish
+
+Goal:
+
+Make the catalog browsing surface more useful before expanding into queue/library work.
+
+Scope:
+
+- Add local catalog search/filtering in Flutter.
+- Improve selected/playing track states.
+- Add empty/error/loading UI polish for catalog browsing.
+- Keep native playback and metrics unchanged.
