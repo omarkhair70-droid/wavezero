@@ -34,17 +34,73 @@ class AudioPlayerManager(
     private val metricsTracker = PlaybackMetricsTracker(nowMs = SystemClock::elapsedRealtime)
     private var positionJob: Job? = null
 
-    private val player: ExoPlayer = ExoPlayer.Builder(context).build().apply {
-        setMediaItem(MediaItem.fromUri(hlsUrl))
-        addListener(playerListener)
-        addAnalyticsListener(analyticsListener)
-    }
+    private val player: ExoPlayer = ExoPlayer.Builder(context).build()
 
     private val mutablePlaybackState = MutableStateFlow(PlaybackState())
     val playbackState: StateFlow<PlaybackState> = mutablePlaybackState.asStateFlow()
 
     private val mutableMetrics = MutableStateFlow(metricsTracker.snapshot())
     val metrics: StateFlow<PlaybackMetrics> = mutableMetrics.asStateFlow()
+
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_BUFFERING -> {
+                    publish(metricsTracker.markBufferingStarted())
+                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Buffering)
+                }
+
+                Player.STATE_READY -> {
+                    publish(metricsTracker.markBufferingEnded())
+                    mutablePlaybackState.value = PlaybackState(
+                        status = if (player.isPlaying) PlaybackStatus.Playing else PlaybackStatus.Ready,
+                    )
+                }
+
+                Player.STATE_ENDED -> {
+                    publish(metricsTracker.markNotPlaying(player.currentPosition))
+                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Ended)
+                }
+
+                Player.STATE_IDLE -> mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Idle)
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) {
+                publish(metricsTracker.markPlaying(player.currentPosition))
+                mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Playing)
+            } else {
+                publish(metricsTracker.markNotPlaying(player.currentPosition))
+                if (mutablePlaybackState.value.status == PlaybackStatus.Playing) {
+                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Paused)
+                }
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            publish(metricsTracker.markError(error.message ?: error.errorCodeName))
+            mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Error)
+        }
+    }
+
+    private val analyticsListener = object : AnalyticsListener {
+        override fun onLoadCompleted(
+            eventTime: AnalyticsListener.EventTime,
+            loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData,
+        ) {
+            if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
+                publish(metricsTracker.markManifestLoaded(loadEventInfo.loadDurationMs))
+            }
+        }
+    }
+
+    init {
+        player.setMediaItem(MediaItem.fromUri(hlsUrl))
+        player.addListener(playerListener)
+        player.addAnalyticsListener(analyticsListener)
+    }
 
     fun markScreenReady() {
         publish(metricsTracker.markScreenReady(appStartedAtMs))
@@ -100,60 +156,6 @@ class AudioPlayerManager(
 
     private fun publish(nextMetrics: PlaybackMetrics) {
         mutableMetrics.value = nextMetrics
-    }
-
-    private val playerListener = object : Player.Listener {
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            when (playbackState) {
-                Player.STATE_BUFFERING -> {
-                    publish(metricsTracker.markBufferingStarted())
-                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Buffering)
-                }
-
-                Player.STATE_READY -> {
-                    publish(metricsTracker.markBufferingEnded())
-                    mutablePlaybackState.value = PlaybackState(
-                        status = if (player.isPlaying) PlaybackStatus.Playing else PlaybackStatus.Ready,
-                    )
-                }
-
-                Player.STATE_ENDED -> {
-                    publish(metricsTracker.markNotPlaying(player.currentPosition))
-                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Ended)
-                }
-
-                Player.STATE_IDLE -> mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Idle)
-            }
-        }
-
-        override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) {
-                publish(metricsTracker.markPlaying(player.currentPosition))
-                mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Playing)
-            } else {
-                publish(metricsTracker.markNotPlaying(player.currentPosition))
-                if (mutablePlaybackState.value.status == PlaybackStatus.Playing) {
-                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Paused)
-                }
-            }
-        }
-
-        override fun onPlayerError(error: PlaybackException) {
-            publish(metricsTracker.markError(error.message ?: error.errorCodeName))
-            mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Error)
-        }
-    }
-
-    private val analyticsListener = object : AnalyticsListener {
-        override fun onLoadCompleted(
-            eventTime: AnalyticsListener.EventTime,
-            loadEventInfo: LoadEventInfo,
-            mediaLoadData: MediaLoadData,
-        ) {
-            if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
-                publish(metricsTracker.markManifestLoaded(loadEventInfo.loadDurationMs))
-            }
-        }
     }
 
     private companion object {
