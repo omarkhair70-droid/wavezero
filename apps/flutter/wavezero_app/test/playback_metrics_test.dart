@@ -10,10 +10,20 @@ void main() {
       bufferCount: 1,
       isPlaying: true,
       currentPositionMs: 250,
+      sessionId: 'session-1',
+      attemptId: 2,
+      tapToReadyMs: 12,
+      tapToIsPlayingMs: 18,
+      tapToPositionAdvanceMs: 24,
+      lastEvent: 'playing',
+      trackTitle: 'Title',
+      trackUrl: 'https://example.test/stream.m3u8',
     );
 
     expect(metrics.toJson()['isPlaying'], isTrue);
+    expect(metrics.toJson()['sessionId'], 'session-1');
     expect(metrics.toDisplayText(), contains('tapToFirstAudioMs: 20'));
+    expect(metrics.toDisplayText(), contains('trackTitle: Title'));
   });
 
   test('PlaybackMetrics reads numeric platform channel maps', () {
@@ -22,11 +32,19 @@ void main() {
       'isPlaying': true,
       'currentPositionMs': 1024,
       'playbackError': 'network',
+      'attemptId': 3.0,
+      'tapToReadyMs': 40.0,
+      'sessionId': 'native-session',
+      'lastEvent': 'error',
     });
 
     expect(metrics.bufferCount, 2);
     expect(metrics.isPlaying, isTrue);
     expect(metrics.currentPositionMs, 1024);
     expect(metrics.playbackError, 'network');
+    expect(metrics.attemptId, 3);
+    expect(metrics.tapToReadyMs, 40);
+    expect(metrics.sessionId, 'native-session');
+    expect(metrics.lastEvent, 'error');
   });
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -27,9 +28,16 @@ class WaveZeroApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: PlaybackProofScreen(
-        playbackBridge: _playbackBridge ?? MockPlaybackBridge(),
+        playbackBridge: _playbackBridge ?? _defaultPlaybackBridge(),
       ),
     );
+  }
+
+  PlaybackBridge _defaultPlaybackBridge() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return PlatformChannelPlaybackBridge();
+    }
+    return MockPlaybackBridge();
   }
 }
 

@@ -26,13 +26,15 @@ import kotlinx.coroutines.launch
 @OptIn(UnstableApi::class)
 class AudioPlayerManager(
     context: Context,
-    private val hlsUrl: String = DemoTrack.hlsUrl,
+    hlsUrl: String = DemoTrack.hlsUrl,
     private val appStartedAtMs: Long = SystemClock.elapsedRealtime(),
 ) {
     private val managerJob = SupervisorJob()
     private val scope = CoroutineScope(managerJob + Dispatchers.Main.immediate)
     private val metricsTracker = PlaybackMetricsTracker(nowMs = SystemClock::elapsedRealtime)
     private var positionJob: Job? = null
+    private var currentTrackTitle: String = DemoTrack.title
+    private var currentHlsUrl: String = hlsUrl
 
     private val player: ExoPlayer = ExoPlayer.Builder(context).build()
 
@@ -47,40 +49,60 @@ class AudioPlayerManager(
             when (playbackState) {
                 Player.STATE_BUFFERING -> {
                     publish(metricsTracker.markBufferingStarted())
-                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Buffering)
+                    mutablePlaybackState.value = PlaybackState(
+                        status = PlaybackStatus.Buffering,
+                        trackTitle = currentTrackTitle,
+                    )
                 }
 
                 Player.STATE_READY -> {
                     publish(metricsTracker.markBufferingEnded())
+                    publish(metricsTracker.markReady())
                     mutablePlaybackState.value = PlaybackState(
                         status = if (player.isPlaying) PlaybackStatus.Playing else PlaybackStatus.Ready,
+                        trackTitle = currentTrackTitle,
                     )
                 }
 
                 Player.STATE_ENDED -> {
                     publish(metricsTracker.markNotPlaying(player.currentPosition))
-                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Ended)
+                    mutablePlaybackState.value = PlaybackState(
+                        status = PlaybackStatus.Ended,
+                        trackTitle = currentTrackTitle,
+                    )
                 }
 
-                Player.STATE_IDLE -> mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Idle)
+                Player.STATE_IDLE -> mutablePlaybackState.value = PlaybackState(
+                    status = PlaybackStatus.Idle,
+                    trackTitle = currentTrackTitle,
+                )
             }
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) {
                 publish(metricsTracker.markPlaying(player.currentPosition))
-                mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Playing)
+                mutablePlaybackState.value = PlaybackState(
+                    status = PlaybackStatus.Playing,
+                    trackTitle = currentTrackTitle,
+                )
             } else {
                 publish(metricsTracker.markNotPlaying(player.currentPosition))
                 if (mutablePlaybackState.value.status == PlaybackStatus.Playing) {
-                    mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Paused)
+                    mutablePlaybackState.value = PlaybackState(
+                        status = PlaybackStatus.Paused,
+                        trackTitle = currentTrackTitle,
+                    )
                 }
             }
         }
 
         override fun onPlayerError(error: PlaybackException) {
             publish(metricsTracker.markError(error.message ?: error.errorCodeName))
-            mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Error)
+            mutablePlaybackState.value = PlaybackState(
+                status = PlaybackStatus.Error,
+                trackTitle = currentTrackTitle,
+            )
         }
     }
 
@@ -97,13 +119,28 @@ class AudioPlayerManager(
     }
 
     init {
-        player.setMediaItem(MediaItem.fromUri(hlsUrl))
+        player.setMediaItem(MediaItem.fromUri(currentHlsUrl))
+        publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         player.addListener(playerListener)
         player.addAnalyticsListener(analyticsListener)
     }
 
     fun markScreenReady() {
         publish(metricsTracker.markScreenReady(appStartedAtMs))
+    }
+
+    fun loadTrack(title: String, hlsUrl: String) {
+        currentTrackTitle = title.ifBlank { DemoTrack.title }
+        currentHlsUrl = hlsUrl
+        positionJob?.cancel()
+        player.stop()
+        player.clearMediaItems()
+        player.setMediaItem(MediaItem.fromUri(currentHlsUrl))
+        publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
+        mutablePlaybackState.value = PlaybackState(
+            status = PlaybackStatus.Ready,
+            trackTitle = currentTrackTitle,
+        )
     }
 
     fun play() {
@@ -116,7 +153,10 @@ class AudioPlayerManager(
     fun pause() {
         player.pause()
         publish(metricsTracker.markNotPlaying(player.currentPosition))
-        mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Paused)
+        mutablePlaybackState.value = PlaybackState(
+            status = PlaybackStatus.Paused,
+            trackTitle = currentTrackTitle,
+        )
     }
 
     fun togglePlayPause() {
@@ -130,11 +170,30 @@ class AudioPlayerManager(
     fun stop() {
         player.stop()
         player.clearMediaItems()
-        player.setMediaItem(MediaItem.fromUri(hlsUrl))
+        player.setMediaItem(MediaItem.fromUri(currentHlsUrl))
         positionJob?.cancel()
         publish(metricsTracker.resetForStop())
-        mutablePlaybackState.value = PlaybackState(status = PlaybackStatus.Stopped)
+        mutablePlaybackState.value = PlaybackState(
+            status = PlaybackStatus.Stopped,
+            trackTitle = currentTrackTitle,
+        )
     }
+
+    fun retry() {
+        stop()
+        play()
+    }
+
+    fun resetMetrics() {
+        publish(metricsTracker.resetTransientMetrics())
+        if (player.isPlaying) {
+            publish(metricsTracker.markPlaying(player.currentPosition))
+        } else {
+            publish(metricsTracker.markNotPlaying(player.currentPosition))
+        }
+    }
+
+    fun metricsSnapshotMap(): Map<String, Any?> = metricsTracker.snapshot().toMap()
 
     fun release() {
         positionJob?.cancel()
