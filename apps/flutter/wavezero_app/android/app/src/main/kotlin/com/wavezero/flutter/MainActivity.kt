@@ -3,6 +3,7 @@ package com.wavezero.flutter
 import android.os.Bundle
 import android.os.SystemClock
 import com.wavezero.player.playback.AudioPlayerManager
+import com.wavezero.player.playback.WaveZeroPlaybackSession
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -19,7 +20,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        val manager = AudioPlayerManager(
+        val manager = WaveZeroPlaybackSession.getOrCreate(
             context = applicationContext,
             appStartedAtMs = appStartedAtMs,
         )
@@ -33,7 +34,6 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        audioPlayerManager?.release()
         audioPlayerManager = null
         super.onDestroy()
     }
