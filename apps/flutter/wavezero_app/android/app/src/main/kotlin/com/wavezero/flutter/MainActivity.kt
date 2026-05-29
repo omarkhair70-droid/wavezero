@@ -105,6 +105,16 @@ class PlaybackMethodChannelHandler(
                     result.success(null)
                 }
 
+                "seekTo" -> {
+                    val positionMs = call.argument<Number>("positionMs")?.toLong()
+                    if (positionMs == null) {
+                        result.error("invalid_arguments", "seekTo requires positionMs", null)
+                        return
+                    }
+                    audioPlayerManager.seekTo(positionMs)
+                    result.success(null)
+                }
+
                 "resetMetrics" -> {
                     audioPlayerManager.resetMetrics()
                     result.success(null)

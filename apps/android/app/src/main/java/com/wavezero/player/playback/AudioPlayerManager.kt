@@ -227,6 +227,12 @@ class AudioPlayerManager(
         play()
     }
 
+    fun seekTo(positionMs: Long) {
+        val safePosition = positionMs.coerceAtLeast(0L)
+        player.seekTo(safePosition)
+        publish(metricsTracker.markPosition(player.currentPosition))
+    }
+
     fun resetMetrics() {
         publish(metricsTracker.resetTransientMetrics())
         if (player.isPlaying) {
@@ -236,7 +242,10 @@ class AudioPlayerManager(
         }
     }
 
-    fun metricsSnapshotMap(): Map<String, Any?> = metricsTracker.snapshot().toMap()
+    fun metricsSnapshotMap(): Map<String, Any?> {
+        val durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+        return metricsTracker.snapshot().toMap() + mapOf("durationMs" to durationMs)
+    }
 
     fun release() {
         positionJob?.cancel()

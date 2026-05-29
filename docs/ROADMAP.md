@@ -136,29 +136,40 @@ Outcome:
 - Wi-Fi and 4G tap-to-audio results improved to around half a second in manual testing.
 - Notification, background playback, and duplicate Play guard behavior were preserved.
 
+### Phase 0H.1 — Preload Metrics
+
+Status: Completed
+
+Outcome:
+
+- Preload work is now visible through `preparedBeforePlay`, `loadToManifestMs`, `loadToReadyMs`, `prebufferCount`, and `prebufferMs`.
+- Flutter displays the preload metrics.
+- Android and Flutter tests cover the preload metrics contract.
+
 ## Next Phases
 
-### Phase 0H.1 — Preload Metrics
+### Phase 0I — Real Player UX
 
 Status: In progress
 
 Goal:
 
-Measure the hidden preload work moved from Play to Load Track by Phase 0H.
+Replace the proof-style metrics screen with a real player shell while preserving native playback and measurement.
 
 Scope:
 
-- Add `preparedBeforePlay` to show whether the player was ready before Play.
-- Add `loadToManifestMs` to measure Load Track to HLS manifest completion.
-- Add `loadToReadyMs` to measure Load Track to Media3 ready.
-- Add `prebufferCount` and `prebufferMs` to separate pre-Play buffering from Play-time startup buffering.
-- Expose preload metrics through Flutter and tests.
+- Add a premium now-playing card with artwork placeholder, track title, status, and artist/proof label.
+- Add a player progress slider and time labels.
+- Add native seek support through the Flutter/Android bridge.
+- Add Play/Pause, Retry, and Stop controls in a player layout.
+- Keep metrics available behind an expandable diagnostics panel.
+- Add a bottom mini-player strip.
 
 Non-goals:
 
-- No backend catalog work.
-- No CDN optimization yet.
-- No production audio pipeline yet.
+- No production artwork pipeline yet.
+- No backend catalog work yet.
+- No queue or playlist model yet.
 
 ### Phase 1 — Real Catalog API
 
