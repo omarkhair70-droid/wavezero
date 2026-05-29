@@ -23,7 +23,11 @@ plugins {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    // The Flutter Gradle plugin may register its own Maven repository during the
+    // Android host build. Using FAIL_ON_PROJECT_REPOS breaks `flutter run`, so
+    // keep the shared settings repositories while allowing Flutter's plugin-owned
+    // project repositories for this host.
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
         google()
         mavenCentral()
