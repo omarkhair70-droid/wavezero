@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -166,11 +165,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     onRetry: () => _runCommand(widget.playbackBridge.retry),
                     onSeekChanged: durationMs == null || durationMs <= 0
                         ? null
-                        : (value) {
-                            setState(() {
-                              _dragPositionMs = value * durationMs;
-                            });
-                          },
+                        : (value) => setState(() => _dragPositionMs = value * durationMs),
                     onSeekEnd: durationMs == null || durationMs <= 0
                         ? null
                         : (value) async {
@@ -641,5 +636,3 @@ String _formatTime(int? valueMs) {
 }
 
 const _timeStyle = TextStyle(color: Color(0xFF9BA3B4), fontSize: 12);
-
-int _safeMax(int a, int b) => math.max(a, b);
