@@ -157,40 +157,51 @@ Outcome:
 - Native seek support is available through the Flutter/Android bridge.
 - Metrics remain visible and copyable from the player UI.
 
+### Phase 0I.1 — Player UX Polish and Seek Reliability
+
+Status: Completed
+
+Outcome:
+
+- Seek attempts are tracked with `seekCount` and `lastSeekToMs`.
+- Seek-induced buffering is tracked separately through `seekBufferMs`.
+- Buffering caused immediately by seek no longer inflates `rebufferCount`.
+- Native seek targets are clamped to known media duration when available.
+
 ## Next Phases
 
-### Phase 0I.1 — Player UX Polish and Seek Reliability
+### Phase 1A — Real Catalog API Foundation
 
 Status: In progress
 
 Goal:
 
-Polish the first real player shell and prevent seek activity from being counted as normal rebuffering.
+Introduce the backend catalog contract that will replace hardcoded demo tracks in the Flutter player.
 
 Scope:
 
-- Track seek attempts with `seekCount` and `lastSeekToMs`.
-- Track seek-induced buffering separately with `seekBufferMs`.
-- Avoid incrementing `rebufferCount` for buffering caused immediately by seek.
-- Clamp native seek targets to known media duration when available.
-- Keep diagnostics able to show the difference between true rebuffering and seek buffering.
-- Keep Play/Pause, notification controls, and background playback unchanged.
+- Add a development catalog fixture with artists, tracks, artwork URLs, durations, and stream assets.
+- Add `/catalog`, `/artists`, `/artists/:id`, `/tracks`, `/tracks/:id`, and `/tracks/:id/manifest` API routes.
+- Include artist names, artwork URLs, primary assets, and stream URLs in API responses.
+- Keep the Rust core `Track`/`TrackAsset` model as the deterministic playback manifest foundation.
+- Keep Flutter playback still using the local demo track until the next client integration phase.
 
 Non-goals:
 
-- No queue or playlist model yet.
-- No production artwork pipeline yet.
-- No backend catalog work yet.
+- No database yet.
+- No auth/user library yet.
+- No Flutter catalog client integration yet.
+- No production storage or signed URLs yet.
 
-### Phase 1 — Real Catalog API
+### Phase 1B — Flutter Catalog Client Integration
 
 Goal:
 
-Replace hardcoded demo HLS tracks with real backend-driven tracks/assets.
+Load the first playable track into the Flutter player from the API catalog contract instead of the hardcoded demo track.
 
 Scope:
 
-- Expand Rust API service for tracks, artists, and assets.
-- Read real track manifests from the backend.
-- Keep playback adapter isolated from catalog implementation.
-- Add basic local/dev seed data.
+- Add a small Flutter catalog client.
+- Fetch `/catalog` or `/tracks/:id/manifest` from a configurable dev API base URL.
+- Load title, stream URL, duration, artist, and artwork into the player screen.
+- Keep native playback controlled through the existing MethodChannel bridge.
