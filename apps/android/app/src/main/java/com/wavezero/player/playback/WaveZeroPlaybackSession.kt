@@ -13,12 +13,10 @@ object WaveZeroPlaybackSession {
         context: Context,
         appStartedAtMs: Long = SystemClock.elapsedRealtime(),
     ): AudioPlayerManager {
-        val appContext = context.applicationContext
-        startMediaSessionService(appContext)
-
         val existing = manager
         if (existing != null) return existing
 
+        val appContext = context.applicationContext
         return AudioPlayerManager(
             context = appContext,
             appStartedAtMs = appStartedAtMs,
