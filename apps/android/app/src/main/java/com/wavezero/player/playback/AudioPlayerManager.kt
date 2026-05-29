@@ -39,6 +39,7 @@ class AudioPlayerManager(
     private var positionJob: Job? = null
     private var currentTrackTitle: String = DemoTrack.title
     private var currentHlsUrl: String = hlsUrl
+    private var playCommandInFlight = false
 
     private val appContext = context.applicationContext
 
@@ -88,6 +89,7 @@ class AudioPlayerManager(
                 }
 
                 Player.STATE_ENDED -> {
+                    playCommandInFlight = false
                     publish(metricsTracker.markNotPlaying(player.currentPosition))
                     mutablePlaybackState.value = PlaybackState(
                         status = PlaybackStatus.Ended,
@@ -104,6 +106,7 @@ class AudioPlayerManager(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) {
+                playCommandInFlight = false
                 publish(metricsTracker.markPlaying(player.currentPosition))
                 mutablePlaybackState.value = PlaybackState(
                     status = PlaybackStatus.Playing,
@@ -121,6 +124,7 @@ class AudioPlayerManager(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            playCommandInFlight = false
             publish(metricsTracker.markError(error.message ?: error.errorCodeName))
             mutablePlaybackState.value = PlaybackState(
                 status = PlaybackStatus.Error,
@@ -155,6 +159,7 @@ class AudioPlayerManager(
     fun loadTrack(title: String, hlsUrl: String) {
         currentTrackTitle = title.ifBlank { DemoTrack.title }
         currentHlsUrl = hlsUrl
+        playCommandInFlight = false
         positionJob?.cancel()
         player.stop()
         player.clearMediaItems()
@@ -167,6 +172,13 @@ class AudioPlayerManager(
     }
 
     fun play() {
+        if (player.isPlaying || player.playWhenReady || playCommandInFlight) {
+            player.playWhenReady = true
+            startPositionUpdates()
+            return
+        }
+
+        playCommandInFlight = true
         publish(metricsTracker.markPlayTapped())
         player.prepare()
         player.playWhenReady = true
@@ -174,6 +186,7 @@ class AudioPlayerManager(
     }
 
     fun pause() {
+        playCommandInFlight = false
         player.pause()
         publish(metricsTracker.markNotPlaying(player.currentPosition))
         mutablePlaybackState.value = PlaybackState(
@@ -191,6 +204,7 @@ class AudioPlayerManager(
     }
 
     fun stop() {
+        playCommandInFlight = false
         player.stop()
         player.clearMediaItems()
         player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
