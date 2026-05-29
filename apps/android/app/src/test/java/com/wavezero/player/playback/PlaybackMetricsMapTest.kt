@@ -21,6 +21,10 @@ class PlaybackMetricsMapTest {
             tapToReadyMs = 12L,
             tapToIsPlayingMs = 18L,
             tapToPositionAdvanceMs = 24L,
+            startupBufferMs = 90L,
+            rebufferCount = 1,
+            rebufferMs = 40L,
+            totalBufferMs = 130L,
             lastEvent = "playing",
             trackTitle = "Title",
             trackUrl = "https://example.test/stream.m3u8",
@@ -40,6 +44,10 @@ class PlaybackMetricsMapTest {
         assertEquals(12L, map["tapToReadyMs"])
         assertEquals(18L, map["tapToIsPlayingMs"])
         assertEquals(24L, map["tapToPositionAdvanceMs"])
+        assertEquals(90L, map["startupBufferMs"])
+        assertEquals(1, map["rebufferCount"])
+        assertEquals(40L, map["rebufferMs"])
+        assertEquals(130L, map["totalBufferMs"])
         assertEquals("playing", map["lastEvent"])
         assertEquals("Title", map["trackTitle"])
         assertEquals("https://example.test/stream.m3u8", map["trackUrl"])
@@ -53,6 +61,9 @@ class PlaybackMetricsMapTest {
         tracker.markPlayTapped()
         nowMs += 100L
         tracker.markPlaying(positionMs = 42L)
+        tracker.markBufferingStarted()
+        nowMs += 50L
+        tracker.markBufferingEnded()
 
         val reset = tracker.resetTransientMetrics()
 
@@ -61,5 +72,54 @@ class PlaybackMetricsMapTest {
         assertNull(reset.tapToFirstAudioMs)
         assertEquals(0L, reset.currentPositionMs)
         assertFalse(reset.isPlaying)
+        assertEquals(0, reset.bufferCount)
+        assertEquals(0L, reset.startupBufferMs)
+        assertEquals(0, reset.rebufferCount)
+        assertEquals(0L, reset.rebufferMs)
+        assertEquals(0L, reset.totalBufferMs)
+    }
+
+    @Test
+    fun metricsTrackAttemptStartupBufferPositionAdvanceAndRebuffer() {
+        var nowMs = 1_000L
+        val tracker = PlaybackMetricsTracker(nowMs = { nowMs })
+        tracker.loadTrack("Loaded", "https://example.test/loaded.m3u8")
+
+        val attempt = tracker.markPlayTapped()
+        assertEquals(1, attempt.attemptId)
+        assertNull(attempt.tapToFirstAudioMs)
+        assertEquals(0, attempt.bufferCount)
+
+        tracker.markBufferingStarted()
+        nowMs += 250L
+        val startupEnded = tracker.markBufferingEnded()
+        assertEquals(1, startupEnded.bufferCount)
+        assertEquals(250L, startupEnded.startupBufferMs)
+        assertEquals(0, startupEnded.rebufferCount)
+        assertEquals(0L, startupEnded.rebufferMs)
+        assertEquals(250L, startupEnded.totalBufferMs)
+
+        nowMs += 50L
+        val ready = tracker.markReady()
+        assertEquals(300L, ready.tapToReadyMs)
+
+        val playingWithoutPositionAdvance = tracker.markPlaying(positionMs = 0L)
+        assertEquals(300L, playingWithoutPositionAdvance.tapToIsPlayingMs)
+        assertNull(playingWithoutPositionAdvance.tapToFirstAudioMs)
+        assertNull(playingWithoutPositionAdvance.tapToPositionAdvanceMs)
+
+        nowMs += 300L
+        val advanced = tracker.markPosition(positionMs = 350L)
+        assertEquals(600L, advanced.tapToPositionAdvanceMs)
+        assertEquals(600L, advanced.tapToFirstAudioMs)
+
+        tracker.markBufferingStarted()
+        nowMs += 150L
+        val rebufferEnded = tracker.markBufferingEnded()
+        assertEquals(2, rebufferEnded.bufferCount)
+        assertEquals(250L, rebufferEnded.startupBufferMs)
+        assertEquals(1, rebufferEnded.rebufferCount)
+        assertEquals(150L, rebufferEnded.rebufferMs)
+        assertEquals(400L, rebufferEnded.totalBufferMs)
     }
 }
