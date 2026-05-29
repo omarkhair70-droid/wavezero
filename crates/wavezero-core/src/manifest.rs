@@ -33,7 +33,7 @@ impl Track {
     }
 }
 
-/// A concrete streamable asset for a track, such as an HLS/CMAF variant.
+/// A concrete streamable asset for a track, such as an HLS/CMAF variant or direct audio file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrackAsset {
     pub id: String,
@@ -72,4 +72,5 @@ pub enum AudioCodec {
     AacLc,
     Opus,
     Flac,
+    Mp3,
 }
