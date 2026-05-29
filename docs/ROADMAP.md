@@ -69,32 +69,23 @@ Outcome:
 - Flutter Android host Kotlin plugin was upgraded to a Flutter-supported version.
 - Flutter Android repository resolution and build output path remain stable.
 
-## Next Phases
-
 ### Phase 0F — Background Playback and Media Session
 
-Status: In progress
+Status: Completed
 
-Goal:
+Outcome:
 
-Turn Android playback from foreground-only proof toward real music-app operating-system integration while preserving the Flutter command UI.
+- A Media3 `MediaSession` wraps the shared ExoPlayer instance.
+- Music audio attributes and Android audio-focus handling are configured.
+- Noisy-device handling is enabled through ExoPlayer's built-in becoming-noisy handling.
+- Flutter and native manifests are prepared for media playback foreground-service permissions.
+- Screen-off playback was verified manually on Android.
 
-Scope:
-
-- Add a Media3 `MediaSession` around the shared ExoPlayer instance.
-- Add music audio attributes and Android audio-focus handling.
-- Handle noisy-device events through ExoPlayer's built-in becoming-noisy handling.
-- Prepare native and Flutter host manifests for media playback foreground-service permissions.
-- Preserve Flutter as the command UI.
-
-Non-goals:
-
-- No iOS yet.
-- No catalog backend dependency.
-- No production notification artwork.
-- No full queue model yet.
+## Next Phases
 
 ### Phase 0F.1 — Foreground Media Playback Service
+
+Status: In progress
 
 Goal:
 
@@ -102,16 +93,18 @@ Promote playback into a real Android foreground media playback service with noti
 
 Scope:
 
-- Add Media3 `MediaSessionService` or equivalent service structure.
-- Add notification controls.
-- Add lock-screen controls.
-- Keep Flutter as the command surface.
-- Verify screen-off playback and pause/resume from system controls.
+- Add a shared playback session owner so Flutter, native proof, and the Android service refer to the same playback manager.
+- Add a Media3 `MediaSessionService` and register it in the native and Flutter Android manifests.
+- Keep Flutter as the command surface while the OS can discover the active media session.
+- Prepare Android 13+ notification permission declarations.
+- Verify screen-off playback and pause/resume from system controls where the device surfaces them.
 
 Non-goals:
 
 - No streaming backend dependency.
 - No iOS yet.
+- No queue model yet.
+- No production notification artwork.
 
 ### Phase 0G — Accurate Metrics System
 
