@@ -23,9 +23,21 @@ object WaveZeroPlaybackSession {
         ).also { manager = it }
     }
 
+    fun showMediaControls(context: Context) {
+        startMediaSessionService(context, WaveZeroMediaSessionService.ACTION_SHOW_NOTIFICATION)
+    }
+
+    fun dismissMediaControls(context: Context) {
+        startMediaSessionService(context, WaveZeroMediaSessionService.ACTION_STOP_AND_DISMISS)
+    }
+
     fun startMediaSessionService(context: Context) {
+        startMediaSessionService(context, WaveZeroMediaSessionService.ACTION_SHOW_NOTIFICATION)
+    }
+
+    private fun startMediaSessionService(context: Context, action: String) {
         val appContext = context.applicationContext
-        val intent = Intent(appContext, WaveZeroMediaSessionService::class.java)
+        val intent = Intent(appContext, WaveZeroMediaSessionService::class.java).setAction(action)
         appContext.startService(intent)
     }
 
