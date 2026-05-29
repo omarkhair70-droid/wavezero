@@ -65,6 +65,21 @@ class CatalogTrackSummary {
     if (artist != null && artist.trim().isNotEmpty) return artist;
     return 'WaveZero catalog track';
   }
+
+  bool matchesQuery(String query) {
+    final normalizedQuery = _normalizeSearch(query);
+    if (normalizedQuery.isEmpty) return true;
+
+    final searchableText = _normalizeSearch([
+      title,
+      subtitle,
+      trackId,
+      artistId ?? '',
+      primaryAsset?.codec ?? '',
+    ].join(' '));
+
+    return searchableText.contains(normalizedQuery);
+  }
 }
 
 class CatalogTrackAssetSummary {
@@ -178,3 +193,5 @@ int? _readInt(Object? value) {
   if (value is num) return value.toInt();
   return null;
 }
+
+String _normalizeSearch(String value) => value.trim().toLowerCase();

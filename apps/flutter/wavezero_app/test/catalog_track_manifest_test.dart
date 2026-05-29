@@ -39,6 +39,11 @@ void main() {
     expect(catalog.tracks.first.primaryAsset?.bitrateKbps, 256);
     expect(catalog.tracks.last.title, 'Independent Frequency');
     expect(catalog.tracks.last.durationMs, 212000);
+    expect(catalog.tracks.first.matchesQuery('wavezero'), isTrue);
+    expect(catalog.tracks.first.matchesQuery('bipbop'), isTrue);
+    expect(catalog.tracks.last.matchesQuery('demo signal'), isTrue);
+    expect(catalog.tracks.last.matchesQuery('independent'), isTrue);
+    expect(catalog.tracks.last.matchesQuery('wavezero'), isFalse);
   });
 
   test('CatalogIndex rejects responses without tracks', () {
