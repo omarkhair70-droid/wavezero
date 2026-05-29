@@ -15,6 +15,10 @@ data class PlaybackMetrics(
     val tapToReadyMs: Long? = null,
     val tapToIsPlayingMs: Long? = null,
     val tapToPositionAdvanceMs: Long? = null,
+    val startupBufferMs: Long = 0,
+    val rebufferCount: Int = 0,
+    val rebufferMs: Long = 0,
+    val totalBufferMs: Long = 0,
     val lastEvent: String = "initialized",
     val trackTitle: String = DemoTrack.title,
     val trackUrl: String = DemoTrack.hlsUrl,
@@ -32,6 +36,10 @@ data class PlaybackMetrics(
         "tapToReadyMs" to tapToReadyMs,
         "tapToIsPlayingMs" to tapToIsPlayingMs,
         "tapToPositionAdvanceMs" to tapToPositionAdvanceMs,
+        "startupBufferMs" to startupBufferMs,
+        "rebufferCount" to rebufferCount,
+        "rebufferMs" to rebufferMs,
+        "totalBufferMs" to totalBufferMs,
         "lastEvent" to lastEvent,
         "trackTitle" to trackTitle,
         "trackUrl" to trackUrl,
@@ -42,9 +50,11 @@ class PlaybackMetricsTracker(
     private val nowMs: () -> Long,
 ) {
     private var playTappedAtMs: Long? = null
-    private var firstAudioObserved = false
+    private var playStartPositionMs: Long = 0L
     private var positionAdvanceObserved = false
     private var isBuffering = false
+    private var bufferStartedAtMs: Long? = null
+    private var bufferPhase: BufferPhase? = null
     private var metrics = PlaybackMetrics()
 
     fun snapshot(): PlaybackMetrics = metrics
@@ -55,9 +65,11 @@ class PlaybackMetricsTracker(
 
     fun loadTrack(title: String, hlsUrl: String): PlaybackMetrics {
         playTappedAtMs = null
-        firstAudioObserved = false
+        playStartPositionMs = 0L
         positionAdvanceObserved = false
         isBuffering = false
+        bufferStartedAtMs = null
+        bufferPhase = null
         return update("track_loaded") {
             copy(
                 tapToFirstAudioMs = null,
@@ -70,6 +82,10 @@ class PlaybackMetricsTracker(
                 tapToReadyMs = null,
                 tapToIsPlayingMs = null,
                 tapToPositionAdvanceMs = null,
+                startupBufferMs = 0,
+                rebufferCount = 0,
+                rebufferMs = 0,
+                totalBufferMs = 0,
                 trackTitle = title,
                 trackUrl = hlsUrl,
             )
@@ -78,16 +94,25 @@ class PlaybackMetricsTracker(
 
     fun markPlayTapped(): PlaybackMetrics {
         playTappedAtMs = nowMs()
-        firstAudioObserved = false
+        playStartPositionMs = metrics.currentPositionMs.coerceAtLeast(0)
         positionAdvanceObserved = false
+        isBuffering = false
+        bufferStartedAtMs = null
+        bufferPhase = null
         return update("play_tapped") {
             copy(
                 playbackError = null,
                 attemptId = attemptId + 1,
                 tapToFirstAudioMs = null,
+                manifestLoadMs = null,
+                bufferCount = 0,
                 tapToReadyMs = null,
                 tapToIsPlayingMs = null,
                 tapToPositionAdvanceMs = null,
+                startupBufferMs = 0,
+                rebufferCount = 0,
+                rebufferMs = 0,
+                totalBufferMs = 0,
             )
         }
     }
@@ -97,27 +122,14 @@ class PlaybackMetricsTracker(
     }
 
     fun markPlaying(positionMs: Long): PlaybackMetrics {
+        val position = positionMs.coerceAtLeast(0)
         val elapsed = elapsedSincePlayTap()
-        val firstAudioMs = if (!firstAudioObserved) {
-            firstAudioObserved = true
-            elapsed
-        } else {
-            metrics.tapToFirstAudioMs
-        }
-        val positionAdvanceMs = if (!positionAdvanceObserved && positionMs > 0L) {
-            positionAdvanceObserved = true
-            elapsed
-        } else {
-            metrics.tapToPositionAdvanceMs
-        }
 
         return update("playing") {
             copy(
-                tapToFirstAudioMs = firstAudioMs,
                 tapToIsPlayingMs = tapToIsPlayingMs ?: elapsed,
-                tapToPositionAdvanceMs = positionAdvanceMs,
                 isPlaying = true,
-                currentPositionMs = positionMs.coerceAtLeast(0),
+                currentPositionMs = position,
             )
         }
     }
@@ -129,14 +141,42 @@ class PlaybackMetricsTracker(
     fun markBufferingStarted(): PlaybackMetrics {
         if (!isBuffering) {
             isBuffering = true
-            return update("buffering_started") { copy(bufferCount = bufferCount + 1) }
+            bufferStartedAtMs = nowMs()
+            bufferPhase = if (positionAdvanceObserved || metrics.currentPositionMs > playStartPositionMs) {
+                BufferPhase.Rebuffer
+            } else {
+                BufferPhase.Startup
+            }
+
+            return update("buffering_started") {
+                copy(
+                    bufferCount = bufferCount + 1,
+                    rebufferCount = rebufferCount + if (bufferPhase == BufferPhase.Rebuffer) 1 else 0,
+                )
+            }
         }
         return metrics
     }
 
     fun markBufferingEnded(): PlaybackMetrics {
+        val startedAt = bufferStartedAtMs
+        val phase = bufferPhase
         isBuffering = false
-        return update("buffering_ended") { this }
+        bufferStartedAtMs = null
+        bufferPhase = null
+
+        if (startedAt == null || phase == null) {
+            return update("buffering_ended") { this }
+        }
+
+        val durationMs = (nowMs() - startedAt).coerceAtLeast(0)
+        return update("buffering_ended") {
+            copy(
+                startupBufferMs = startupBufferMs + if (phase == BufferPhase.Startup) durationMs else 0,
+                rebufferMs = rebufferMs + if (phase == BufferPhase.Rebuffer) durationMs else 0,
+                totalBufferMs = totalBufferMs + durationMs,
+            )
+        }
     }
 
     fun markManifestLoaded(loadDurationMs: Long): PlaybackMetrics = update("manifest_loaded") {
@@ -144,16 +184,24 @@ class PlaybackMetricsTracker(
     }
 
     fun markPosition(positionMs: Long): PlaybackMetrics {
-        val positionAdvanceMs = if (!positionAdvanceObserved && positionMs > 0L) {
+        val position = positionMs.coerceAtLeast(0)
+        val elapsed = elapsedSincePlayTap()
+        val positionAdvanceMs = if (
+            elapsed != null &&
+            !positionAdvanceObserved &&
+            position > playStartPositionMs
+        ) {
             positionAdvanceObserved = true
-            elapsedSincePlayTap()
+            elapsed
         } else {
             metrics.tapToPositionAdvanceMs
         }
+
         return update("position") {
             copy(
-                currentPositionMs = positionMs.coerceAtLeast(0),
+                currentPositionMs = position,
                 tapToPositionAdvanceMs = positionAdvanceMs,
+                tapToFirstAudioMs = tapToFirstAudioMs ?: positionAdvanceMs,
             )
         }
     }
@@ -164,9 +212,11 @@ class PlaybackMetricsTracker(
 
     fun resetTransientMetrics(): PlaybackMetrics {
         playTappedAtMs = null
-        firstAudioObserved = false
+        playStartPositionMs = metrics.currentPositionMs.coerceAtLeast(0)
         positionAdvanceObserved = false
         isBuffering = false
+        bufferStartedAtMs = null
+        bufferPhase = null
         return update("metrics_reset") {
             copy(
                 tapToFirstAudioMs = null,
@@ -178,6 +228,10 @@ class PlaybackMetricsTracker(
                 tapToReadyMs = null,
                 tapToIsPlayingMs = null,
                 tapToPositionAdvanceMs = null,
+                startupBufferMs = 0,
+                rebufferCount = 0,
+                rebufferMs = 0,
+                totalBufferMs = 0,
             )
         }
     }
@@ -191,5 +245,10 @@ class PlaybackMetricsTracker(
     private fun update(eventName: String, block: PlaybackMetrics.() -> PlaybackMetrics): PlaybackMetrics {
         metrics = metrics.block().copy(lastEvent = eventName)
         return metrics
+    }
+
+    private enum class BufferPhase {
+        Startup,
+        Rebuffer,
     }
 }
