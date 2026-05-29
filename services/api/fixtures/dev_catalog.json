@@ -34,13 +34,13 @@
       "id": "track-independent-frequency",
       "artist_id": "artist-demo-signal",
       "title": "Independent Frequency",
-      "duration_ms": 212000,
+      "duration_ms": 30000,
       "artwork_url": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
       "assets": [
         {
           "id": "asset-independent-frequency-aac",
           "track_id": "track-independent-frequency",
-          "manifest_url": "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/gear0/prog_index.m3u8",
+          "manifest_url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
           "codec": "aac_lc",
           "bitrate_kbps": 192,
           "segment_count": 53,
