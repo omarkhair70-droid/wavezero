@@ -10,6 +10,7 @@ void main() {
       bufferCount: 1,
       isPlaying: true,
       currentPositionMs: 250,
+      durationMs: 180000,
       sessionId: 'session-1',
       attemptId: 2,
       tapToReadyMs: 12,
@@ -24,6 +25,9 @@ void main() {
       loadToReadyMs: 75,
       prebufferCount: 1,
       prebufferMs: 70,
+      seekCount: 2,
+      seekBufferMs: 44,
+      lastSeekToMs: 12000,
       lastEvent: 'playing',
       trackTitle: 'Title',
       trackUrl: 'https://example.test/stream.m3u8',
@@ -31,6 +35,7 @@ void main() {
 
     expect(metrics.toJson()['isPlaying'], isTrue);
     expect(metrics.toJson()['sessionId'], 'session-1');
+    expect(metrics.toJson()['durationMs'], 180000);
     expect(metrics.toJson()['startupBufferMs'], 90);
     expect(metrics.toJson()['rebufferCount'], 1);
     expect(metrics.toJson()['totalBufferMs'], 130);
@@ -39,10 +44,15 @@ void main() {
     expect(metrics.toJson()['loadToReadyMs'], 75);
     expect(metrics.toJson()['prebufferCount'], 1);
     expect(metrics.toJson()['prebufferMs'], 70);
+    expect(metrics.toJson()['seekCount'], 2);
+    expect(metrics.toJson()['seekBufferMs'], 44);
+    expect(metrics.toJson()['lastSeekToMs'], 12000);
     expect(metrics.toDisplayText(), contains('tapToFirstAudioMs: 20'));
     expect(metrics.toDisplayText(), contains('startupBufferMs: 90'));
     expect(metrics.toDisplayText(), contains('preparedBeforePlay: true'));
     expect(metrics.toDisplayText(), contains('loadToReadyMs: 75'));
+    expect(metrics.toDisplayText(), contains('seekCount: 2'));
+    expect(metrics.toDisplayText(), contains('seekBufferMs: 44'));
     expect(metrics.toDisplayText(), contains('trackTitle: Title'));
   });
 
@@ -51,6 +61,7 @@ void main() {
       'bufferCount': 2.0,
       'isPlaying': true,
       'currentPositionMs': 1024,
+      'durationMs': 180000.0,
       'playbackError': 'network',
       'attemptId': 3.0,
       'tapToReadyMs': 40.0,
@@ -63,6 +74,9 @@ void main() {
       'loadToReadyMs': 72.0,
       'prebufferCount': 1.0,
       'prebufferMs': 66.0,
+      'seekCount': 4.0,
+      'seekBufferMs': 87.0,
+      'lastSeekToMs': 45000.0,
       'sessionId': 'native-session',
       'lastEvent': 'error',
     });
@@ -70,6 +84,7 @@ void main() {
     expect(metrics.bufferCount, 2);
     expect(metrics.isPlaying, isTrue);
     expect(metrics.currentPositionMs, 1024);
+    expect(metrics.durationMs, 180000);
     expect(metrics.playbackError, 'network');
     expect(metrics.attemptId, 3);
     expect(metrics.tapToReadyMs, 40);
@@ -82,6 +97,9 @@ void main() {
     expect(metrics.loadToReadyMs, 72);
     expect(metrics.prebufferCount, 1);
     expect(metrics.prebufferMs, 66);
+    expect(metrics.seekCount, 4);
+    expect(metrics.seekBufferMs, 87);
+    expect(metrics.lastSeekToMs, 45000);
     expect(metrics.sessionId, 'native-session');
     expect(metrics.lastEvent, 'error');
   });
