@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/wavezero-core",
+    "crates/wavezero-ffi",
 ]
 exclude = [
     "services/api",
