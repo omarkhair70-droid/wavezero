@@ -2,6 +2,52 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wavezero_app/catalog/catalog_track_manifest.dart';
 
 void main() {
+  test('CatalogIndex parses catalog API track list', () {
+    final catalog = CatalogIndex.fromJson(<String, Object?>{
+      'artists': const <Object?>[],
+      'tracks': <Object?>[
+        <String, Object?>{
+          'id': 'track-apple-bipbop-hls',
+          'artist_id': 'artist-wavezero-labs',
+          'artist_name': 'WaveZero Labs',
+          'title': 'Apple BipBop HLS Demo',
+          'duration_ms': 1800000,
+          'artwork_url': 'https://images.example.test/artwork.jpg',
+          'primary_asset': <String, Object?>{
+            'id': 'asset-apple-bipbop-aac',
+            'manifest_url': 'https://example.test/stream.m3u8',
+            'codec': 'aac_lc',
+            'bitrate_kbps': 256,
+          },
+        },
+        <String, Object?>{
+          'id': 'track-independent-frequency',
+          'artist_name': 'Demo Signal',
+          'title': 'Independent Frequency',
+          'duration_ms': 212000,
+          'primary_asset': <String, Object?>{
+            'id': 'asset-independent-frequency-aac',
+            'manifest_url': 'https://example.test/other.m3u8',
+          },
+        },
+      ],
+    });
+
+    expect(catalog.tracks, hasLength(2));
+    expect(catalog.tracks.first.trackId, 'track-apple-bipbop-hls');
+    expect(catalog.tracks.first.subtitle, 'WaveZero Labs');
+    expect(catalog.tracks.first.primaryAsset?.bitrateKbps, 256);
+    expect(catalog.tracks.last.title, 'Independent Frequency');
+    expect(catalog.tracks.last.durationMs, 212000);
+  });
+
+  test('CatalogIndex rejects responses without tracks', () {
+    expect(
+      () => CatalogIndex.fromJson(<String, Object?>{}),
+      throwsFormatException,
+    );
+  });
+
   test('CatalogTrackManifest parses track manifest API response', () {
     final manifest = CatalogTrackManifest.fromJson(<String, Object?>{
       'track': <String, Object?>{

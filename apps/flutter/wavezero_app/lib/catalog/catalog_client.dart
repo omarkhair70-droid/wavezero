@@ -19,10 +19,20 @@ class CatalogClient {
   final String baseUrl;
   final HttpClient _httpClient;
 
+  Future<CatalogIndex> fetchCatalog() async {
+    final json = await _getJsonObject('$baseUrl/catalog');
+    return CatalogIndex.fromJson(json);
+  }
+
   Future<CatalogTrackManifest> fetchTrackManifest({
     String trackId = 'track-apple-bipbop-hls',
   }) async {
-    final uri = Uri.parse('$baseUrl/tracks/$trackId/manifest');
+    final json = await _getJsonObject('$baseUrl/tracks/$trackId/manifest');
+    return CatalogTrackManifest.fromJson(json);
+  }
+
+  Future<Map<String, Object?>> _getJsonObject(String url) async {
+    final uri = Uri.parse(url);
     final request = await _httpClient.getUrl(uri).timeout(const Duration(seconds: 5));
     final response = await request.close().timeout(const Duration(seconds: 8));
     final body = await response.transform(utf8.decoder).join();
@@ -35,10 +45,9 @@ class CatalogClient {
 
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, Object?>) {
-      throw const FormatException('Catalog manifest response is not a JSON object');
+      throw const FormatException('Catalog API response is not a JSON object');
     }
-
-    return CatalogTrackManifest.fromJson(decoded);
+    return decoded;
   }
 
   void close() => _httpClient.close(force: true);
