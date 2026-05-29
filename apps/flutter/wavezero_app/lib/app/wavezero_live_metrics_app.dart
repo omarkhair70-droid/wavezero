@@ -58,6 +58,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
   late final TextEditingController _apiBaseUrlController;
+  late final TextEditingController _searchController;
   Timer? _poller;
   PlaybackMetrics _metrics = const PlaybackMetrics();
   CatalogTrackManifest? _catalogManifest;
@@ -70,7 +71,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _catalogListLoading = false;
   String _catalogStatus = 'Catalog not loaded yet.';
   String _catalogListStatus = 'Catalog list not loaded yet.';
+  String _catalogQuery = '';
   double? _dragPositionMs;
+
+  List<CatalogTrackSummary> get _filteredCatalogTracks => _catalogTracks
+      .where((track) => track.matchesQuery(_catalogQuery))
+      .toList(growable: false);
 
   @override
   void initState() {
@@ -78,6 +84,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _titleController = TextEditingController(text: waveZeroTestTrack.title);
     _urlController = TextEditingController(text: waveZeroTestTrack.url);
     _apiBaseUrlController = TextEditingController(text: CatalogClient.defaultBaseUrl);
+    _searchController = TextEditingController();
+    _searchController.addListener(() {
+      if (!mounted) return;
+      setState(() => _catalogQuery = _searchController.text);
+    });
     _poller = Timer.periodic(_refreshInterval, (_) => _refreshMetrics());
     _loadCatalogListAndInitialTrack(fallbackToDemo: true);
   }
@@ -88,6 +99,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _titleController.dispose();
     _urlController.dispose();
     _apiBaseUrlController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -126,19 +138,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     try {
       final catalog = await client.fetchCatalog();
       if (!mounted) return;
-      final firstTrack = catalog.tracks.isEmpty ? null : catalog.tracks.first;
+      final preferredTrack = _findTrack(catalog.tracks, _selectedTrackId) ??
+          (catalog.tracks.isEmpty ? null : catalog.tracks.first);
       setState(() {
         _catalogTracks = catalog.tracks;
-        _selectedTrackId = firstTrack?.trackId;
+        _selectedTrackId = preferredTrack?.trackId;
         _catalogListStatus = catalog.tracks.isEmpty
             ? 'Catalog API returned no tracks.'
             : 'Loaded ${catalog.tracks.length} catalog tracks.';
       });
 
-      if (firstTrack == null) {
+      if (preferredTrack == null) {
         throw const FormatException('Catalog API returned no playable tracks');
       }
-      await _loadCatalogTrack(trackId: firstTrack.trackId, client: client);
+      await _loadCatalogTrack(trackId: preferredTrack.trackId, client: client);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -161,20 +174,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _loadCatalogTrack({
-    String trackId = 'track-apple-bipbop-hls',
+    String? trackId,
     CatalogClient? client,
     bool closeClient = false,
   }) async {
     if (_catalogLoading) return;
+    final targetTrackId = trackId ?? _selectedTrackId ?? 'track-apple-bipbop-hls';
     setState(() {
       _catalogLoading = true;
       _catalogStatus = 'Loading catalog manifest...';
-      _selectedTrackId = trackId;
+      _selectedTrackId = targetTrackId;
     });
 
     final activeClient = client ?? CatalogClient(baseUrl: _apiBaseUrlController.text);
     try {
-      final manifest = await activeClient.fetchTrackManifest(trackId: trackId);
+      final manifest = await activeClient.fetchTrackManifest(trackId: targetTrackId);
       if (!mounted) return;
       _titleController.text = manifest.title;
       _urlController.text = manifest.streamUrl;
@@ -271,11 +285,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   ),
                   const SizedBox(height: 16),
                   _CatalogListCard(
-                    tracks: _catalogTracks,
+                    tracks: _filteredCatalogTracks,
+                    totalTrackCount: _catalogTracks.length,
                     selectedTrackId: _selectedTrackId,
                     status: _catalogListStatus,
                     loading: _catalogListLoading,
                     busy: _busy || _catalogLoading,
+                    searchController: _searchController,
+                    onClearSearch: () => _searchController.clear(),
                     onRefresh: () => _loadCatalogListAndInitialTrack(),
                     onSelectTrack: (track) => _loadCatalogTrack(
                       trackId: track.trackId,
@@ -340,7 +357,7 @@ class _TopBar extends StatelessWidget {
               ),
               SizedBox(height: 4),
               Text(
-                'Native playback. Fast start. Catalog browsing.',
+                'Native playback. Fast start. Searchable catalog.',
                 style: TextStyle(color: Color(0xFF98A1B8), fontSize: 14),
               ),
             ],
@@ -534,24 +551,31 @@ class _Artwork extends StatelessWidget {
 class _CatalogListCard extends StatelessWidget {
   const _CatalogListCard({
     required this.tracks,
+    required this.totalTrackCount,
     required this.selectedTrackId,
     required this.status,
     required this.loading,
     required this.busy,
+    required this.searchController,
+    required this.onClearSearch,
     required this.onRefresh,
     required this.onSelectTrack,
   });
 
   final List<CatalogTrackSummary> tracks;
+  final int totalTrackCount;
   final String? selectedTrackId;
   final String status;
   final bool loading;
   final bool busy;
+  final TextEditingController searchController;
+  final VoidCallback onClearSearch;
   final VoidCallback onRefresh;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
 
   @override
   Widget build(BuildContext context) {
+    final hasQuery = searchController.text.trim().isNotEmpty;
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -568,7 +592,7 @@ class _CatalogListCard extends StatelessWidget {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Choose a track from the API.',
+                      'Search and choose a track from the API.',
                       style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13),
                     ),
                   ],
@@ -586,14 +610,32 @@ class _CatalogListCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
           const SizedBox(height: 12),
-          if (tracks.isEmpty)
-            const Text(
-              'No catalog tracks loaded yet.',
-              style: TextStyle(color: Color(0xFF98A1B8)),
-            )
+          TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              labelText: 'Search catalog',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: hasQuery
+                  ? IconButton(
+                      onPressed: onClearSearch,
+                      icon: const Icon(Icons.close),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            hasQuery
+                ? '$status Showing ${tracks.length} of $totalTrackCount.'
+                : status,
+            style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          if (totalTrackCount == 0)
+            const _EmptyCatalogMessage(message: 'No catalog tracks loaded yet.')
+          else if (tracks.isEmpty)
+            const _EmptyCatalogMessage(message: 'No tracks match this search.')
           else
             ...tracks.map(
               (track) => Padding(
@@ -608,6 +650,25 @@ class _CatalogListCard extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _EmptyCatalogMessage extends StatelessWidget {
+  const _EmptyCatalogMessage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E18),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF20273A)),
+      ),
+      child: Text(message, style: const TextStyle(color: Color(0xFF98A1B8))),
     );
   }
 }
@@ -655,7 +716,7 @@ class _CatalogTrackTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    track.subtitle,
+                    _trackSubtitle(track),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
@@ -734,7 +795,7 @@ class _TrackSetupCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.cloud_download),
-                label: const Text('Load selected/API'),
+                label: const Text('Reload selected/API'),
               ),
               OutlinedButton.icon(
                 onPressed: busy ? null : onLoadTrack,
@@ -937,6 +998,22 @@ class _Panel extends StatelessWidget {
       child: Padding(padding: padding, child: child),
     );
   }
+}
+
+CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) {
+  if (trackId == null) return null;
+  for (final track in tracks) {
+    if (track.trackId == trackId) return track;
+  }
+  return null;
+}
+
+String _trackSubtitle(CatalogTrackSummary track) {
+  final asset = track.primaryAsset;
+  final parts = <String>[track.subtitle];
+  if (asset?.codec != null) parts.add(asset!.codec!);
+  if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps');
+  return parts.join(' • ');
 }
 
 String _statusFromEvent(String? event) {
