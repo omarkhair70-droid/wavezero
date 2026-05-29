@@ -61,11 +61,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Timer? _poller;
   PlaybackMetrics _metrics = const PlaybackMetrics();
   CatalogTrackManifest? _catalogManifest;
+  List<CatalogTrackSummary> _catalogTracks = const [];
+  String? _selectedTrackId;
   bool _busy = false;
   bool _refreshing = false;
   bool _showMetrics = false;
   bool _catalogLoading = false;
+  bool _catalogListLoading = false;
   String _catalogStatus = 'Catalog not loaded yet.';
+  String _catalogListStatus = 'Catalog list not loaded yet.';
   double? _dragPositionMs;
 
   @override
@@ -75,7 +79,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _urlController = TextEditingController(text: waveZeroTestTrack.url);
     _apiBaseUrlController = TextEditingController(text: CatalogClient.defaultBaseUrl);
     _poller = Timer.periodic(_refreshInterval, (_) => _refreshMetrics());
-    _loadCatalogTrack(fallbackToDemo: true);
+    _loadCatalogListAndInitialTrack(fallbackToDemo: true);
   }
 
   @override
@@ -110,27 +114,37 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
   }
 
-  Future<void> _loadCatalogTrack({bool fallbackToDemo = false}) async {
-    if (_catalogLoading) return;
+  Future<void> _loadCatalogListAndInitialTrack({bool fallbackToDemo = false}) async {
+    if (_catalogListLoading) return;
     setState(() {
-      _catalogLoading = true;
-      _catalogStatus = 'Loading catalog manifest...';
+      _catalogListLoading = true;
+      _catalogListStatus = 'Loading catalog list...';
+      _catalogStatus = 'Loading catalog...';
     });
 
     final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
     try {
-      final manifest = await client.fetchTrackManifest();
+      final catalog = await client.fetchCatalog();
       if (!mounted) return;
-      _titleController.text = manifest.title;
-      _urlController.text = manifest.streamUrl;
+      final firstTrack = catalog.tracks.isEmpty ? null : catalog.tracks.first;
       setState(() {
-        _catalogManifest = manifest;
-        _catalogStatus = 'Loaded from catalog API: ${manifest.title}';
+        _catalogTracks = catalog.tracks;
+        _selectedTrackId = firstTrack?.trackId;
+        _catalogListStatus = catalog.tracks.isEmpty
+            ? 'Catalog API returned no tracks.'
+            : 'Loaded ${catalog.tracks.length} catalog tracks.';
       });
-      await _loadTrack(source: TrackLoadSource.catalog);
+
+      if (firstTrack == null) {
+        throw const FormatException('Catalog API returned no playable tracks');
+      }
+      await _loadCatalogTrack(trackId: firstTrack.trackId, client: client);
     } catch (error) {
       if (!mounted) return;
       setState(() {
+        _catalogListStatus = fallbackToDemo
+            ? 'Catalog list unavailable. Using local demo track. $error'
+            : 'Catalog list load failed. $error';
         _catalogStatus = fallbackToDemo
             ? 'Catalog unavailable. Using local demo track. $error'
             : 'Catalog load failed. $error';
@@ -142,6 +156,39 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       }
     } finally {
       client.close();
+      if (mounted) setState(() => _catalogListLoading = false);
+    }
+  }
+
+  Future<void> _loadCatalogTrack({
+    String trackId = 'track-apple-bipbop-hls',
+    CatalogClient? client,
+    bool closeClient = false,
+  }) async {
+    if (_catalogLoading) return;
+    setState(() {
+      _catalogLoading = true;
+      _catalogStatus = 'Loading catalog manifest...';
+      _selectedTrackId = trackId;
+    });
+
+    final activeClient = client ?? CatalogClient(baseUrl: _apiBaseUrlController.text);
+    try {
+      final manifest = await activeClient.fetchTrackManifest(trackId: trackId);
+      if (!mounted) return;
+      _titleController.text = manifest.title;
+      _urlController.text = manifest.streamUrl;
+      setState(() {
+        _catalogManifest = manifest;
+        _selectedTrackId = manifest.trackId;
+        _catalogStatus = 'Loaded from catalog API: ${manifest.title}';
+      });
+      await _loadTrack(source: TrackLoadSource.catalog);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _catalogStatus = 'Catalog load failed. $error');
+    } finally {
+      if (closeClient) activeClient.close();
       if (mounted) setState(() => _catalogLoading = false);
     }
   }
@@ -223,6 +270,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                           },
                   ),
                   const SizedBox(height: 16),
+                  _CatalogListCard(
+                    tracks: _catalogTracks,
+                    selectedTrackId: _selectedTrackId,
+                    status: _catalogListStatus,
+                    loading: _catalogListLoading,
+                    busy: _busy || _catalogLoading,
+                    onRefresh: () => _loadCatalogListAndInitialTrack(),
+                    onSelectTrack: (track) => _loadCatalogTrack(
+                      trackId: track.trackId,
+                      closeClient: true,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   _TrackSetupCard(
                     titleController: _titleController,
                     urlController: _urlController,
@@ -230,7 +290,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     catalogStatus: _catalogStatus,
                     catalogLoading: _catalogLoading,
                     busy: _busy,
-                    onLoadCatalog: () => _loadCatalogTrack(),
+                    onLoadCatalog: () => _loadCatalogTrack(closeClient: true),
                     onLoadTrack: () => _loadTrack(),
                   ),
                   const SizedBox(height: 16),
@@ -280,7 +340,7 @@ class _TopBar extends StatelessWidget {
               ),
               SizedBox(height: 4),
               Text(
-                'Native playback. Fast start. Catalog-ready.',
+                'Native playback. Fast start. Catalog browsing.',
                 style: TextStyle(color: Color(0xFF98A1B8), fontSize: 14),
               ),
             ],
@@ -415,19 +475,20 @@ class _NowPlayingCard extends StatelessWidget {
 }
 
 class _Artwork extends StatelessWidget {
-  const _Artwork({this.artworkUrl});
+  const _Artwork({this.artworkUrl, this.size = 118});
 
   final String? artworkUrl;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final url = artworkUrl;
     return Container(
-      width: 118,
-      height: 118,
+      width: size,
+      height: size,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(size > 60 ? 28 : 14),
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -442,16 +503,16 @@ class _Artwork extends StatelessWidget {
         ],
       ),
       child: url == null || url.trim().isEmpty
-          ? const Icon(Icons.music_note_rounded, size: 48, color: Colors.white)
+          ? Icon(Icons.music_note_rounded, size: size * 0.4, color: Colors.white)
           : Stack(
               fit: StackFit.expand,
               children: [
                 Image.network(
                   url,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(
+                  errorBuilder: (_, __, ___) => Icon(
                     Icons.music_note_rounded,
-                    size: 48,
+                    size: size * 0.4,
                     color: Colors.white,
                   ),
                 ),
@@ -466,6 +527,149 @@ class _Artwork extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _CatalogListCard extends StatelessWidget {
+  const _CatalogListCard({
+    required this.tracks,
+    required this.selectedTrackId,
+    required this.status,
+    required this.loading,
+    required this.busy,
+    required this.onRefresh,
+    required this.onSelectTrack,
+  });
+
+  final List<CatalogTrackSummary> tracks;
+  final String? selectedTrackId;
+  final String status;
+  final bool loading;
+  final bool busy;
+  final VoidCallback onRefresh;
+  final ValueChanged<CatalogTrackSummary> onSelectTrack;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Catalog',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Choose a track from the API.',
+                      style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton.outlined(
+                onPressed: loading || busy ? null : onRefresh,
+                icon: loading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+          const SizedBox(height: 12),
+          if (tracks.isEmpty)
+            const Text(
+              'No catalog tracks loaded yet.',
+              style: TextStyle(color: Color(0xFF98A1B8)),
+            )
+          else
+            ...tracks.map(
+              (track) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _CatalogTrackTile(
+                  track: track,
+                  selected: track.trackId == selectedTrackId,
+                  busy: busy,
+                  onTap: () => onSelectTrack(track),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CatalogTrackTile extends StatelessWidget {
+  const _CatalogTrackTile({
+    required this.track,
+    required this.selected,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final CatalogTrackSummary track;
+  final bool selected;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: busy ? null : onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0x227C5CFF) : const Color(0xFF0B0E18),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected ? const Color(0xFF8D7CFF) : const Color(0xFF20273A),
+          ),
+        ),
+        child: Row(
+          children: [
+            _Artwork(artworkUrl: track.artworkUrl, size: 54),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    track.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(_formatTime(track.durationMs), style: _timeStyle),
+            const SizedBox(width: 8),
+            Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -530,7 +734,7 @@ class _TrackSetupCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.cloud_download),
-                label: const Text('Load from API'),
+                label: const Text('Load selected/API'),
               ),
               OutlinedButton.icon(
                 onPressed: busy ? null : onLoadTrack,
