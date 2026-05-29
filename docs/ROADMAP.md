@@ -113,29 +113,40 @@ Outcome:
 - Notification Play/Pause and Stop actions control the shared player.
 - Notification playback controls were verified manually on Android.
 
+### Phase 0G — Accurate Metrics System
+
+Status: Completed
+
+Outcome:
+
+- Playback metrics are attempt-based and live-refreshing in Flutter.
+- `tapToReadyMs`, `tapToIsPlayingMs`, and `tapToPositionAdvanceMs` are visible on device.
+- Startup buffer and rebuffer metrics are separated.
+- Duplicate Play taps during startup no longer create fake attempts.
+- Wi-Fi and 4G baseline testing has started.
+
 ## Next Phases
 
-### Phase 0G — Accurate Metrics System
+### Phase 0H — Startup Speed Optimization
 
 Status: In progress
 
 Goal:
 
-Make playback metrics trustworthy enough to compare Wi-Fi, 4G, cold start, retry, and buffering behavior.
+Reduce first-play startup latency by preparing the Media3 player during Load Track instead of waiting until Play.
 
 Scope:
 
-- Finalize `tapToReadyMs`, `tapToIsPlayingMs`, and `tapToPositionAdvanceMs` semantics.
-- Add clear attempt/session lifecycle.
-- Separate startup buffer from rebuffer behavior.
-- Add metrics copy/export flow.
-- Add Wi-Fi vs 4G manual test guide.
-- Add local logging for playback attempts.
+- Call Media3 `prepare()` during `loadTrack`.
+- Keep Play as a fast `playWhenReady` command when the player is already ready.
+- Preserve notification, background playback, and duplicate Play guard behavior.
+- Compare before/after Wi-Fi and 4G metrics using `tapToFirstAudioMs`, `tapToReadyMs`, and `startupBufferMs`.
 
 Non-goals:
 
-- No analytics vendor integration.
-- No personal data collection.
+- No backend catalog work.
+- No CDN optimization yet.
+- No production audio pipeline yet.
 
 ### Phase 1 — Real Catalog API
 
