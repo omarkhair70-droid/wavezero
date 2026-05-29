@@ -12,6 +12,10 @@ class PlaybackMetrics {
     this.tapToReadyMs,
     this.tapToIsPlayingMs,
     this.tapToPositionAdvanceMs,
+    this.startupBufferMs = 0,
+    this.rebufferCount = 0,
+    this.rebufferMs = 0,
+    this.totalBufferMs = 0,
     this.lastEvent,
     this.trackTitle,
     this.trackUrl,
@@ -29,6 +33,10 @@ class PlaybackMetrics {
   final int? tapToReadyMs;
   final int? tapToIsPlayingMs;
   final int? tapToPositionAdvanceMs;
+  final int startupBufferMs;
+  final int rebufferCount;
+  final int rebufferMs;
+  final int totalBufferMs;
   final String? lastEvent;
   final String? trackTitle;
   final String? trackUrl;
@@ -53,6 +61,10 @@ class PlaybackMetrics {
     bool clearTapToIsPlayingMs = false,
     int? tapToPositionAdvanceMs,
     bool clearTapToPositionAdvanceMs = false,
+    int? startupBufferMs,
+    int? rebufferCount,
+    int? rebufferMs,
+    int? totalBufferMs,
     String? lastEvent,
     String? trackTitle,
     String? trackUrl,
@@ -81,6 +93,10 @@ class PlaybackMetrics {
       tapToPositionAdvanceMs: clearTapToPositionAdvanceMs
           ? null
           : tapToPositionAdvanceMs ?? this.tapToPositionAdvanceMs,
+      startupBufferMs: startupBufferMs ?? this.startupBufferMs,
+      rebufferCount: rebufferCount ?? this.rebufferCount,
+      rebufferMs: rebufferMs ?? this.rebufferMs,
+      totalBufferMs: totalBufferMs ?? this.totalBufferMs,
       lastEvent: lastEvent ?? this.lastEvent,
       trackTitle: trackTitle ?? this.trackTitle,
       trackUrl: trackUrl ?? this.trackUrl,
@@ -101,6 +117,10 @@ class PlaybackMetrics {
       'tapToReadyMs': tapToReadyMs,
       'tapToIsPlayingMs': tapToIsPlayingMs,
       'tapToPositionAdvanceMs': tapToPositionAdvanceMs,
+      'startupBufferMs': startupBufferMs,
+      'rebufferCount': rebufferCount,
+      'rebufferMs': rebufferMs,
+      'totalBufferMs': totalBufferMs,
       'lastEvent': lastEvent,
       'trackTitle': trackTitle,
       'trackUrl': trackUrl,
@@ -128,6 +148,10 @@ class PlaybackMetrics {
       tapToReadyMs: _readInt(json['tapToReadyMs']),
       tapToIsPlayingMs: _readInt(json['tapToIsPlayingMs']),
       tapToPositionAdvanceMs: _readInt(json['tapToPositionAdvanceMs']),
+      startupBufferMs: _readInt(json['startupBufferMs']) ?? 0,
+      rebufferCount: _readInt(json['rebufferCount']) ?? 0,
+      rebufferMs: _readInt(json['rebufferMs']) ?? 0,
+      totalBufferMs: _readInt(json['totalBufferMs']) ?? 0,
       lastEvent: json['lastEvent'] as String?,
       trackTitle: json['trackTitle'] as String?,
       trackUrl: json['trackUrl'] as String?,

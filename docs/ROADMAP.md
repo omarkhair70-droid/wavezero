@@ -92,31 +92,32 @@ Outcome:
 - Android can discover the active WaveZero media session.
 - Android 13+ notification permission is declared.
 
-## Next Phases
-
 ### Phase 0F.2 — Runtime Notification Permission and Reliable Media Controls
 
-Status: In progress
+Status: Completed
 
-Goal:
+Outcome:
 
-Make Android media notification and lock-screen controls more reliable during local testing.
+- Android 13+ notification permission is requested at runtime from the Flutter host.
+- MediaSessionService starts before play/retry bridge commands.
+- Flutter remains the product command surface.
 
-Scope:
+### Phase 0F.3 — Explicit Foreground Playback Notification
 
-- Request Android 13+ notification permission at runtime from the Flutter host.
-- Start the MediaSessionService immediately before play/retry commands.
-- Keep Flutter as the product command surface.
-- Verify notification and lock-screen controls on a real Android device.
+Status: Completed
 
-Non-goals:
+Outcome:
 
-- No production artwork.
-- No queue model yet.
-- No iOS yet.
-- No streaming backend dependency.
+- WaveZero creates an explicit foreground playback notification.
+- Notification channel `wavezero_playback` exists.
+- Notification Play/Pause and Stop actions control the shared player.
+- Notification playback controls were verified manually on Android.
+
+## Next Phases
 
 ### Phase 0G — Accurate Metrics System
+
+Status: In progress
 
 Goal:
 
@@ -126,6 +127,7 @@ Scope:
 
 - Finalize `tapToReadyMs`, `tapToIsPlayingMs`, and `tapToPositionAdvanceMs` semantics.
 - Add clear attempt/session lifecycle.
+- Separate startup buffer from rebuffer behavior.
 - Add metrics copy/export flow.
 - Add Wi-Fi vs 4G manual test guide.
 - Add local logging for playback attempts.
@@ -133,7 +135,7 @@ Scope:
 Non-goals:
 
 - No analytics vendor integration.
-- No user tracking.
+- No personal data collection.
 
 ### Phase 1 — Real Catalog API
 
