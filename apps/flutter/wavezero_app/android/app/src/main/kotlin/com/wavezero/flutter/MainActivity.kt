@@ -82,24 +82,26 @@ class PlaybackMethodChannelHandler(
                 }
 
                 "play" -> {
-                    WaveZeroPlaybackSession.startMediaSessionService(context)
                     audioPlayerManager.play()
+                    WaveZeroPlaybackSession.showMediaControls(context)
                     result.success(null)
                 }
 
                 "pause" -> {
                     audioPlayerManager.pause()
+                    WaveZeroPlaybackSession.showMediaControls(context)
                     result.success(null)
                 }
 
                 "stop" -> {
                     audioPlayerManager.stop()
+                    WaveZeroPlaybackSession.dismissMediaControls(context)
                     result.success(null)
                 }
 
                 "retry" -> {
-                    WaveZeroPlaybackSession.startMediaSessionService(context)
                     audioPlayerManager.retry()
+                    WaveZeroPlaybackSession.showMediaControls(context)
                     result.success(null)
                 }
 
