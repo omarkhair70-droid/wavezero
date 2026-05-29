@@ -1,6 +1,7 @@
 package com.wavezero.player.playback
 
 import android.content.Context
+import android.content.Intent
 import android.os.SystemClock
 
 object WaveZeroPlaybackSession {
@@ -15,10 +16,17 @@ object WaveZeroPlaybackSession {
         val existing = manager
         if (existing != null) return existing
 
+        val appContext = context.applicationContext
         return AudioPlayerManager(
-            context = context.applicationContext,
+            context = appContext,
             appStartedAtMs = appStartedAtMs,
         ).also { manager = it }
+    }
+
+    fun startMediaSessionService(context: Context) {
+        val appContext = context.applicationContext
+        val intent = Intent(appContext, WaveZeroMediaSessionService::class.java)
+        appContext.startService(intent)
     }
 
     @Synchronized

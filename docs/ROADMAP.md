@@ -81,30 +81,40 @@ Outcome:
 - Flutter and native manifests are prepared for media playback foreground-service permissions.
 - Screen-off playback was verified manually on Android.
 
+### Phase 0F.1 — Foreground Media Playback Service
+
+Status: Completed
+
+Outcome:
+
+- A shared playback session owner connects Flutter, the native proof, and the Android service to the same playback manager.
+- A Media3 `MediaSessionService` is registered in the native and Flutter Android manifests.
+- Android can discover the active WaveZero media session.
+- Android 13+ notification permission is declared.
+
 ## Next Phases
 
-### Phase 0F.1 — Foreground Media Playback Service
+### Phase 0F.2 — Runtime Notification Permission and Reliable Media Controls
 
 Status: In progress
 
 Goal:
 
-Promote playback into a real Android foreground media playback service with notification and lock-screen controls.
+Make Android media notification and lock-screen controls more reliable during local testing.
 
 Scope:
 
-- Add a shared playback session owner so Flutter, native proof, and the Android service refer to the same playback manager.
-- Add a Media3 `MediaSessionService` and register it in the native and Flutter Android manifests.
-- Keep Flutter as the command surface while the OS can discover the active media session.
-- Prepare Android 13+ notification permission declarations.
-- Verify screen-off playback and pause/resume from system controls where the device surfaces them.
+- Request Android 13+ notification permission at runtime from the Flutter host.
+- Start the MediaSessionService immediately before play/retry commands.
+- Keep Flutter as the product command surface.
+- Verify notification and lock-screen controls on a real Android device.
 
 Non-goals:
 
-- No streaming backend dependency.
-- No iOS yet.
+- No production artwork.
 - No queue model yet.
-- No production notification artwork.
+- No iOS yet.
+- No streaming backend dependency.
 
 ### Phase 0G — Accurate Metrics System
 
@@ -137,35 +147,3 @@ Scope:
 - Read real track manifests from the backend.
 - Keep playback adapter isolated from catalog implementation.
 - Add basic local/dev seed data.
-
-### Phase 2 — Rust Core Integration
-
-Goal:
-
-Move deterministic playback decisions into Rust core and use them from app flows.
-
-Scope:
-
-- Connect queue decisions to app UI.
-- Connect prefetch decisions to Android playback preparation.
-- Connect network scoring and cache policy to playback flow.
-- Advance `wavezero-ffi` toward generated bindings when appropriate.
-
-### Phase 3 — Streaming Pipeline
-
-Goal:
-
-Build the real audio delivery foundation.
-
-Scope:
-
-- Encoding pipeline decisions.
-- HLS/CMAF manifest strategy.
-- Cloudflare R2 or equivalent storage.
-- Edge signed manifests.
-- CDN delivery.
-- Track asset variants and quality strategy.
-
-### Phase 4 — iOS Native Adapter
-
-Goal:

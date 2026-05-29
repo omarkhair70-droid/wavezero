@@ -1,5 +1,9 @@
 package com.wavezero.flutter
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import com.wavezero.player.playback.AudioPlayerManager
@@ -16,6 +20,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         appStartedAtMs = SystemClock.elapsedRealtime()
         super.onCreate(savedInstanceState)
+        requestPostNotificationsIfNeeded()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -30,16 +35,36 @@ class MainActivity : FlutterActivity() {
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             PlaybackMethodChannelHandler.CHANNEL_NAME,
-        ).setMethodCallHandler(PlaybackMethodChannelHandler(manager))
+        ).setMethodCallHandler(
+            PlaybackMethodChannelHandler(
+                context = applicationContext,
+                audioPlayerManager = manager,
+            ),
+        )
     }
 
     override fun onDestroy() {
         audioPlayerManager = null
         super.onDestroy()
     }
+
+    private fun requestPostNotificationsIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+
+        requestPermissions(
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_POST_NOTIFICATIONS,
+        )
+    }
+
+    private companion object {
+        const val REQUEST_POST_NOTIFICATIONS = 3001
+    }
 }
 
 class PlaybackMethodChannelHandler(
+    private val context: Context,
     private val audioPlayerManager: AudioPlayerManager,
 ) : MethodChannel.MethodCallHandler {
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -57,6 +82,7 @@ class PlaybackMethodChannelHandler(
                 }
 
                 "play" -> {
+                    WaveZeroPlaybackSession.startMediaSessionService(context)
                     audioPlayerManager.play()
                     result.success(null)
                 }
@@ -72,6 +98,7 @@ class PlaybackMethodChannelHandler(
                 }
 
                 "retry" -> {
+                    WaveZeroPlaybackSession.startMediaSessionService(context)
                     audioPlayerManager.retry()
                     result.success(null)
                 }
