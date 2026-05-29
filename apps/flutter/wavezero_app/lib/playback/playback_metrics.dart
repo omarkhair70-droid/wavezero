@@ -16,6 +16,11 @@ class PlaybackMetrics {
     this.rebufferCount = 0,
     this.rebufferMs = 0,
     this.totalBufferMs = 0,
+    this.preparedBeforePlay = false,
+    this.loadToManifestMs,
+    this.loadToReadyMs,
+    this.prebufferCount = 0,
+    this.prebufferMs = 0,
     this.lastEvent,
     this.trackTitle,
     this.trackUrl,
@@ -37,6 +42,11 @@ class PlaybackMetrics {
   final int rebufferCount;
   final int rebufferMs;
   final int totalBufferMs;
+  final bool preparedBeforePlay;
+  final int? loadToManifestMs;
+  final int? loadToReadyMs;
+  final int prebufferCount;
+  final int prebufferMs;
   final String? lastEvent;
   final String? trackTitle;
   final String? trackUrl;
@@ -65,6 +75,13 @@ class PlaybackMetrics {
     int? rebufferCount,
     int? rebufferMs,
     int? totalBufferMs,
+    bool? preparedBeforePlay,
+    int? loadToManifestMs,
+    bool clearLoadToManifestMs = false,
+    int? loadToReadyMs,
+    bool clearLoadToReadyMs = false,
+    int? prebufferCount,
+    int? prebufferMs,
     String? lastEvent,
     String? trackTitle,
     String? trackUrl,
@@ -97,6 +114,14 @@ class PlaybackMetrics {
       rebufferCount: rebufferCount ?? this.rebufferCount,
       rebufferMs: rebufferMs ?? this.rebufferMs,
       totalBufferMs: totalBufferMs ?? this.totalBufferMs,
+      preparedBeforePlay: preparedBeforePlay ?? this.preparedBeforePlay,
+      loadToManifestMs: clearLoadToManifestMs
+          ? null
+          : loadToManifestMs ?? this.loadToManifestMs,
+      loadToReadyMs:
+          clearLoadToReadyMs ? null : loadToReadyMs ?? this.loadToReadyMs,
+      prebufferCount: prebufferCount ?? this.prebufferCount,
+      prebufferMs: prebufferMs ?? this.prebufferMs,
       lastEvent: lastEvent ?? this.lastEvent,
       trackTitle: trackTitle ?? this.trackTitle,
       trackUrl: trackUrl ?? this.trackUrl,
@@ -121,6 +146,11 @@ class PlaybackMetrics {
       'rebufferCount': rebufferCount,
       'rebufferMs': rebufferMs,
       'totalBufferMs': totalBufferMs,
+      'preparedBeforePlay': preparedBeforePlay,
+      'loadToManifestMs': loadToManifestMs,
+      'loadToReadyMs': loadToReadyMs,
+      'prebufferCount': prebufferCount,
+      'prebufferMs': prebufferMs,
       'lastEvent': lastEvent,
       'trackTitle': trackTitle,
       'trackUrl': trackUrl,
@@ -152,6 +182,11 @@ class PlaybackMetrics {
       rebufferCount: _readInt(json['rebufferCount']) ?? 0,
       rebufferMs: _readInt(json['rebufferMs']) ?? 0,
       totalBufferMs: _readInt(json['totalBufferMs']) ?? 0,
+      preparedBeforePlay: json['preparedBeforePlay'] == true,
+      loadToManifestMs: _readInt(json['loadToManifestMs']),
+      loadToReadyMs: _readInt(json['loadToReadyMs']),
+      prebufferCount: _readInt(json['prebufferCount']) ?? 0,
+      prebufferMs: _readInt(json['prebufferMs']) ?? 0,
       lastEvent: json['lastEvent'] as String?,
       trackTitle: json['trackTitle'] as String?,
       trackUrl: json['trackUrl'] as String?,
