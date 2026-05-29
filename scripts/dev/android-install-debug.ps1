@@ -20,7 +20,7 @@ if (-not (Test-Path $ApkPath)) {
     }
 }
 
-$DeviceLines = (& $Adb.Source devices) | Where-Object { $_ -match "\tdevice$" }
+$DeviceLines = @((& $Adb.Source devices) | Where-Object { $_ -match "\tdevice$" })
 if ($DeviceLines.Count -eq 0) {
     Write-Host "No connected Android device was found. Current adb devices output:"
     & $Adb.Source devices
