@@ -25,6 +25,15 @@ class PlaybackMetrics {
     this.seekCount = 0,
     this.seekBufferMs = 0,
     this.lastSeekToMs,
+    this.nativePrebufferEnabled = false,
+    this.nativePrebufferTrackId,
+    this.nativePrebufferTrackTitle,
+    this.nativePrebufferInFlight = false,
+    this.nativePrebufferReady = false,
+    this.nativePrebufferHitCount = 0,
+    this.nativePrebufferMissCount = 0,
+    this.nativePrebufferPrepareMs,
+    this.nextPreparedBeforePlay = false,
     this.lastEvent,
     this.trackTitle,
     this.trackUrl,
@@ -55,6 +64,15 @@ class PlaybackMetrics {
   final int seekCount;
   final int seekBufferMs;
   final int? lastSeekToMs;
+  final bool nativePrebufferEnabled;
+  final String? nativePrebufferTrackId;
+  final String? nativePrebufferTrackTitle;
+  final bool nativePrebufferInFlight;
+  final bool nativePrebufferReady;
+  final int nativePrebufferHitCount;
+  final int nativePrebufferMissCount;
+  final int? nativePrebufferPrepareMs;
+  final bool nextPreparedBeforePlay;
   final String? lastEvent;
   final String? trackTitle;
   final String? trackUrl;
@@ -96,6 +114,18 @@ class PlaybackMetrics {
     int? seekBufferMs,
     int? lastSeekToMs,
     bool clearLastSeekToMs = false,
+    bool? nativePrebufferEnabled,
+    String? nativePrebufferTrackId,
+    bool clearNativePrebufferTrackId = false,
+    String? nativePrebufferTrackTitle,
+    bool clearNativePrebufferTrackTitle = false,
+    bool? nativePrebufferInFlight,
+    bool? nativePrebufferReady,
+    int? nativePrebufferHitCount,
+    int? nativePrebufferMissCount,
+    int? nativePrebufferPrepareMs,
+    bool clearNativePrebufferPrepareMs = false,
+    bool? nextPreparedBeforePlay,
     String? lastEvent,
     String? trackTitle,
     String? trackUrl,
@@ -141,6 +171,26 @@ class PlaybackMetrics {
       seekBufferMs: seekBufferMs ?? this.seekBufferMs,
       lastSeekToMs:
           clearLastSeekToMs ? null : lastSeekToMs ?? this.lastSeekToMs,
+      nativePrebufferEnabled:
+          nativePrebufferEnabled ?? this.nativePrebufferEnabled,
+      nativePrebufferTrackId: clearNativePrebufferTrackId
+          ? null
+          : nativePrebufferTrackId ?? this.nativePrebufferTrackId,
+      nativePrebufferTrackTitle: clearNativePrebufferTrackTitle
+          ? null
+          : nativePrebufferTrackTitle ?? this.nativePrebufferTrackTitle,
+      nativePrebufferInFlight:
+          nativePrebufferInFlight ?? this.nativePrebufferInFlight,
+      nativePrebufferReady: nativePrebufferReady ?? this.nativePrebufferReady,
+      nativePrebufferHitCount:
+          nativePrebufferHitCount ?? this.nativePrebufferHitCount,
+      nativePrebufferMissCount:
+          nativePrebufferMissCount ?? this.nativePrebufferMissCount,
+      nativePrebufferPrepareMs: clearNativePrebufferPrepareMs
+          ? null
+          : nativePrebufferPrepareMs ?? this.nativePrebufferPrepareMs,
+      nextPreparedBeforePlay:
+          nextPreparedBeforePlay ?? this.nextPreparedBeforePlay,
       lastEvent: lastEvent ?? this.lastEvent,
       trackTitle: trackTitle ?? this.trackTitle,
       trackUrl: trackUrl ?? this.trackUrl,
@@ -174,6 +224,15 @@ class PlaybackMetrics {
       'seekCount': seekCount,
       'seekBufferMs': seekBufferMs,
       'lastSeekToMs': lastSeekToMs,
+      'nativePrebufferEnabled': nativePrebufferEnabled,
+      'nativePrebufferTrackId': nativePrebufferTrackId,
+      'nativePrebufferTrackTitle': nativePrebufferTrackTitle,
+      'nativePrebufferInFlight': nativePrebufferInFlight,
+      'nativePrebufferReady': nativePrebufferReady,
+      'nativePrebufferHitCount': nativePrebufferHitCount,
+      'nativePrebufferMissCount': nativePrebufferMissCount,
+      'nativePrebufferPrepareMs': nativePrebufferPrepareMs,
+      'nextPreparedBeforePlay': nextPreparedBeforePlay,
       'lastEvent': lastEvent,
       'trackTitle': trackTitle,
       'trackUrl': trackUrl,
@@ -214,6 +273,15 @@ class PlaybackMetrics {
       seekCount: _readInt(json['seekCount']) ?? 0,
       seekBufferMs: _readInt(json['seekBufferMs']) ?? 0,
       lastSeekToMs: _readInt(json['lastSeekToMs']),
+      nativePrebufferEnabled: json['nativePrebufferEnabled'] == true,
+      nativePrebufferTrackId: json['nativePrebufferTrackId'] as String?,
+      nativePrebufferTrackTitle: json['nativePrebufferTrackTitle'] as String?,
+      nativePrebufferInFlight: json['nativePrebufferInFlight'] == true,
+      nativePrebufferReady: json['nativePrebufferReady'] == true,
+      nativePrebufferHitCount: _readInt(json['nativePrebufferHitCount']) ?? 0,
+      nativePrebufferMissCount: _readInt(json['nativePrebufferMissCount']) ?? 0,
+      nativePrebufferPrepareMs: _readInt(json['nativePrebufferPrepareMs']),
+      nextPreparedBeforePlay: json['nextPreparedBeforePlay'] == true,
       lastEvent: json['lastEvent'] as String?,
       trackTitle: json['trackTitle'] as String?,
       trackUrl: json['trackUrl'] as String?,

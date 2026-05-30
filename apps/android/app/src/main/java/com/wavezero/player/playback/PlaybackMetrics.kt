@@ -27,6 +27,15 @@ data class PlaybackMetrics(
     val seekCount: Int = 0,
     val seekBufferMs: Long = 0,
     val lastSeekToMs: Long? = null,
+    val nativePrebufferEnabled: Boolean = false,
+    val nativePrebufferTrackId: String? = null,
+    val nativePrebufferTrackTitle: String? = null,
+    val nativePrebufferInFlight: Boolean = false,
+    val nativePrebufferReady: Boolean = false,
+    val nativePrebufferHitCount: Int = 0,
+    val nativePrebufferMissCount: Int = 0,
+    val nativePrebufferPrepareMs: Long? = null,
+    val nextPreparedBeforePlay: Boolean = false,
     val lastEvent: String = "initialized",
     val trackTitle: String = DemoTrack.title,
     val trackUrl: String = DemoTrack.hlsUrl,
@@ -56,6 +65,15 @@ data class PlaybackMetrics(
         "seekCount" to seekCount,
         "seekBufferMs" to seekBufferMs,
         "lastSeekToMs" to lastSeekToMs,
+        "nativePrebufferEnabled" to nativePrebufferEnabled,
+        "nativePrebufferTrackId" to nativePrebufferTrackId,
+        "nativePrebufferTrackTitle" to nativePrebufferTrackTitle,
+        "nativePrebufferInFlight" to nativePrebufferInFlight,
+        "nativePrebufferReady" to nativePrebufferReady,
+        "nativePrebufferHitCount" to nativePrebufferHitCount,
+        "nativePrebufferMissCount" to nativePrebufferMissCount,
+        "nativePrebufferPrepareMs" to nativePrebufferPrepareMs,
+        "nextPreparedBeforePlay" to nextPreparedBeforePlay,
         "lastEvent" to lastEvent,
         "trackTitle" to trackTitle,
         "trackUrl" to trackUrl,
@@ -114,6 +132,7 @@ class PlaybackMetricsTracker(
                 seekCount = 0,
                 seekBufferMs = 0,
                 lastSeekToMs = null,
+                nextPreparedBeforePlay = false,
                 trackTitle = title,
                 trackUrl = hlsUrl,
             )
@@ -328,6 +347,7 @@ class PlaybackMetricsTracker(
                 seekCount = 0,
                 seekBufferMs = 0,
                 lastSeekToMs = null,
+                nextPreparedBeforePlay = false,
             )
         }
     }
@@ -350,6 +370,54 @@ class PlaybackMetricsTracker(
                 tapToIsPlayingMs = null,
                 tapToPositionAdvanceMs = null,
                 lastSeekToMs = null,
+                nextPreparedBeforePlay = false,
+            )
+        }
+    }
+
+    fun markNativePrebufferStarted(trackId: String, title: String): PlaybackMetrics = update("native_prebuffer_started") {
+        copy(
+            nativePrebufferEnabled = true,
+            nativePrebufferTrackId = trackId,
+            nativePrebufferTrackTitle = title,
+            nativePrebufferInFlight = true,
+            nativePrebufferReady = false,
+            nativePrebufferPrepareMs = null,
+            nextPreparedBeforePlay = false,
+        )
+    }
+
+    fun markNativePrebufferReady(trackId: String, prepareMs: Long): PlaybackMetrics {
+        if (metrics.nativePrebufferTrackId != trackId) return metrics
+        return update("native_prebuffer_ready") {
+            copy(
+                nativePrebufferEnabled = true,
+                nativePrebufferInFlight = false,
+                nativePrebufferReady = true,
+                nativePrebufferPrepareMs = prepareMs.coerceAtLeast(0),
+            )
+        }
+    }
+
+    fun markNativePrebufferCleared(): PlaybackMetrics = update("native_prebuffer_cleared") {
+        copy(
+            nativePrebufferEnabled = false,
+            nativePrebufferTrackId = null,
+            nativePrebufferTrackTitle = null,
+            nativePrebufferInFlight = false,
+            nativePrebufferReady = false,
+            nativePrebufferPrepareMs = null,
+            nextPreparedBeforePlay = false,
+        )
+    }
+
+    fun markNativePrebufferOutcome(trackId: String, usedPreparedPath: Boolean): PlaybackMetrics {
+        val matchedReady = metrics.nativePrebufferTrackId == trackId && metrics.nativePrebufferReady
+        return update("native_prebuffer_outcome") {
+            copy(
+                nativePrebufferHitCount = if (usedPreparedPath && matchedReady) nativePrebufferHitCount + 1 else nativePrebufferHitCount,
+                nativePrebufferMissCount = if (usedPreparedPath && matchedReady) nativePrebufferMissCount else nativePrebufferMissCount + 1,
+                nextPreparedBeforePlay = usedPreparedPath && matchedReady,
             )
         }
     }
