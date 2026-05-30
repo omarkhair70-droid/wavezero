@@ -412,7 +412,7 @@ mod tests {
     fn dev_catalog_fixture_loads_real_playable_track() {
         let catalog = CatalogStore::from_dev_fixture();
         assert_eq!(catalog.artists.len(), 1);
-        assert_eq!(catalog.tracks.len(), 2);
+        assert_eq!(catalog.tracks.len(), 4);
 
         let track = catalog
             .find_track("track-local-song-3")
@@ -440,6 +440,47 @@ mod tests {
         assert_eq!(track.title, "Local Real Song");
         assert_eq!(asset.manifest_url, "http://192.168.1.7:8090/song.mp3");
         assert_eq!(core_asset.codec, AudioCodec::Mp3);
+    }
+
+    #[test]
+    fn dev_catalog_fixture_includes_longer_local_playback_chain() {
+        let catalog = CatalogStore::from_dev_fixture();
+        let expected_tracks = [
+            (
+                "track-local-real-song",
+                "Local Real Song",
+                "http://192.168.1.7:8090/song.mp3",
+            ),
+            (
+                "track-local-song-3",
+                "Song 3",
+                "http://192.168.1.7:8090/song3.mp3",
+            ),
+            (
+                "track-local-song-4",
+                "Song 4",
+                "http://192.168.1.7:8090/song4.mp3",
+            ),
+            (
+                "track-local-song-5",
+                "Song 5",
+                "http://192.168.1.7:8090/song5.mp3",
+            ),
+        ];
+
+        for (track_id, title, manifest_url) in expected_tracks {
+            let track = catalog
+                .find_track(track_id)
+                .unwrap_or_else(|| panic!("{track_id} exists in dev catalog"));
+            let asset = track
+                .primary_asset()
+                .unwrap_or_else(|| panic!("{track_id} has primary asset"));
+
+            assert_eq!(track.title, title);
+            assert_eq!(asset.manifest_url, manifest_url);
+            assert!(matches!(asset.codec, CatalogAudioCodec::Mp3));
+            assert!(asset.is_primary);
+        }
     }
 
     #[test]

@@ -107,6 +107,43 @@ It prints the current Git branch and checks Java, `adb`, Flutter, `FIREBASE_APP_
 
 Phase 0E adds stable Rust CI only. Android and Flutter CI are intentionally documented as future work until the local Android and Flutter build paths are verified without committing Gradle wrapper binaries or secrets.
 
+## Local multi-track catalog audio
+
+The development API serves a controlled local catalog for validating queued playback, native prebuffering, and prepared handoff behavior across more than one transition. The catalog keeps the existing local tracks and adds two more local MP3 placeholders; catalog loading does not check whether these files exist, so missing files should only surface when a developer tries to play that specific track.
+
+Expected local audio files on the Windows development machine:
+
+```text
+C:\Users\dell\Desktop\wavezero-test-audio\song.mp3
+C:\Users\dell\Desktop\wavezero-test-audio\song3.mp3
+C:\Users\dell\Desktop\wavezero-test-audio\song4.mp3
+C:\Users\dell\Desktop\wavezero-test-audio\song5.mp3
+```
+
+Serve that directory on port `8090` so the API catalog URLs resolve from the Android device:
+
+```text
+http://192.168.1.7:8090/song.mp3
+http://192.168.1.7:8090/song3.mp3
+http://192.168.1.7:8090/song4.mp3
+http://192.168.1.7:8090/song5.mp3
+```
+
+Manual Android verification checklist for the expanded local chain:
+
+1. Add `song4.mp3` and `song5.mp3` to `C:\Users\dell\Desktop\wavezero-test-audio`.
+2. Start the local audio server on port `8090`.
+3. Start the Rust API.
+4. Run the Flutter app.
+5. Confirm catalog shows at least 4 tracks.
+6. Add all tracks to queue.
+7. Play Local Real Song.
+8. Wait for `nativePrebufferReady` on the up-next track.
+9. Tap Next repeatedly and confirm each next track plays.
+10. Let one track auto-advance and confirm prepared auto-advance still works.
+11. Confirm `playbackError = none`.
+12. Confirm prebuffer/handoff metrics still update.
+
 ## Phase 2A.2 Android smoke checklist
 
 Use this checklist when validating Smart Preload with Phase 2A.1 Soft Stop recovery on a physical Android device or emulator:
