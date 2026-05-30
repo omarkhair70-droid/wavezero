@@ -46,6 +46,7 @@ class PlaybackMetrics {
     this.autoAdvancePreparedFallback = 0,
     this.autoAdvancePreparedBeforePlay = false,
     this.lastAutoAdvancePreparedTrackId,
+    this.nativePrebufferClearReason,
     this.lastEvent,
     this.trackTitle,
     this.trackUrl,
@@ -97,6 +98,7 @@ class PlaybackMetrics {
   final int autoAdvancePreparedFallback;
   final bool autoAdvancePreparedBeforePlay;
   final String? lastAutoAdvancePreparedTrackId;
+  final String? nativePrebufferClearReason;
   final String? lastEvent;
   final String? trackTitle;
   final String? trackUrl;
@@ -167,6 +169,8 @@ class PlaybackMetrics {
     bool? autoAdvancePreparedBeforePlay,
     String? lastAutoAdvancePreparedTrackId,
     bool clearLastAutoAdvancePreparedTrackId = false,
+    String? nativePrebufferClearReason,
+    bool clearNativePrebufferClearReason = false,
     String? lastEvent,
     String? trackTitle,
     String? trackUrl,
@@ -261,6 +265,9 @@ class PlaybackMetrics {
       lastAutoAdvancePreparedTrackId: clearLastAutoAdvancePreparedTrackId
           ? null
           : lastAutoAdvancePreparedTrackId ?? this.lastAutoAdvancePreparedTrackId,
+      nativePrebufferClearReason: clearNativePrebufferClearReason
+          ? null
+          : nativePrebufferClearReason ?? this.nativePrebufferClearReason,
       lastEvent: lastEvent ?? this.lastEvent,
       trackTitle: trackTitle ?? this.trackTitle,
       trackUrl: trackUrl ?? this.trackUrl,
@@ -315,6 +322,7 @@ class PlaybackMetrics {
       'autoAdvancePreparedFallback': autoAdvancePreparedFallback,
       'autoAdvancePreparedBeforePlay': autoAdvancePreparedBeforePlay,
       'lastAutoAdvancePreparedTrackId': lastAutoAdvancePreparedTrackId,
+      'nativePrebufferClearReason': nativePrebufferClearReason,
       'lastEvent': lastEvent,
       'trackTitle': trackTitle,
       'trackUrl': trackUrl,
@@ -385,6 +393,8 @@ class PlaybackMetrics {
           json['autoAdvancePreparedBeforePlay'] == true,
       lastAutoAdvancePreparedTrackId:
           json['lastAutoAdvancePreparedTrackId'] as String?,
+      nativePrebufferClearReason:
+          json['nativePrebufferClearReason'] as String?,
       lastEvent: json['lastEvent'] as String?,
       trackTitle: json['trackTitle'] as String?,
       trackUrl: json['trackUrl'] as String?,

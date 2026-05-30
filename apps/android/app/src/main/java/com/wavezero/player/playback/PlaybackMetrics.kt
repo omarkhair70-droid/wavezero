@@ -48,6 +48,7 @@ data class PlaybackMetrics(
     val autoAdvancePreparedFallback: Int = 0,
     val autoAdvancePreparedBeforePlay: Boolean = false,
     val lastAutoAdvancePreparedTrackId: String? = null,
+    val nativePrebufferClearReason: String? = null,
     val lastEvent: String = "initialized",
     val trackTitle: String = DemoTrack.title,
     val trackUrl: String = DemoTrack.hlsUrl,
@@ -98,6 +99,7 @@ data class PlaybackMetrics(
         "autoAdvancePreparedFallback" to autoAdvancePreparedFallback,
         "autoAdvancePreparedBeforePlay" to autoAdvancePreparedBeforePlay,
         "lastAutoAdvancePreparedTrackId" to lastAutoAdvancePreparedTrackId,
+        "nativePrebufferClearReason" to nativePrebufferClearReason,
         "lastEvent" to lastEvent,
         "trackTitle" to trackTitle,
         "trackUrl" to trackUrl,
@@ -420,6 +422,7 @@ class PlaybackMetricsTracker(
             nativePrebufferInFlight = true,
             nativePrebufferReady = false,
             nativePrebufferPrepareMs = null,
+            nativePrebufferClearReason = null,
         )
     }
 
@@ -438,7 +441,10 @@ class PlaybackMetricsTracker(
         }
     }
 
-    fun markNativePrebufferCleared(nextPreparedBeforePlay: Boolean = false): PlaybackMetrics = update("native_prebuffer_cleared") {
+    fun markNativePrebufferCleared(
+        nextPreparedBeforePlay: Boolean = false,
+        reason: String? = null,
+    ): PlaybackMetrics = update("native_prebuffer_cleared") {
         copy(
             nativePrebufferEnabled = false,
             nativePrebufferTrackId = null,
@@ -448,6 +454,7 @@ class PlaybackMetricsTracker(
             nativePrebufferPrepareMs = null,
             nextPreparedBeforePlay = nextPreparedBeforePlay,
             autoAdvancePreparedBeforePlay = false,
+            nativePrebufferClearReason = reason,
         )
     }
 
@@ -510,6 +517,7 @@ class PlaybackMetricsTracker(
                 nativePrebufferInFlight = false,
                 nativePrebufferReady = false,
                 nativePrebufferPrepareMs = null,
+                nativePrebufferClearReason = null,
                 nativePrebufferHitCount = if (matchedReady) nativePrebufferHitCount + 1 else nativePrebufferHitCount,
                 nativePrebufferHandoffSucceeded = if (matchedReady) nativePrebufferHandoffSucceeded + 1 else nativePrebufferHandoffSucceeded,
                 nextPreparedBeforePlay = matchedReady && explicitNext,

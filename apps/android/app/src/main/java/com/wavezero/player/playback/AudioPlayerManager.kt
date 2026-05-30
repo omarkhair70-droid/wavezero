@@ -142,6 +142,7 @@ class AudioPlayerManager(
                 return
             }
 
+            clearNativePrebuffer(NativePrebufferClearReason.NativePlaybackError)
             playCommandInFlight = false
             publish(metricsTracker.markError(error.message ?: error.errorCodeName))
             mutablePlaybackState.value = PlaybackState(
@@ -166,7 +167,7 @@ class AudioPlayerManager(
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            clearNativePrebuffer()
+            clearNativePrebuffer(NativePrebufferClearReason.NativePlaybackError)
         }
     }
 
@@ -197,12 +198,12 @@ class AudioPlayerManager(
     }
 
     fun loadTrack(title: String, hlsUrl: String) {
+        clearNativePrebuffer(NativePrebufferClearReason.TrackLoaded)
         currentTrackTitle = title.ifBlank { DemoTrack.title }
         currentHlsUrl = hlsUrl
         playCommandInFlight = false
         softStopped = false
         positionJob?.cancel()
-        clearNativePrebufferIfCurrent(hlsUrl)
         player.stop()
         player.clearMediaItems()
         player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
@@ -218,7 +219,7 @@ class AudioPlayerManager(
         val safeTrackId = trackId.trim()
         val safeTitle = title.ifBlank { "Up next" }
         if (safeTrackId.isBlank() || hlsUrl.isBlank()) {
-            clearNativePrebuffer()
+            clearNativePrebuffer(NativePrebufferClearReason.InvalidCandidate)
             return
         }
         if (
@@ -261,7 +262,7 @@ class AudioPlayerManager(
     }
 
     fun clearNextTrackPrebuffer() {
-        clearNativePrebuffer()
+        clearNativePrebuffer(NativePrebufferClearReason.FlutterRequested)
     }
 
     fun recordNextTrackPrebufferOutcome(trackId: String, usedPreparedPath: Boolean) {
@@ -331,6 +332,7 @@ class AudioPlayerManager(
         ensureCurrentMediaItemLoaded()
         player.seekTo(0)
         positionJob?.cancel()
+        clearNativePrebuffer(NativePrebufferClearReason.Stop)
         publish(metricsTracker.resetForStop())
         mutablePlaybackState.value = PlaybackState(
             status = PlaybackStatus.Paused,
@@ -340,7 +342,7 @@ class AudioPlayerManager(
 
     fun retry() {
         softStopped = false
-        clearNativePrebufferIfCurrent(currentHlsUrl)
+        clearNativePrebuffer(NativePrebufferClearReason.Retry)
         player.stop()
         player.clearMediaItems()
         player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
@@ -459,13 +461,9 @@ class AudioPlayerManager(
         return true
     }
 
-    private fun clearNativePrebufferIfCurrent(hlsUrl: String) {
-        if (nativePrebufferUrl == hlsUrl) clearNativePrebuffer()
-    }
-
-    private fun clearNativePrebuffer() {
+    private fun clearNativePrebuffer(reason: NativePrebufferClearReason) {
         clearNativePrebufferState()
-        publish(metricsTracker.markNativePrebufferCleared())
+        publish(metricsTracker.markNativePrebufferCleared(reason = reason.value))
     }
 
     private fun clearNativePrebufferState() {
@@ -549,6 +547,15 @@ class AudioPlayerManager(
     private enum class PreparedHandoffSource {
         ExplicitNext,
         AutoAdvance,
+    }
+
+    private enum class NativePrebufferClearReason(val value: String) {
+        FlutterRequested("flutter_requested"),
+        InvalidCandidate("invalid_candidate"),
+        NativePlaybackError("native_playback_error"),
+        Retry("retry"),
+        Stop("stop"),
+        TrackLoaded("track_loaded"),
     }
 
     private companion object {

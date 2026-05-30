@@ -237,6 +237,7 @@ class MockPlaybackBridge implements PlaybackBridge {
   }) async {
     _loadedTitle = title;
     _loadedUrl = url;
+    _prebufferUrl = null;
     _metrics = _metrics.copyWith(
       currentPositionMs: 0,
       durationMs: 180000,
@@ -252,6 +253,13 @@ class MockPlaybackBridge implements PlaybackBridge {
       clearTapToIsPlayingMs: true,
       clearTapToPositionAdvanceMs: true,
       clearLastSeekToMs: true,
+      nativePrebufferEnabled: false,
+      clearNativePrebufferTrackId: true,
+      clearNativePrebufferTrackTitle: true,
+      nativePrebufferInFlight: false,
+      nativePrebufferReady: false,
+      clearNativePrebufferPrepareMs: true,
+      nativePrebufferClearReason: 'track_loaded',
     );
   }
 
@@ -273,6 +281,7 @@ class MockPlaybackBridge implements PlaybackBridge {
       lastNativePrebufferTrackTitle: title,
       lastNativePrebufferPrepareMs: 40,
       nextPreparedBeforePlay: false,
+      clearNativePrebufferClearReason: true,
       lastEvent: 'native_prebuffer_ready',
     );
   }
@@ -288,6 +297,7 @@ class MockPlaybackBridge implements PlaybackBridge {
       nativePrebufferReady: false,
       clearNativePrebufferPrepareMs: true,
       nextPreparedBeforePlay: false,
+      nativePrebufferClearReason: 'flutter_requested',
       lastEvent: 'native_prebuffer_cleared',
     );
   }
@@ -321,6 +331,7 @@ class MockPlaybackBridge implements PlaybackBridge {
       clearNativePrebufferTrackId: matchedReady,
       clearNativePrebufferTrackTitle: matchedReady,
       clearNativePrebufferPrepareMs: matchedReady,
+      clearNativePrebufferClearReason: matchedReady,
       lastEvent: matchedReady ? 'native_prebuffer_handoff_succeeded' : 'native_prebuffer_outcome',
     );
     if (matchedReady) {
@@ -408,6 +419,7 @@ class MockPlaybackBridge implements PlaybackBridge {
 
   @override
   Future<void> stop() async {
+    _prebufferUrl = null;
     _metrics = _metrics.copyWith(
       isPlaying: false,
       currentPositionMs: 0,
@@ -417,6 +429,13 @@ class MockPlaybackBridge implements PlaybackBridge {
       clearTapToIsPlayingMs: true,
       clearTapToPositionAdvanceMs: true,
       clearPlaybackError: true,
+      nativePrebufferEnabled: false,
+      clearNativePrebufferTrackId: true,
+      clearNativePrebufferTrackTitle: true,
+      nativePrebufferInFlight: false,
+      nativePrebufferReady: false,
+      clearNativePrebufferPrepareMs: true,
+      nativePrebufferClearReason: 'stop',
     );
   }
 
@@ -426,6 +445,7 @@ class MockPlaybackBridge implements PlaybackBridge {
       _metrics = _metrics.copyWith(playbackError: 'No track loaded');
       return;
     }
+    _prebufferUrl = null;
     _metrics = _metrics.copyWith(
       bufferCount: _metrics.bufferCount + 1,
       isPlaying: true,
@@ -436,6 +456,13 @@ class MockPlaybackBridge implements PlaybackBridge {
       attemptId: _metrics.attemptId + 1,
       lastEvent: 'playing',
       clearPlaybackError: true,
+      nativePrebufferEnabled: false,
+      clearNativePrebufferTrackId: true,
+      clearNativePrebufferTrackTitle: true,
+      nativePrebufferInFlight: false,
+      nativePrebufferReady: false,
+      clearNativePrebufferPrepareMs: true,
+      nativePrebufferClearReason: 'retry',
     );
   }
 
