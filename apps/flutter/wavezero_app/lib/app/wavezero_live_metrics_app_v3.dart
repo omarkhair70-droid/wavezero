@@ -374,6 +374,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _nextPreparedBeforePlay = false;
   }
 
+  Future<void> _clearNativeNextPrebuffer() async {
+    await widget.playbackBridge.clearNextTrackPrebuffer();
+    if (!mounted) return;
+    setState(() {
+      _audioPreparedBeforeNext = false;
+      _nextPreparedBeforePlay = false;
+    });
+  }
+
   void _setPrefetchEnabled(bool value) {
     setState(() {
       _prefetchEnabled = value;
@@ -387,7 +396,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       }
       _queueStatus = value ? 'Smart preload enabled.' : 'Smart preload disabled.';
     });
-    if (value) unawaited(_updatePredictivePreloadCandidate());
+    if (value) {
+      unawaited(_updatePredictivePreloadCandidate());
+    } else {
+      unawaited(_clearNativeNextPrebuffer());
+    }
   }
 
   Future<void> _updatePredictivePreloadCandidate() async {
@@ -402,10 +415,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _manifestPrefetched = false;
         _audioPreparedBeforeNext = false;
       });
+      unawaited(_clearNativeNextPrebuffer());
       return;
     }
 
     if (_prefetchedTrackId == candidate.trackId && (_prefetchedManifest != null || _prefetchInFlight)) return;
+
+    final previousNativeCandidateId = _prefetchedTrackId;
+    if (previousNativeCandidateId != null && previousNativeCandidateId != candidate.trackId) {
+      await _clearNativeNextPrebuffer();
+      if (!mounted || !_prefetchEnabled || _nextQueueTrack?.trackId != candidate.trackId) return;
+    }
 
     final generation = ++_prefetchGeneration;
     setState(() {
@@ -429,11 +449,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _manifestPrefetched = true;
         _audioPreparedBeforeNext = false;
       });
-      await widget.playbackBridge.prepareNextTrack(
-        trackId: manifest.trackId,
-        title: manifest.title,
-        url: manifest.streamUrl,
-      );
+      try {
+        await widget.playbackBridge.prepareNextTrack(
+          trackId: manifest.trackId,
+          title: manifest.title,
+          url: manifest.streamUrl,
+        );
+      } catch (error) {
+        if (!mounted || generation != _prefetchGeneration) return;
+        await _clearNativeNextPrebuffer();
+      }
     } catch (error) {
       if (!mounted || generation != _prefetchGeneration) return;
       setState(() {
@@ -441,6 +466,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _manifestPrefetched = false;
         _audioPreparedBeforeNext = false;
       });
+      await _clearNativeNextPrebuffer();
     } finally {
       client.close();
     }

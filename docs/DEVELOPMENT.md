@@ -131,3 +131,14 @@ Use this developer-facing baseline before Phase 2B native audio prebuffering cha
 6. Tap Stop, then Play, and record `stopToPlayRecoveryMs` if it appears. Leave it unavailable if the flow has not been observed yet.
 7. Record `sessionRecoveryMs` when available from startup session-store recovery.
 8. Confirm honesty before Phase 2B: `audioPreparedBeforeNext` and `nextPreparedBeforePlay` must remain `false` unless native audio preparation actually exists.
+
+## Phase 2B native prebuffer clear-state smoke checklist
+
+Use this checklist when validating the Phase 2B secondary ExoPlayer prebuffer foundation on Android:
+
+1. Enable Smart Preload and wait for `manifestPrefetched: true`, then `nativePrebufferReady: true` for the up-next track.
+2. Disable Smart Preload and confirm `nativePrebufferReady` clears.
+3. Clear the queue and confirm native prebuffer metrics clear instead of retaining the previous up-next track.
+4. Change the up-next track and confirm `nativePrebufferTrackId` updates to the new candidate.
+5. Tap Next and confirm playback still uses the safe fallback path.
+6. Confirm `nextPreparedBeforePlay` remains `false` until a future prepared-player handoff is implemented.

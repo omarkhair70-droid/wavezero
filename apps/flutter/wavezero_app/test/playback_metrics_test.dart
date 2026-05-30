@@ -28,6 +28,15 @@ void main() {
       seekCount: 2,
       seekBufferMs: 44,
       lastSeekToMs: 12000,
+      nativePrebufferEnabled: true,
+      nativePrebufferTrackId: 'track-3',
+      nativePrebufferTrackTitle: 'Song 3',
+      nativePrebufferInFlight: false,
+      nativePrebufferReady: true,
+      nativePrebufferHitCount: 0,
+      nativePrebufferMissCount: 1,
+      nativePrebufferPrepareMs: 123,
+      nextPreparedBeforePlay: false,
       lastEvent: 'playing',
       trackTitle: 'Title',
       trackUrl: 'https://example.test/stream.m3u8',
@@ -47,6 +56,13 @@ void main() {
     expect(metrics.toJson()['seekCount'], 2);
     expect(metrics.toJson()['seekBufferMs'], 44);
     expect(metrics.toJson()['lastSeekToMs'], 12000);
+    expect(metrics.toJson()['nativePrebufferEnabled'], isTrue);
+    expect(metrics.toJson()['nativePrebufferTrackId'], 'track-3');
+    expect(metrics.toJson()['nativePrebufferTrackTitle'], 'Song 3');
+    expect(metrics.toJson()['nativePrebufferReady'], isTrue);
+    expect(metrics.toJson()['nativePrebufferMissCount'], 1);
+    expect(metrics.toJson()['nativePrebufferPrepareMs'], 123);
+    expect(metrics.toJson()['nextPreparedBeforePlay'], isFalse);
     expect(metrics.toDisplayText(), contains('tapToFirstAudioMs: 20'));
     expect(metrics.toDisplayText(), contains('startupBufferMs: 90'));
     expect(metrics.toDisplayText(), contains('preparedBeforePlay: true'));
@@ -77,6 +93,15 @@ void main() {
       'seekCount': 4.0,
       'seekBufferMs': 87.0,
       'lastSeekToMs': 45000.0,
+      'nativePrebufferEnabled': true,
+      'nativePrebufferTrackId': 'track-4',
+      'nativePrebufferTrackTitle': 'Song 4',
+      'nativePrebufferInFlight': false,
+      'nativePrebufferReady': true,
+      'nativePrebufferHitCount': 2.0,
+      'nativePrebufferMissCount': 3.0,
+      'nativePrebufferPrepareMs': 81.0,
+      'nextPreparedBeforePlay': false,
       'sessionId': 'native-session',
       'lastEvent': 'error',
     });
@@ -100,6 +125,14 @@ void main() {
     expect(metrics.seekCount, 4);
     expect(metrics.seekBufferMs, 87);
     expect(metrics.lastSeekToMs, 45000);
+    expect(metrics.nativePrebufferEnabled, isTrue);
+    expect(metrics.nativePrebufferTrackId, 'track-4');
+    expect(metrics.nativePrebufferTrackTitle, 'Song 4');
+    expect(metrics.nativePrebufferReady, isTrue);
+    expect(metrics.nativePrebufferHitCount, 2);
+    expect(metrics.nativePrebufferMissCount, 3);
+    expect(metrics.nativePrebufferPrepareMs, 81);
+    expect(metrics.nextPreparedBeforePlay, isFalse);
     expect(metrics.sessionId, 'native-session');
     expect(metrics.lastEvent, 'error');
   });
