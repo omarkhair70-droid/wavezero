@@ -160,6 +160,8 @@ class AudioPlayerManager(
             loadEventInfo: LoadEventInfo,
             mediaLoadData: MediaLoadData,
         ) {
+            if (softStopped) return
+
             if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
                 publish(metricsTracker.markManifestLoaded(loadEventInfo.loadDurationMs))
             }

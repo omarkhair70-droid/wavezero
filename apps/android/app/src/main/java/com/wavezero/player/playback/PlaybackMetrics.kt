@@ -259,11 +259,15 @@ class PlaybackMetricsTracker(
         }
     }
 
-    fun markManifestLoaded(loadDurationMs: Long): PlaybackMetrics = update("manifest_loaded") {
-        copy(
-            manifestLoadMs = loadDurationMs.coerceAtLeast(0),
-            loadToManifestMs = loadToManifestMs ?: elapsedSinceTrackLoad(),
-        )
+    fun markManifestLoaded(loadDurationMs: Long): PlaybackMetrics {
+        if (metrics.lastEvent == "stopped") return metrics
+
+        return update("manifest_loaded") {
+            copy(
+                manifestLoadMs = loadDurationMs.coerceAtLeast(0),
+                loadToManifestMs = loadToManifestMs ?: elapsedSinceTrackLoad(),
+            )
+        }
     }
 
     fun markPosition(positionMs: Long): PlaybackMetrics {
@@ -345,8 +349,6 @@ class PlaybackMetricsTracker(
                 tapToReadyMs = null,
                 tapToIsPlayingMs = null,
                 tapToPositionAdvanceMs = null,
-                startupBufferMs = 0,
-                totalBufferMs = 0,
                 lastSeekToMs = null,
             )
         }
