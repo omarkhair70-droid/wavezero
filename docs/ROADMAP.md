@@ -14,271 +14,40 @@ WaveZero is a native audio platform with a Flutter experience layer and a Rust d
 
 ## Completed Phases
 
-### Phase 0B — Android Native Playback Proof
+### Phase 1G — Player State Machine and UX Cleanup
 
 Status: Completed
 
 Outcome:
 
-- Android Media3/ExoPlayer proof runs on a real Android phone.
-- HLS demo playback works.
-- The native proof can build a debug APK locally.
-- Core playback metrics are visible on device.
-
-### Phase 0C — Max Stack Foundation
-
-Status: Completed
-
-Outcome:
-
-- Flutter shell added as the future UI/experience layer.
-- Rust FFI scaffold added without replacing `wavezero-core`.
-- Max Stack architecture docs added.
-- Flutter/Rust/native ownership boundaries documented.
-
-### Phase 0D — Flutter to Android Media3 Bridge
-
-Status: Completed
-
-Outcome:
-
-- Flutter Android host added under `apps/flutter/wavezero_app/android`.
-- Flutter `wavezero/playback` MethodChannel wired to Android `AudioPlayerManager`.
-- Android Media3 remains the real playback adapter.
-- Flutter can command load/play/pause/stop/retry/reset/metrics through the bridge.
-- Metrics model now includes richer bridge fields including session, attempt, timing, event, track title, and URL.
-
-### Phase 0E — Developer Distribution Automation
-
-Status: Completed
-
-Outcome:
-
-- Android and Flutter local development scripts were added.
-- Flutter Android host can build and install locally.
-- Firebase App Distribution documentation exists without committing credentials.
-- Stable Rust CI checks run on GitHub Actions.
-
-### Phase 0E.1 — Flutter Android Toolchain Upgrade
-
-Status: Completed
-
-Outcome:
-
-- Flutter Android host Android Gradle Plugin was upgraded to a Flutter-supported version.
-- Flutter Android host Kotlin plugin was upgraded to a Flutter-supported version.
-- Flutter Android repository resolution and build output path remain stable.
-
-### Phase 0F — Background Playback and Media Session
-
-Status: Completed
-
-Outcome:
-
-- A Media3 `MediaSession` wraps the shared ExoPlayer instance.
-- Music audio attributes and Android audio-focus handling are configured.
-- Noisy-device handling is enabled through ExoPlayer's built-in becoming-noisy handling.
-- Flutter and native manifests are prepared for media playback foreground-service permissions.
-- Screen-off playback was verified manually on Android.
-
-### Phase 0F.1 — Foreground Media Playback Service
-
-Status: Completed
-
-Outcome:
-
-- A shared playback session owner connects Flutter, the native proof, and the Android service to the same playback manager.
-- A Media3 `MediaSessionService` is registered in the native and Flutter Android manifests.
-- Android can discover the active WaveZero media session.
-- Android 13+ notification permission is declared.
-
-### Phase 0F.2 — Runtime Notification Permission and Reliable Media Controls
-
-Status: Completed
-
-Outcome:
-
-- Android 13+ notification permission is requested at runtime from the Flutter host.
-- MediaSessionService starts before play/retry bridge commands.
-- Flutter remains the product command surface.
-
-### Phase 0F.3 — Explicit Foreground Playback Notification
-
-Status: Completed
-
-Outcome:
-
-- WaveZero creates an explicit foreground playback notification.
-- Notification channel `wavezero_playback` exists.
-- Notification Play/Pause and Stop actions control the shared player.
-- Notification playback controls were verified manually on Android.
-
-### Phase 0G — Accurate Metrics System
-
-Status: Completed
-
-Outcome:
-
-- Playback metrics are attempt-based and live-refreshing in Flutter.
-- `tapToReadyMs`, `tapToIsPlayingMs`, and `tapToPositionAdvanceMs` are visible on device.
-- Startup buffer and rebuffer metrics are separated.
-- Duplicate Play taps during startup no longer create fake attempts.
-- Wi-Fi and 4G baseline testing has started.
-
-### Phase 0H — Startup Speed Optimization
-
-Status: Completed
-
-Outcome:
-
-- Media3 prepare starts during Load Track.
-- Play becomes a fast `playWhenReady` command when the player is already ready.
-- Wi-Fi and 4G tap-to-audio results improved to around half a second in manual testing.
-- Notification, background playback, and duplicate Play guard behavior were preserved.
-
-### Phase 0H.1 — Preload Metrics
-
-Status: Completed
-
-Outcome:
-
-- Preload work is now visible through `preparedBeforePlay`, `loadToManifestMs`, `loadToReadyMs`, `prebufferCount`, and `prebufferMs`.
-- Flutter displays the preload metrics.
-- Android and Flutter tests cover the preload metrics contract.
-
-### Phase 0I — Real Player UX
-
-Status: Completed
-
-Outcome:
-
-- The Flutter proof screen became a real player shell.
-- The UI includes a now-playing card, artwork placeholder, progress slider, main playback controls, diagnostics panel, and mini-player strip.
-- Native seek support is available through the Flutter/Android bridge.
-- Metrics remain visible and copyable from the player UI.
-
-### Phase 0I.1 — Player UX Polish and Seek Reliability
-
-Status: Completed
-
-Outcome:
-
-- Seek attempts are tracked with `seekCount` and `lastSeekToMs`.
-- Seek-induced buffering is tracked separately through `seekBufferMs`.
-- Buffering caused immediately by seek no longer inflates `rebufferCount`.
-- Native seek targets are clamped to known media duration when available.
-
-### Phase 1A — Real Catalog API Foundation
-
-Status: Completed
-
-Outcome:
-
-- A development catalog fixture now contains artists, tracks, artwork URLs, durations, and stream assets.
-- API routes exist for `/catalog`, `/artists`, `/artists/:id`, `/tracks`, `/tracks/:id`, and `/tracks/:id/manifest`.
-- API responses include artist names, artwork URLs, primary assets, and stream URLs.
-- The API was verified locally through `/health`, `/catalog`, and `/tracks/track-apple-bipbop-hls/manifest`.
-
-### Phase 1B — Flutter Catalog Client Integration
-
-Status: Completed
-
-Outcome:
-
-- Flutter can fetch `/tracks/:id/manifest` from a configurable dev API base URL.
-- The player loads title, stream URL, duration, artist, and artwork from the API manifest.
-- Local demo fallback remains available when the API is unavailable.
-- The dev runner can pass `WAVEZERO_API_BASE_URL` into Flutter with `--dart-define`.
-- Manual testing verified the Android app loading the catalog manifest from the local Rust API.
-
-### Phase 1C — Catalog List UI
-
-Status: Completed
-
-Outcome:
-
-- Flutter fetches `/catalog` from the API.
-- The app renders catalog tracks with title, artist, artwork, duration, and selected state.
-- Tapping a catalog track loads that track manifest into the existing player shell.
-- Manual testing verified selecting and playing the second catalog track from Android.
-
-### Phase 1D — Search and Catalog Polish
-
-Status: Completed
-
-Outcome:
-
-- Local catalog search/filtering works in Flutter.
-- Selected-track refresh and reload behavior is stable.
-- Catalog rows show asset metadata such as codec and bitrate.
-- Seeded development tracks are easier to distinguish during manual testing.
-
-### Phase 1D.1 — Local Real Track Catalog Entry
-
-Status: Completed
-
-Outcome:
-
-- A `Local Lab` development artist exists in the dev catalog.
-- A `Local Real Song` catalog entry points at the locally hosted MP3 test file.
-- The catalog/core asset model supports `mp3`.
-- Manual testing verified a real locally hosted MP3 track through the catalog/search flow.
-
-### Phase 1E — Queue Foundation
-
-Status: Completed
-
-Outcome:
-
-- A simple in-memory Flutter queue exists.
-- The Queue card shows current tracks and supports remove/clear actions.
-- Catalog rows can add tracks to the queue.
-- Previous/next controls load neighboring catalog tracks through the existing native playback bridge.
-- Catalog, search, local MP3 playback, background playback, notification controls, and metrics remain intact.
-
-### Phase 1F — Queue Polish and Auto-Advance
-
-Status: Completed
-
-Outcome:
-
-- Queue rows show numbered, current, and up-next labels.
-- The player shell shows the next queued track.
-- Auto-advance can move to the next queue item near the end of a track.
-- Queue status and auto-advance count are visible.
-
-### Phase 1F.1 — Local Catalog Cleanup and Second Real Song
-
-Status: Completed
-
-Outcome:
-
-- Seed demo tracks were removed from the development catalog.
-- The catalog now focuses on local real MP3 tracks for manual testing.
-- `Local Real Song` and `Song 3` are the main local catalog entries.
+- A Flutter operation-state model separates player, catalog, queue, seek, manual-track, and metrics operations.
+- The player shows clearer state/status copy.
+- Catalog search stays usable while audio is playing.
+- Metrics refresh no longer blocks normal controls.
+- Native playback bridge ownership remains unchanged.
 
 ## Next Phases
 
-### Phase 1G — Player State Machine and UX Cleanup
+### Phase 1I — Persistent Queue and Session Recovery
 
 Status: In progress
 
 Goal:
 
-Make player, catalog, queue, metrics, and manual-track interactions feel predictable by replacing broad busy-state behavior with a clearer operation model.
+Make the queue and selected/current track survive app restarts on-device.
 
 Scope:
 
-- Add a small Flutter operation-state model.
-- Separate player-control, catalog, queue, manual-track, seek, and metrics busy behavior.
-- Keep catalog search usable while audio is playing.
-- Show a clear status strip for Ready, Loading catalog, Loading track, Playing, Paused, Seeking, Queue advance, Auto-advance, and Error.
-- Keep native playback bridge ownership unchanged.
+- Add local queue/session storage through SharedPreferences.
+- Persist queued track IDs, selected track ID, current track ID, and auto-advance preference.
+- Restore the queue after catalog load by matching stored track IDs against the current catalog.
+- Show lightweight session recovery status in the player UI.
+- Keep persistence client-side until production accounts/backend storage exist.
 
 Non-goals:
 
-- No persistent queue yet.
 - No auth.
+- No cloud sync.
 - No database.
 - No upload UI.
 
