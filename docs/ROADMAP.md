@@ -236,39 +236,60 @@ Outcome:
 - Previous/next controls load neighboring catalog tracks through the existing native playback bridge.
 - Catalog, search, local MP3 playback, background playback, notification controls, and metrics remain intact.
 
+### Phase 1F — Queue Polish and Auto-Advance
+
+Status: Completed
+
+Outcome:
+
+- Queue rows show numbered, current, and up-next labels.
+- The player shell shows the next queued track.
+- Auto-advance can move to the next queue item near the end of a track.
+- Queue status and auto-advance count are visible.
+
+### Phase 1F.1 — Local Catalog Cleanup and Second Real Song
+
+Status: Completed
+
+Outcome:
+
+- Seed demo tracks were removed from the development catalog.
+- The catalog now focuses on local real MP3 tracks for manual testing.
+- `Local Real Song` and `Song 3` are the main local catalog entries.
+
 ## Next Phases
 
-### Phase 1F — Queue Polish and Auto-Advance
+### Phase 1G — Player State Machine and UX Cleanup
 
 Status: In progress
 
 Goal:
 
-Make the first queue feel closer to a real music app queue.
+Make player, catalog, queue, metrics, and manual-track interactions feel predictable by replacing broad busy-state behavior with a clearer operation model.
 
 Scope:
 
-- Improve queue row UX with numbered, current, and up-next labels.
-- Show the next queued track in the player shell.
-- Add an auto-advance toggle and status copy.
-- Auto-load/play the next queue item when the current track reaches the end.
-- Add lightweight auto-advance count/status diagnostics.
+- Add a small Flutter operation-state model.
+- Separate player-control, catalog, queue, manual-track, seek, and metrics busy behavior.
+- Keep catalog search usable while audio is playing.
+- Show a clear status strip for Ready, Loading catalog, Loading track, Playing, Paused, Seeking, Queue advance, Auto-advance, and Error.
 - Keep native playback bridge ownership unchanged.
 
 Non-goals:
 
-- No persistent queue storage yet.
-- No shuffle/repeat yet.
-- No server-side queue model yet.
+- No persistent queue yet.
+- No auth.
+- No database.
+- No upload UI.
 
-### Phase 1G — Queue Persistence and Session Recovery
+### Phase 1H — Local Library and Add Track UX
 
 Goal:
 
-Make the queue survive app restarts and recover the last selected track.
+Replace manual URL editing with a cleaner local-library workflow.
 
 Scope:
 
-- Persist the queue locally on device.
-- Restore current queue item and selected track on app launch.
-- Keep queue persistence client-side until a production user/account model exists.
+- Add a clearer local-track entry workflow.
+- Reduce manual setup visibility for normal use.
+- Keep production storage and upload outside this phase.
