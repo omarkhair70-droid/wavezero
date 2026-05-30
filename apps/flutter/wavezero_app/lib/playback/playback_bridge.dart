@@ -224,6 +224,9 @@ class MockPlaybackBridge implements PlaybackBridge {
       nativePrebufferInFlight: false,
       nativePrebufferReady: true,
       nativePrebufferPrepareMs: 40,
+      lastNativePrebufferTrackId: trackId,
+      lastNativePrebufferTrackTitle: title,
+      lastNativePrebufferPrepareMs: 40,
       nextPreparedBeforePlay: false,
       lastEvent: 'native_prebuffer_ready',
     );
@@ -263,6 +266,7 @@ class MockPlaybackBridge implements PlaybackBridge {
       nativePrebufferHitCount: matchedReady ? _metrics.nativePrebufferHitCount + 1 : _metrics.nativePrebufferHitCount,
       nativePrebufferMissCount: matchedReady ? _metrics.nativePrebufferMissCount : _metrics.nativePrebufferMissCount + 1,
       nativePrebufferHandoffAttempted: _metrics.nativePrebufferHandoffAttempted + 1,
+      clearNativeHandoffToPlayingMs: true,
       nativePrebufferHandoffSucceeded: matchedReady ? _metrics.nativePrebufferHandoffSucceeded + 1 : _metrics.nativePrebufferHandoffSucceeded,
       nativePrebufferHandoffFallback: matchedReady ? _metrics.nativePrebufferHandoffFallback : _metrics.nativePrebufferHandoffFallback + 1,
       nextPreparedBeforePlay: matchedReady,
