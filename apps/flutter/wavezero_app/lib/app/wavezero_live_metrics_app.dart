@@ -54,6 +54,7 @@ class _PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<_PlayerScreen> {
   static const _refreshInterval = Duration(milliseconds: 500);
+  static const _autoAdvanceThresholdMs = 1200;
 
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
@@ -66,13 +67,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<CatalogTrackSummary> _queue = const [];
   String? _selectedTrackId;
   String? _queueCurrentTrackId;
+  String? _lastAutoAdvanceTrackId;
   bool _busy = false;
   bool _refreshing = false;
   bool _showMetrics = false;
   bool _catalogLoading = false;
   bool _catalogListLoading = false;
+  bool _autoAdvanceEnabled = true;
+  bool _autoAdvancing = false;
+  int _autoAdvanceCount = 0;
   String _catalogStatus = 'Catalog not loaded yet.';
   String _catalogListStatus = 'Catalog list not loaded yet.';
+  String _queueStatus = 'Queue is ready.';
   String _catalogQuery = '';
   double? _dragPositionMs;
 
@@ -88,6 +94,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   bool get _canPlayPrevious => _queueCurrentIndex > 0;
   bool get _canPlayNext => _queueCurrentIndex >= 0 && _queueCurrentIndex < _queue.length - 1;
+
+  CatalogTrackSummary? get _currentQueueTrack {
+    final index = _queueCurrentIndex;
+    if (index < 0 || index >= _queue.length) return null;
+    return _queue[index];
+  }
+
+  CatalogTrackSummary? get _nextQueueTrack {
+    final index = _queueCurrentIndex;
+    if (index < 0 || index >= _queue.length - 1) return null;
+    return _queue[index + 1];
+  }
 
   @override
   void initState() {
@@ -121,8 +139,44 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       final nextMetrics = await widget.playbackBridge.metricsSnapshot();
       if (!mounted) return;
       setState(() => _metrics = nextMetrics);
+      await _maybeAutoAdvance(nextMetrics);
     } finally {
       _refreshing = false;
+    }
+  }
+
+  Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {
+    if (!_autoAdvanceEnabled || _autoAdvancing || _busy || _catalogLoading) return;
+    if (!_canPlayNext) return;
+
+    final durationMs = metrics.durationMs ?? _catalogManifest?.durationMs;
+    if (durationMs == null || durationMs <= 0) return;
+
+    final remainingMs = durationMs - metrics.currentPositionMs;
+    final nearEnd = metrics.currentPositionMs > 0 && remainingMs <= _autoAdvanceThresholdMs;
+    final endedEvent = metrics.lastEvent == 'ended' || metrics.lastEvent == 'playback_ended';
+
+    if (!nearEnd && !endedEvent) {
+      if (metrics.currentPositionMs < durationMs - (_autoAdvanceThresholdMs * 2)) {
+        _lastAutoAdvanceTrackId = null;
+      }
+      return;
+    }
+
+    final currentTrackId = _queueCurrentTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
+    if (currentTrackId == null || _lastAutoAdvanceTrackId == currentTrackId) return;
+
+    _lastAutoAdvanceTrackId = currentTrackId;
+    setState(() {
+      _autoAdvancing = true;
+      _queueStatus = 'Auto-advancing to next track...';
+    });
+
+    try {
+      await _playNextQueueTrack(autoStart: true, source: QueueAdvanceSource.auto);
+    } finally {
+      if (!mounted) return;
+      setState(() => _autoAdvancing = false);
     }
   }
 
@@ -156,10 +210,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         if (_queue.isEmpty) {
           _queue = catalog.tracks;
           _queueCurrentTrackId = preferredTrack?.trackId;
+          _queueStatus = catalog.tracks.isEmpty
+              ? 'Queue is empty.'
+              : 'Queue initialized from catalog.';
         } else {
           _queue = _queue
               .map((queued) => _findTrack(catalog.tracks, queued.trackId) ?? queued)
               .toList(growable: false);
+          _queueStatus = 'Queue refreshed with latest catalog metadata.';
         }
         _selectedTrackId = preferredTrack?.trackId;
         _catalogListStatus = catalog.tracks.isEmpty
@@ -196,6 +254,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     String? trackId,
     CatalogClient? client,
     bool closeClient = false,
+    bool autoPlay = false,
   }) async {
     if (_catalogLoading) return;
     final targetTrackId = trackId ?? _selectedTrackId ?? 'track-apple-bipbop-hls';
@@ -204,6 +263,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _catalogStatus = 'Loading catalog manifest...';
       _selectedTrackId = targetTrackId;
       _queueCurrentTrackId = targetTrackId;
+      _lastAutoAdvanceTrackId = targetTrackId;
     });
 
     final activeClient = client ?? CatalogClient(baseUrl: _apiBaseUrlController.text);
@@ -219,6 +279,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _catalogStatus = 'Loaded from catalog API: ${manifest.title}';
       });
       await _loadTrack(source: TrackLoadSource.catalog);
+      if (autoPlay) {
+        await _runCommand(widget.playbackBridge.play);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() => _catalogStatus = 'Catalog load failed. $error');
@@ -258,24 +321,33 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   void _addToQueue(CatalogTrackSummary track) {
+    final alreadyQueued = _queue.any((queued) => queued.trackId == track.trackId);
     setState(() {
-      final exists = _queue.any((queued) => queued.trackId == track.trackId);
-      if (!exists) _queue = [..._queue, track];
+      if (!alreadyQueued) _queue = [..._queue, track];
       _queueCurrentTrackId ??= track.trackId;
+      _queueStatus = alreadyQueued
+          ? '${track.title} is already in queue.'
+          : '${track.title} added to queue.';
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${track.title} added to queue')),
+      SnackBar(content: Text(alreadyQueued ? '${track.title} is already queued' : '${track.title} added to queue')),
     );
   }
 
   void _removeFromQueue(CatalogTrackSummary track) {
     setState(() {
+      final removedIndex = _queue.indexWhere((queued) => queued.trackId == track.trackId);
       final wasCurrent = track.trackId == _queueCurrentTrackId;
       _queue = _queue.where((queued) => queued.trackId != track.trackId).toList(growable: false);
       if (_queue.isEmpty) {
         _queueCurrentTrackId = null;
+        _queueStatus = 'Queue cleared.';
       } else if (wasCurrent) {
-        _queueCurrentTrackId = _queue.first.trackId;
+        final nextIndex = removedIndex.clamp(0, _queue.length - 1).toInt();
+        _queueCurrentTrackId = _queue[nextIndex].trackId;
+        _queueStatus = 'Removed current track. Queue moved to ${_queue[nextIndex].title}.';
+      } else {
+        _queueStatus = '${track.title} removed from queue.';
       }
     });
   }
@@ -284,24 +356,39 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     setState(() {
       _queue = const [];
       _queueCurrentTrackId = null;
+      _lastAutoAdvanceTrackId = null;
+      _queueStatus = 'Queue cleared.';
     });
   }
 
-  Future<void> _playQueueTrack(CatalogTrackSummary track) {
-    setState(() => _queueCurrentTrackId = track.trackId);
-    return _loadCatalogTrack(trackId: track.trackId, closeClient: true);
+  Future<void> _playQueueTrack(
+    CatalogTrackSummary track, {
+    bool autoStart = false,
+    QueueAdvanceSource source = QueueAdvanceSource.manual,
+  }) async {
+    setState(() {
+      _queueCurrentTrackId = track.trackId;
+      _queueStatus = switch (source) {
+        QueueAdvanceSource.auto => 'Auto-advanced to ${track.title}.',
+        QueueAdvanceSource.next => 'Skipped to next: ${track.title}.',
+        QueueAdvanceSource.previous => 'Returned to previous: ${track.title}.',
+        QueueAdvanceSource.manual => 'Queue selected: ${track.title}.',
+      };
+      if (source == QueueAdvanceSource.auto) _autoAdvanceCount += 1;
+    });
+    await _loadCatalogTrack(trackId: track.trackId, closeClient: true, autoPlay: autoStart);
   }
 
-  Future<void> _playNextQueueTrack() async {
+  Future<void> _playNextQueueTrack({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.next}) async {
     final index = _queueCurrentIndex;
     if (index < 0 || index >= _queue.length - 1) return;
-    await _playQueueTrack(_queue[index + 1]);
+    await _playQueueTrack(_queue[index + 1], autoStart: autoStart, source: source);
   }
 
-  Future<void> _playPreviousQueueTrack() async {
+  Future<void> _playPreviousQueueTrack({bool autoStart = false}) async {
     final index = _queueCurrentIndex;
     if (index <= 0) return;
-    await _playQueueTrack(_queue[index - 1]);
+    await _playQueueTrack(_queue[index - 1], autoStart: autoStart, source: QueueAdvanceSource.previous);
   }
 
   @override
@@ -329,6 +416,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   _NowPlayingCard(
                     metrics: _metrics,
                     manifest: _catalogManifest,
+                    nextTrack: _nextQueueTrack,
                     progressValue: progressValue,
                     displayedPositionMs: displayedPositionMs,
                     durationMs: durationMs,
@@ -342,8 +430,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     ),
                     onStop: () => _runCommand(widget.playbackBridge.stop),
                     onRetry: () => _runCommand(widget.playbackBridge.retry),
-                    onPrevious: _playPreviousQueueTrack,
-                    onNext: _playNextQueueTrack,
+                    onPrevious: () => _playPreviousQueueTrack(autoStart: _metrics.isPlaying),
+                    onNext: () => _playNextQueueTrack(autoStart: _metrics.isPlaying),
                     onSeekChanged: durationMs == null || durationMs <= 0
                         ? null
                         : (value) => setState(() => _dragPositionMs = value * durationMs),
@@ -359,8 +447,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   _QueueCard(
                     queue: _queue,
                     currentTrackId: _queueCurrentTrackId,
-                    busy: _busy || _catalogLoading,
-                    onPlayTrack: _playQueueTrack,
+                    currentIndex: _queueCurrentIndex,
+                    status: _queueStatus,
+                    busy: _busy || _catalogLoading || _autoAdvancing,
+                    autoAdvanceEnabled: _autoAdvanceEnabled,
+                    autoAdvanceCount: _autoAdvanceCount,
+                    onToggleAutoAdvance: (value) => setState(() {
+                      _autoAdvanceEnabled = value;
+                      _queueStatus = value ? 'Auto-advance enabled.' : 'Auto-advance disabled.';
+                    }),
+                    onPlayTrack: (track) => _playQueueTrack(track, autoStart: _metrics.isPlaying),
                     onRemoveTrack: _removeFromQueue,
                     onClearQueue: _clearQueue,
                   ),
@@ -418,6 +514,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
 enum TrackLoadSource { catalog, demoFallback, manual }
 
+enum QueueAdvanceSource { manual, next, previous, auto }
+
 class _TopBar extends StatelessWidget {
   const _TopBar();
 
@@ -439,7 +537,7 @@ class _TopBar extends StatelessWidget {
               ),
               SizedBox(height: 4),
               Text(
-                'Native playback. Fast start. Searchable catalog. Queue ready.',
+                'Native playback. Fast start. Queue flow.',
                 style: TextStyle(color: Color(0xFF98A1B8), fontSize: 14),
               ),
             ],
@@ -455,6 +553,7 @@ class _NowPlayingCard extends StatelessWidget {
   const _NowPlayingCard({
     required this.metrics,
     required this.manifest,
+    required this.nextTrack,
     required this.progressValue,
     required this.displayedPositionMs,
     required this.durationMs,
@@ -472,6 +571,7 @@ class _NowPlayingCard extends StatelessWidget {
 
   final PlaybackMetrics metrics;
   final CatalogTrackManifest? manifest;
+  final CatalogTrackSummary? nextTrack;
   final double progressValue;
   final int displayedPositionMs;
   final int? durationMs;
@@ -550,6 +650,16 @@ class _NowPlayingCard extends StatelessWidget {
               Text(_formatTime(durationMs), style: _timeStyle),
             ],
           ),
+          if (nextTrack != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Up next: ${nextTrack!.title}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+            ),
+          ],
           const SizedBox(height: 22),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -652,7 +762,12 @@ class _QueueCard extends StatelessWidget {
   const _QueueCard({
     required this.queue,
     required this.currentTrackId,
+    required this.currentIndex,
+    required this.status,
     required this.busy,
+    required this.autoAdvanceEnabled,
+    required this.autoAdvanceCount,
+    required this.onToggleAutoAdvance,
     required this.onPlayTrack,
     required this.onRemoveTrack,
     required this.onClearQueue,
@@ -660,13 +775,19 @@ class _QueueCard extends StatelessWidget {
 
   final List<CatalogTrackSummary> queue;
   final String? currentTrackId;
+  final int currentIndex;
+  final String status;
   final bool busy;
+  final bool autoAdvanceEnabled;
+  final int autoAdvanceCount;
+  final ValueChanged<bool> onToggleAutoAdvance;
   final ValueChanged<CatalogTrackSummary> onPlayTrack;
   final ValueChanged<CatalogTrackSummary> onRemoveTrack;
   final VoidCallback onClearQueue;
 
   @override
   Widget build(BuildContext context) {
+    final nextTrack = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null;
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -679,7 +800,7 @@ class _QueueCard extends StatelessWidget {
                   children: [
                     Text('Queue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                     SizedBox(height: 4),
-                    Text('First in-memory playback queue.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                    Text('Current, up next, and auto-advance.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
                   ],
                 ),
               ),
@@ -692,20 +813,58 @@ class _QueueCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B0E18),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF20273A)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: Color(0xFF8D7CFF), size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    nextTrack == null
+                        ? 'Auto-advance ready. No next track yet.'
+                        : 'Auto-advance to ${nextTrack.title}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12),
+                  ),
+                ),
+                Text('$autoAdvanceCount auto', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 11)),
+                Switch(
+                  value: autoAdvanceEnabled,
+                  onChanged: busy ? null : onToggleAutoAdvance,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+          const SizedBox(height: 12),
           if (queue.isEmpty)
             const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from the catalog.')
           else
-            ...queue.map(
-              (track) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _QueueTrackTile(
-                  track: track,
-                  current: track.trackId == currentTrackId,
-                  busy: busy,
-                  onPlay: () => onPlayTrack(track),
-                  onRemove: () => onRemoveTrack(track),
-                ),
-              ),
+            ...queue.indexed.map(
+              (entry) {
+                final index = entry.$1;
+                final track = entry.$2;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _QueueTrackTile(
+                    track: track,
+                    index: index,
+                    current: track.trackId == currentTrackId,
+                    upNext: index == currentIndex + 1,
+                    busy: busy,
+                    onPlay: () => onPlayTrack(track),
+                    onRemove: () => onRemoveTrack(track),
+                  ),
+                );
+              },
             ),
         ],
       ),
@@ -716,20 +875,25 @@ class _QueueCard extends StatelessWidget {
 class _QueueTrackTile extends StatelessWidget {
   const _QueueTrackTile({
     required this.track,
+    required this.index,
     required this.current,
+    required this.upNext,
     required this.busy,
     required this.onPlay,
     required this.onRemove,
   });
 
   final CatalogTrackSummary track;
+  final int index;
   final bool current;
+  final bool upNext;
   final bool busy;
   final VoidCallback onPlay;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    final label = current ? 'Now' : upNext ? 'Up next' : '#${index + 1}';
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -739,13 +903,21 @@ class _QueueTrackTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(current ? Icons.equalizer : Icons.queue_music, color: const Color(0xFF8D7CFF)),
+          Icon(current ? Icons.equalizer : upNext ? Icons.trending_flat : Icons.queue_music, color: const Color(0xFF8D7CFF)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                    const SizedBox(width: 8),
+                    _QueueBadge(label: label),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
               ],
@@ -761,6 +933,25 @@ class _QueueTrackTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _QueueBadge extends StatelessWidget {
+  const _QueueBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0x227C5CFF),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0x338D7CFF)),
+      ),
+      child: Text(label, style: const TextStyle(color: Color(0xFFC9BEFF), fontSize: 10, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -1253,6 +1444,9 @@ String _statusFromEvent(String? event) {
       return 'Paused';
     case 'stopped':
       return 'Stopped';
+    case 'ended':
+    case 'playback_ended':
+      return 'Ended';
     default:
       return 'Ready';
   }
