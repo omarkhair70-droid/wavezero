@@ -33,6 +33,10 @@ class PlaybackMetrics {
     this.nativePrebufferHitCount = 0,
     this.nativePrebufferMissCount = 0,
     this.nativePrebufferPrepareMs,
+    this.lastNativePrebufferTrackId,
+    this.lastNativePrebufferTrackTitle,
+    this.lastNativePrebufferPrepareMs,
+    this.nativeHandoffToPlayingMs,
     this.nativePrebufferHandoffAttempted = 0,
     this.nativePrebufferHandoffSucceeded = 0,
     this.nativePrebufferHandoffFallback = 0,
@@ -75,6 +79,10 @@ class PlaybackMetrics {
   final int nativePrebufferHitCount;
   final int nativePrebufferMissCount;
   final int? nativePrebufferPrepareMs;
+  final String? lastNativePrebufferTrackId;
+  final String? lastNativePrebufferTrackTitle;
+  final int? lastNativePrebufferPrepareMs;
+  final int? nativeHandoffToPlayingMs;
   final int nativePrebufferHandoffAttempted;
   final int nativePrebufferHandoffSucceeded;
   final int nativePrebufferHandoffFallback;
@@ -131,6 +139,14 @@ class PlaybackMetrics {
     int? nativePrebufferMissCount,
     int? nativePrebufferPrepareMs,
     bool clearNativePrebufferPrepareMs = false,
+    String? lastNativePrebufferTrackId,
+    bool clearLastNativePrebufferTrackId = false,
+    String? lastNativePrebufferTrackTitle,
+    bool clearLastNativePrebufferTrackTitle = false,
+    int? lastNativePrebufferPrepareMs,
+    bool clearLastNativePrebufferPrepareMs = false,
+    int? nativeHandoffToPlayingMs,
+    bool clearNativeHandoffToPlayingMs = false,
     int? nativePrebufferHandoffAttempted,
     int? nativePrebufferHandoffSucceeded,
     int? nativePrebufferHandoffFallback,
@@ -198,6 +214,18 @@ class PlaybackMetrics {
       nativePrebufferPrepareMs: clearNativePrebufferPrepareMs
           ? null
           : nativePrebufferPrepareMs ?? this.nativePrebufferPrepareMs,
+      lastNativePrebufferTrackId: clearLastNativePrebufferTrackId
+          ? null
+          : lastNativePrebufferTrackId ?? this.lastNativePrebufferTrackId,
+      lastNativePrebufferTrackTitle: clearLastNativePrebufferTrackTitle
+          ? null
+          : lastNativePrebufferTrackTitle ?? this.lastNativePrebufferTrackTitle,
+      lastNativePrebufferPrepareMs: clearLastNativePrebufferPrepareMs
+          ? null
+          : lastNativePrebufferPrepareMs ?? this.lastNativePrebufferPrepareMs,
+      nativeHandoffToPlayingMs: clearNativeHandoffToPlayingMs
+          ? null
+          : nativeHandoffToPlayingMs ?? this.nativeHandoffToPlayingMs,
       nativePrebufferHandoffAttempted:
           nativePrebufferHandoffAttempted ?? this.nativePrebufferHandoffAttempted,
       nativePrebufferHandoffSucceeded:
@@ -247,6 +275,10 @@ class PlaybackMetrics {
       'nativePrebufferHitCount': nativePrebufferHitCount,
       'nativePrebufferMissCount': nativePrebufferMissCount,
       'nativePrebufferPrepareMs': nativePrebufferPrepareMs,
+      'lastNativePrebufferTrackId': lastNativePrebufferTrackId,
+      'lastNativePrebufferTrackTitle': lastNativePrebufferTrackTitle,
+      'lastNativePrebufferPrepareMs': lastNativePrebufferPrepareMs,
+      'nativeHandoffToPlayingMs': nativeHandoffToPlayingMs,
       'nativePrebufferHandoffAttempted': nativePrebufferHandoffAttempted,
       'nativePrebufferHandoffSucceeded': nativePrebufferHandoffSucceeded,
       'nativePrebufferHandoffFallback': nativePrebufferHandoffFallback,
@@ -299,6 +331,11 @@ class PlaybackMetrics {
       nativePrebufferHitCount: _readInt(json['nativePrebufferHitCount']) ?? 0,
       nativePrebufferMissCount: _readInt(json['nativePrebufferMissCount']) ?? 0,
       nativePrebufferPrepareMs: _readInt(json['nativePrebufferPrepareMs']),
+      lastNativePrebufferTrackId: json['lastNativePrebufferTrackId'] as String?,
+      lastNativePrebufferTrackTitle: json['lastNativePrebufferTrackTitle'] as String?,
+      lastNativePrebufferPrepareMs:
+          _readInt(json['lastNativePrebufferPrepareMs']),
+      nativeHandoffToPlayingMs: _readInt(json['nativeHandoffToPlayingMs']),
       nativePrebufferHandoffAttempted:
           _readInt(json['nativePrebufferHandoffAttempted']) ?? 0,
       nativePrebufferHandoffSucceeded:

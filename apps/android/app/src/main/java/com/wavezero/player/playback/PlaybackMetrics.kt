@@ -35,6 +35,10 @@ data class PlaybackMetrics(
     val nativePrebufferHitCount: Int = 0,
     val nativePrebufferMissCount: Int = 0,
     val nativePrebufferPrepareMs: Long? = null,
+    val lastNativePrebufferTrackId: String? = null,
+    val lastNativePrebufferTrackTitle: String? = null,
+    val lastNativePrebufferPrepareMs: Long? = null,
+    val nativeHandoffToPlayingMs: Long? = null,
     val nativePrebufferHandoffAttempted: Int = 0,
     val nativePrebufferHandoffSucceeded: Int = 0,
     val nativePrebufferHandoffFallback: Int = 0,
@@ -76,6 +80,10 @@ data class PlaybackMetrics(
         "nativePrebufferHitCount" to nativePrebufferHitCount,
         "nativePrebufferMissCount" to nativePrebufferMissCount,
         "nativePrebufferPrepareMs" to nativePrebufferPrepareMs,
+        "lastNativePrebufferTrackId" to lastNativePrebufferTrackId,
+        "lastNativePrebufferTrackTitle" to lastNativePrebufferTrackTitle,
+        "lastNativePrebufferPrepareMs" to lastNativePrebufferPrepareMs,
+        "nativeHandoffToPlayingMs" to nativeHandoffToPlayingMs,
         "nativePrebufferHandoffAttempted" to nativePrebufferHandoffAttempted,
         "nativePrebufferHandoffSucceeded" to nativePrebufferHandoffSucceeded,
         "nativePrebufferHandoffFallback" to nativePrebufferHandoffFallback,
@@ -97,6 +105,7 @@ class PlaybackMetricsTracker(
     private var bufferStartedAtMs: Long? = null
     private var bufferPhase: BufferPhase? = null
     private var lastSeekAtMs: Long? = null
+    private var nativeHandoffStartedAtMs: Long? = null
     private var metrics = PlaybackMetrics()
 
     fun snapshot(): PlaybackMetrics = metrics
@@ -114,6 +123,7 @@ class PlaybackMetricsTracker(
         bufferStartedAtMs = null
         bufferPhase = null
         lastSeekAtMs = null
+        nativeHandoffStartedAtMs = null
         return update("track_loaded") {
             copy(
                 tapToFirstAudioMs = null,
@@ -203,18 +213,24 @@ class PlaybackMetricsTracker(
     fun markPlaying(positionMs: Long): PlaybackMetrics {
         val position = positionMs.coerceAtLeast(0)
         val elapsed = elapsedSincePlayTap()
+        val handoffElapsed = nativeHandoffStartedAtMs?.let { (nowMs() - it).coerceAtLeast(0) }
+        nativeHandoffStartedAtMs = null
 
         return update("playing") {
             copy(
                 tapToIsPlayingMs = tapToIsPlayingMs ?: elapsed,
+                nativeHandoffToPlayingMs = handoffElapsed ?: nativeHandoffToPlayingMs,
                 isPlaying = true,
                 currentPositionMs = position,
             )
         }
     }
 
-    fun markNotPlaying(positionMs: Long): PlaybackMetrics = update("not_playing") {
-        copy(isPlaying = false, currentPositionMs = positionMs.coerceAtLeast(0))
+    fun markNotPlaying(positionMs: Long): PlaybackMetrics {
+        nativeHandoffStartedAtMs = null
+        return update("not_playing") {
+            copy(isPlaying = false, currentPositionMs = positionMs.coerceAtLeast(0))
+        }
     }
 
     fun markSeekStarted(targetPositionMs: Long): PlaybackMetrics {
@@ -330,6 +346,7 @@ class PlaybackMetricsTracker(
         bufferStartedAtMs = null
         bufferPhase = null
         lastSeekAtMs = null
+        nativeHandoffStartedAtMs = null
         return update("metrics_reset") {
             copy(
                 tapToFirstAudioMs = null,
@@ -366,6 +383,7 @@ class PlaybackMetricsTracker(
         bufferStartedAtMs = null
         bufferPhase = null
         lastSeekAtMs = null
+        nativeHandoffStartedAtMs = null
         return update("stopped") {
             copy(
                 tapToFirstAudioMs = null,
@@ -400,6 +418,9 @@ class PlaybackMetricsTracker(
                 nativePrebufferInFlight = false,
                 nativePrebufferReady = true,
                 nativePrebufferPrepareMs = prepareMs.coerceAtLeast(0),
+                lastNativePrebufferTrackId = trackId,
+                lastNativePrebufferTrackTitle = nativePrebufferTrackTitle,
+                lastNativePrebufferPrepareMs = prepareMs.coerceAtLeast(0),
             )
         }
     }
@@ -419,6 +440,7 @@ class PlaybackMetricsTracker(
     fun markNativePrebufferOutcome(trackId: String, usedPreparedPath: Boolean): PlaybackMetrics {
         val matchedReady = metrics.nativePrebufferTrackId == trackId && metrics.nativePrebufferReady
         val succeeded = usedPreparedPath && matchedReady
+        if (!succeeded) nativeHandoffStartedAtMs = null
         return update("native_prebuffer_outcome") {
             copy(
                 nativePrebufferHitCount = if (succeeded) nativePrebufferHitCount + 1 else nativePrebufferHitCount,
@@ -430,11 +452,16 @@ class PlaybackMetricsTracker(
     }
 
     fun markNativePrebufferHandoffAttempted(): PlaybackMetrics = update("native_prebuffer_handoff_attempted") {
-        copy(nativePrebufferHandoffAttempted = nativePrebufferHandoffAttempted + 1)
+        nativeHandoffStartedAtMs = null
+        copy(
+            nativePrebufferHandoffAttempted = nativePrebufferHandoffAttempted + 1,
+            nativeHandoffToPlayingMs = null,
+        )
     }
 
     fun markNativePrebufferHandoffSucceeded(trackId: String): PlaybackMetrics {
         val matchedReady = metrics.nativePrebufferTrackId == trackId && metrics.nativePrebufferReady
+        if (matchedReady) nativeHandoffStartedAtMs = nowMs()
         return update("native_prebuffer_handoff_succeeded") {
             copy(
                 nativePrebufferEnabled = false,
