@@ -74,12 +74,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _autoAdvanceEnabled = true;
   bool _sessionRestored = false;
   int _autoAdvanceCount = 0;
+  int _prefetchGeneration = 0;
+  int _prefetchHitCount = 0;
+  int _prefetchMissCount = 0;
+  int? _nextTapStartedAtMs;
+  int? _nextTapToAudioMs;
   double? _dragPositionMs;
+
+  bool _prefetchEnabled = true;
+  bool _prefetchInFlight = false;
+  bool? _lastPrefetchHit;
+  bool _manifestPrefetched = false;
+  bool _audioPreparedBeforeNext = false;
+  bool _nextPreparedBeforePlay = false;
 
   String? _selectedTrackId;
   String? _queueCurrentTrackId;
   String? _lastAutoAdvanceTrackId;
   String? _lastError;
+  String? _prefetchedTrackId;
+  String? _prefetchedTrackTitle;
+  CatalogTrackManifest? _prefetchedManifest;
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
   String _queueStatus = 'Queue is ready.';
@@ -271,13 +286,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     );
   }
 
-  Future<void> _loadCatalogTrack({String? trackId, bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status}) {
+  Future<void> _loadCatalogTrack({String? trackId, bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status, CatalogTrackManifest? prefetchedManifest}) {
     final id = trackId ?? _selectedTrackId ?? (_catalog.isNotEmpty ? _catalog.first.trackId : null);
     if (id == null) return Future<void>.value();
     return _runOperation(operation, () async {
       final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
       try {
-        await _loadManifestAndNativeTrack(id, client: client, autoPlay: autoPlay, status: status);
+        await _loadManifestAndNativeTrack(id, client: client, autoPlay: autoPlay, status: status, prefetchedManifest: prefetchedManifest);
         unawaited(_saveSession());
       } finally {
         client.close();
@@ -285,7 +300,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
   }
 
-  Future<void> _loadManifestAndNativeTrack(String trackId, {required CatalogClient client, bool autoPlay = false, String? status}) async {
+  Future<void> _loadManifestAndNativeTrack(String trackId, {required CatalogClient client, bool autoPlay = false, String? status, CatalogTrackManifest? prefetchedManifest}) async {
     if (!mounted) return;
     setState(() {
       _catalogStatus = 'Loading catalog manifest...';
@@ -293,7 +308,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _queueCurrentTrackId = trackId;
       _lastAutoAdvanceTrackId = trackId;
     });
-    final manifest = await client.fetchTrackManifest(trackId: trackId);
+    final manifest = prefetchedManifest?.trackId == trackId ? prefetchedManifest! : await client.fetchTrackManifest(trackId: trackId);
     if (!mounted) return;
     _titleController.text = manifest.title;
     _urlController.text = manifest.streamUrl;
@@ -305,6 +320,81 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
     await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
     if (autoPlay) await widget.playbackBridge.play();
+    if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
+      setState(() {
+        _nextTapToAudioMs = null;
+        _nextPreparedBeforePlay = _audioPreparedBeforeNext;
+      });
+    }
+    unawaited(_updatePredictivePreloadCandidate());
+  }
+
+
+  void _setPrefetchEnabled(bool value) {
+    setState(() {
+      _prefetchEnabled = value;
+      if (!value) {
+        _prefetchedTrackId = null;
+        _prefetchedTrackTitle = null;
+        _prefetchedManifest = null;
+        _prefetchInFlight = false;
+        _manifestPrefetched = false;
+        _audioPreparedBeforeNext = false;
+      }
+      _queueStatus = value ? 'Smart preload enabled.' : 'Smart preload disabled.';
+    });
+    if (value) unawaited(_updatePredictivePreloadCandidate());
+  }
+
+  Future<void> _updatePredictivePreloadCandidate() async {
+    final candidate = _prefetchEnabled ? _nextQueueTrack : null;
+    if (candidate == null) {
+      if (!mounted) return;
+      setState(() {
+        _prefetchedTrackId = null;
+        _prefetchedTrackTitle = null;
+        _prefetchedManifest = null;
+        _prefetchInFlight = false;
+        _manifestPrefetched = false;
+        _audioPreparedBeforeNext = false;
+      });
+      return;
+    }
+
+    if (_prefetchedTrackId == candidate.trackId && (_prefetchedManifest != null || _prefetchInFlight)) return;
+
+    final generation = ++_prefetchGeneration;
+    setState(() {
+      _prefetchInFlight = true;
+      _prefetchedTrackId = candidate.trackId;
+      _prefetchedTrackTitle = candidate.title;
+      _prefetchedManifest = null;
+      _manifestPrefetched = false;
+      _audioPreparedBeforeNext = false;
+    });
+
+    final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
+    try {
+      final manifest = await client.fetchTrackManifest(trackId: candidate.trackId);
+      if (!mounted || generation != _prefetchGeneration || !_prefetchEnabled || _nextQueueTrack?.trackId != candidate.trackId) return;
+      setState(() {
+        _prefetchedTrackId = manifest.trackId;
+        _prefetchedTrackTitle = manifest.title;
+        _prefetchedManifest = manifest;
+        _prefetchInFlight = false;
+        _manifestPrefetched = true;
+        _audioPreparedBeforeNext = false;
+      });
+    } catch (error) {
+      if (!mounted || generation != _prefetchGeneration) return;
+      setState(() {
+        _prefetchInFlight = false;
+        _manifestPrefetched = false;
+        _audioPreparedBeforeNext = false;
+      });
+    } finally {
+      client.close();
+    }
   }
 
   Future<void> _loadManualTrack() {
@@ -351,6 +441,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
+    unawaited(_updatePredictivePreloadCandidate());
   }
 
   void _removeFromQueue(CatalogTrackSummary track) {
@@ -372,6 +463,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
+    unawaited(_updatePredictivePreloadCandidate());
   }
 
   void _clearQueue() {
@@ -384,23 +476,40 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session cleared.';
     });
     unawaited(widget.sessionStore.clear());
+    unawaited(_updatePredictivePreloadCandidate());
   }
 
   Future<void> _playQueueTrack(CatalogTrackSummary track, {bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.manual}) async {
     final operation = source == QueueAdvanceSource.auto ? PlayerOperation.autoAdvance : PlayerOperation.queueAdvance;
+    final prefetchHit = _prefetchEnabled && _prefetchedTrackId == track.trackId && _prefetchedManifest != null;
+    final prefetchedManifest = prefetchHit ? _prefetchedManifest : null;
     final status = switch (source) {
       QueueAdvanceSource.auto => 'Auto-advanced to ${track.title}.',
-      QueueAdvanceSource.next => 'Skipped to next: ${track.title}.',
+      QueueAdvanceSource.next => prefetchHit ? 'Instant Next manifest hit: ${track.title}.' : 'Skipped to next: ${track.title}.',
       QueueAdvanceSource.previous => 'Returned to previous: ${track.title}.',
       QueueAdvanceSource.manual => 'Queue selected: ${track.title}.',
     };
     if (source == QueueAdvanceSource.auto) setState(() => _autoAdvanceCount += 1);
+    if (source == QueueAdvanceSource.next) {
+      setState(() {
+        _lastPrefetchHit = prefetchHit;
+        if (prefetchHit) {
+          _prefetchHitCount += 1;
+        } else {
+          _prefetchMissCount += 1;
+        }
+        _nextTapStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+        _nextTapToAudioMs = null;
+        _audioPreparedBeforeNext = false;
+        _nextPreparedBeforePlay = false;
+      });
+    }
     setState(() {
       _queueCurrentTrackId = track.trackId;
       _queueStatus = status;
       _sessionStatus = 'Session saved.';
     });
-    await _loadCatalogTrack(trackId: track.trackId, autoPlay: autoStart, operation: operation, status: status);
+    await _loadCatalogTrack(trackId: track.trackId, autoPlay: autoStart, operation: operation, status: status, prefetchedManifest: prefetchedManifest);
   }
 
   Future<void> _playNext({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.next}) async {
@@ -462,6 +571,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
                   const SizedBox(height: 8),
                   _SessionStrip(status: _sessionStatus),
+                  const SizedBox(height: 12),
+                  _SmartPreloadCard(
+                    enabled: _prefetchEnabled,
+                    prefetchedTrackId: _prefetchedTrackId,
+                    prefetchedTrackTitle: _prefetchedTrackTitle,
+                    prefetchInFlight: _prefetchInFlight,
+                    manifestPrefetched: _manifestPrefetched,
+                    audioPreparedBeforeNext: _audioPreparedBeforeNext,
+                    lastPrefetchHit: _lastPrefetchHit,
+                    prefetchHitCount: _prefetchHitCount,
+                    prefetchMissCount: _prefetchMissCount,
+                    nextTapToAudioMs: _nextTapToAudioMs,
+                    nextPreparedBeforePlay: _nextPreparedBeforePlay,
+                    controlsDisabled: _queueDisabled,
+                    onToggle: _setPrefetchEnabled,
+                  ),
                   const SizedBox(height: 16),
                   _QueueCard(
                     queue: _queue,
@@ -478,6 +603,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                         _sessionStatus = 'Session saved.';
                       });
                       unawaited(_saveSession());
+                      unawaited(_updatePredictivePreloadCandidate());
                     },
                     onPlayTrack: (track) => _playQueueTrack(track, autoStart: _metrics.isPlaying),
                     onRemoveTrack: _removeFromQueue,
@@ -521,7 +647,7 @@ enum QueueAdvanceSource { manual, next, previous, auto }
 class _TopBar extends StatelessWidget {
   const _TopBar();
   @override
-  Widget build(BuildContext context) => const Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('WaveZero', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1.1)), SizedBox(height: 4), Text('Native playback. Persistent queue. Session recovery.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 14))])), Icon(Icons.graphic_eq, color: Color(0xFF8D7CFF))]);
+  Widget build(BuildContext context) => const Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('WaveZero', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1.1)), SizedBox(height: 4), Text('Native playback. Predictive preload. Instant Next foundation.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 14))])), Icon(Icons.graphic_eq, color: Color(0xFF8D7CFF))]);
 }
 
 class _StatusStrip extends StatelessWidget {
@@ -574,6 +700,30 @@ class _Artwork extends StatelessWidget {
   final double size;
   @override
   Widget build(BuildContext context) { final url = artworkUrl; return Container(width: size, height: size, clipBehavior: Clip.antiAlias, decoration: BoxDecoration(borderRadius: BorderRadius.circular(size > 60 ? 28 : 14), gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF7C5CFF), Color(0xFF14182A), Color(0xFF00D4FF)])), child: url == null || url.trim().isEmpty ? Icon(Icons.music_note_rounded, size: size * 0.4, color: Colors.white) : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.music_note_rounded, size: size * 0.4, color: Colors.white))); }
+}
+
+
+class _SmartPreloadCard extends StatelessWidget {
+  const _SmartPreloadCard({required this.enabled, required this.prefetchedTrackId, required this.prefetchedTrackTitle, required this.prefetchInFlight, required this.manifestPrefetched, required this.audioPreparedBeforeNext, required this.lastPrefetchHit, required this.prefetchHitCount, required this.prefetchMissCount, required this.nextTapToAudioMs, required this.nextPreparedBeforePlay, required this.controlsDisabled, required this.onToggle});
+  final bool enabled;
+  final String? prefetchedTrackId;
+  final String? prefetchedTrackTitle;
+  final bool prefetchInFlight;
+  final bool manifestPrefetched;
+  final bool audioPreparedBeforeNext;
+  final bool? lastPrefetchHit;
+  final int prefetchHitCount;
+  final int prefetchMissCount;
+  final int? nextTapToAudioMs;
+  final bool nextPreparedBeforePlay;
+  final bool controlsDisabled;
+  final ValueChanged<bool> onToggle;
+  @override
+  Widget build(BuildContext context) {
+    final result = lastPrefetchHit == null ? 'none' : lastPrefetchHit! ? 'hit' : 'miss';
+    final title = prefetchedTrackTitle ?? 'No track prefetched';
+    return _Panel(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Icon(Icons.auto_awesome, color: Color(0xFF8D7CFF)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Smart Preload', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), SizedBox(height: 3), Text('Phase 2A manifest prefetch only; true audio prebuffering is Phase 2B.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12))])), Switch(value: enabled, onChanged: controlsDisabled ? null : onToggle)]), const SizedBox(height: 12), Wrap(spacing: 10, runSpacing: 10, children: [_HealthChip(label: 'prefetchEnabled', value: enabled ? 'on' : 'off', good: enabled), _HealthChip(label: 'prefetchInFlight', value: prefetchInFlight ? 'true' : 'false', good: !prefetchInFlight), _HealthChip(label: 'lastPrefetchResult', value: result, good: lastPrefetchHit == true), _HealthChip(label: 'manifestPrefetched', value: manifestPrefetched ? 'true' : 'false', good: manifestPrefetched), _HealthChip(label: 'audioPreparedBeforeNext', value: audioPreparedBeforeNext ? 'true' : 'false', good: audioPreparedBeforeNext), _HealthChip(label: 'nextTapToAudioMs', value: _formatMetric(nextTapToAudioMs), good: nextTapToAudioMs != null), _HealthChip(label: 'nextPreparedBeforePlay', value: nextPreparedBeforePlay ? 'true' : 'false', good: nextPreparedBeforePlay)]), const SizedBox(height: 12), Text('prefetchedTrackTitle: $title', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12)), const SizedBox(height: 4), Text('prefetchedTrackId: ${prefetchedTrackId ?? 'none'} • prefetchHitCount: $prefetchHitCount • prefetchMissCount: $prefetchMissCount', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))]));
+  }
 }
 
 class _QueueCard extends StatelessWidget { const _QueueCard({required this.queue, required this.currentTrackId, required this.currentIndex, required this.status, required this.controlsDisabled, required this.autoAdvanceEnabled, required this.autoAdvanceCount, required this.onToggleAutoAdvance, required this.onPlayTrack, required this.onRemoveTrack, required this.onClearQueue}); final List<CatalogTrackSummary> queue; final String? currentTrackId; final int currentIndex; final String status; final bool controlsDisabled; final bool autoAdvanceEnabled; final int autoAdvanceCount; final ValueChanged<bool> onToggleAutoAdvance; final ValueChanged<CatalogTrackSummary> onPlayTrack; final ValueChanged<CatalogTrackSummary> onRemoveTrack; final VoidCallback onClearQueue; @override Widget build(BuildContext context) { final nextTrack = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null; return _Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Queue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), SizedBox(height: 4), Text('Current, up next, auto-advance, and recovery.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13))])), Text('${queue.length} tracks', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(width: 8), IconButton.outlined(onPressed: queue.isEmpty || controlsDisabled ? null : onClearQueue, icon: const Icon(Icons.clear_all))]), const SizedBox(height: 12), Row(children: [Expanded(child: Text(nextTrack == null ? 'No next track yet.' : 'Auto-advance to ${nextTrack.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12))), Text('$autoAdvanceCount auto', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 11)), Switch(value: autoAdvanceEnabled, onChanged: controlsDisabled ? null : onToggleAutoAdvance)]), Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 12), if (queue.isEmpty) const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from the catalog.') else ...queue.indexed.map((entry) => _QueueRow(track: entry.$2, index: entry.$1, current: entry.$2.trackId == currentTrackId, upNext: entry.$1 == currentIndex + 1, disabled: controlsDisabled, onPlay: () => onPlayTrack(entry.$2), onRemove: () => onRemoveTrack(entry.$2)))])); }}
