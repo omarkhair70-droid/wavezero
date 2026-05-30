@@ -439,7 +439,12 @@ class AudioPlayerManager(
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         publish(metricsTracker.markPlayTapped())
         publish(metricsTracker.markReady())
-        publish(metricsTracker.markNativePrebufferHandoffSucceeded(safeTrackId))
+        publish(
+            metricsTracker.markNativePrebufferHandoffSucceeded(
+                trackId = safeTrackId,
+                explicitNext = source == PreparedHandoffSource.ExplicitNext,
+            ),
+        )
         if (source == PreparedHandoffSource.AutoAdvance) {
             publish(metricsTracker.markAutoAdvancePreparedSucceeded(safeTrackId))
         }
