@@ -27,7 +27,20 @@ class WaveZeroLiveMetricsApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7C5CFF), brightness: Brightness.dark),
+        scaffoldBackgroundColor: _WzTokens.canvas,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: _WzTokens.accent,
+          brightness: Brightness.dark,
+        ),
+        fontFamily: 'Roboto',
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: _WzTokens.surfaceMuted,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(_WzTokens.radiusMd),
+            borderSide: const BorderSide(color: _WzTokens.border),
+          ),
+        ),
         useMaterial3: true,
       ),
       home: _PlayerScreen(
@@ -682,7 +695,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF060810),
+      backgroundColor: _WzTokens.canvas,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -807,31 +820,170 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
 enum QueueAdvanceSource { manual, next, previous, auto }
 
+class _WzTokens {
+  const _WzTokens._();
+
+  static const Color canvas = Color(0xFF060810);
+  static const Color surface = Color(0xFF101521);
+  static const Color surfaceElevated = Color(0xFF151B2A);
+  static const Color surfaceMuted = Color(0xFF0B0F19);
+  static const Color border = Color(0xFF252E43);
+  static const Color borderSoft = Color(0xFF1C2435);
+  static const Color accent = Color(0xFF9A8CFF);
+  static const Color accentSoft = Color(0x1F9A8CFF);
+  static const Color success = Color(0xFF38D996);
+  static const Color successSoft = Color(0x1838D996);
+  static const Color warning = Color(0xFFFFC46B);
+  static const Color warningSoft = Color(0x1AFFC46B);
+  static const Color textPrimary = Color(0xFFF3F5FB);
+  static const Color textMuted = Color(0xFFA4ADC1);
+  static const Color textSubtle = Color(0xFF7F899F);
+
+  static const double space1 = 4;
+  static const double space2 = 8;
+  static const double space3 = 12;
+  static const double space4 = 16;
+  static const double space5 = 20;
+  static const double space6 = 24;
+  static const double radiusMd = 18;
+  static const double radiusLg = 26;
+  static const double radiusXl = 32;
+
+  static const TextStyle eyebrow = TextStyle(
+    color: accent,
+    fontSize: 12,
+    fontWeight: FontWeight.w800,
+    letterSpacing: 0.6,
+  );
+  static const TextStyle title = TextStyle(
+    color: textPrimary,
+    fontSize: 20,
+    fontWeight: FontWeight.w900,
+    letterSpacing: -0.3,
+  );
+  static const TextStyle body = TextStyle(color: textMuted, fontSize: 13, height: 1.35);
+  static const TextStyle caption = TextStyle(color: textSubtle, fontSize: 12, height: 1.3);
+}
+
 class _TopBar extends StatelessWidget {
   const _TopBar();
+
   @override
-  Widget build(BuildContext context) => const Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('WaveZero', style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1.1)), SizedBox(height: 4), Text('Native playback. Predictive preload. Instant Next foundation.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 14))])), Icon(Icons.graphic_eq, color: Color(0xFF8D7CFF))]);
+  Widget build(BuildContext context) => const Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'WaveZero',
+                  style: TextStyle(
+                    color: _WzTokens.textPrimary,
+                    fontSize: 38,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -1.2,
+                  ),
+                ),
+                SizedBox(height: _WzTokens.space1),
+                Text(
+                  'Premium music engine shell for predictive native playback.',
+                  style: _WzTokens.body,
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.graphic_eq, color: _WzTokens.accent),
+        ],
+      );
 }
 
 class _StatusStrip extends StatelessWidget {
-  const _StatusStrip({required this.status, required this.detail, required this.operation, required this.refreshingMetrics});
+  const _StatusStrip({
+    required this.status,
+    required this.detail,
+    required this.operation,
+    required this.refreshingMetrics,
+  });
+
   final String status;
   final String detail;
   final String operation;
   final bool refreshingMetrics;
+
   @override
-  Widget build(BuildContext context) => _Panel(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), child: Row(children: [Icon(refreshingMetrics ? Icons.sync : Icons.radio_button_checked, color: const Color(0xFF8D7CFF), size: 18), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(status, style: const TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))])), const SizedBox(width: 8), Text(operation, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 11))]));
+  Widget build(BuildContext context) => _Panel(
+        padding: const EdgeInsets.symmetric(horizontal: _WzTokens.space4, vertical: 14),
+        child: Row(
+          children: [
+            Icon(
+              refreshingMetrics ? Icons.sync : Icons.radio_button_checked,
+              color: _WzTokens.accent,
+              size: 18,
+            ),
+            const SizedBox(width: _WzTokens.space3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(status, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: _WzTokens.space1),
+                  Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                ],
+              ),
+            ),
+            const SizedBox(width: _WzTokens.space2),
+            Flexible(
+              child: Text(
+                operation,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: _WzTokens.caption,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _SessionStrip extends StatelessWidget {
   const _SessionStrip({required this.status});
+
   final String status;
+
   @override
-  Widget build(BuildContext context) => _Panel(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), child: Row(children: [const Icon(Icons.restore, color: Color(0xFF8D7CFF), size: 17), const SizedBox(width: 10), Expanded(child: Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)))]));
+  Widget build(BuildContext context) => _Panel(
+        padding: const EdgeInsets.symmetric(horizontal: _WzTokens.space4, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.restore, color: _WzTokens.accent, size: 17),
+            const SizedBox(width: 10),
+            Expanded(child: Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption)),
+          ],
+        ),
+      );
 }
 
 class _NowPlayingCard extends StatelessWidget {
-  const _NowPlayingCard({required this.metrics, required this.manifest, required this.nextTrack, required this.progressValue, required this.displayedPositionMs, required this.durationMs, required this.controlsDisabled, required this.canPlayPrevious, required this.canPlayNext, required this.onPlayPause, required this.onStop, required this.onRetry, required this.onPrevious, required this.onNext, required this.onSeekChanged, required this.onSeekEnd});
+  const _NowPlayingCard({
+    required this.metrics,
+    required this.manifest,
+    required this.nextTrack,
+    required this.progressValue,
+    required this.displayedPositionMs,
+    required this.durationMs,
+    required this.controlsDisabled,
+    required this.canPlayPrevious,
+    required this.canPlayNext,
+    required this.onPlayPause,
+    required this.onStop,
+    required this.onRetry,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onSeekChanged,
+    required this.onSeekEnd,
+  });
+
   final PlaybackMetrics metrics;
   final CatalogTrackManifest? manifest;
   final CatalogTrackSummary? nextTrack;
@@ -848,23 +1000,129 @@ class _NowPlayingCard extends StatelessWidget {
   final VoidCallback onNext;
   final ValueChanged<double>? onSeekChanged;
   final ValueChanged<double>? onSeekEnd;
+
   @override
   Widget build(BuildContext context) {
     final title = metrics.trackTitle ?? manifest?.title ?? waveZeroTestTrack.title;
     final subtitle = manifest?.subtitle ?? 'WaveZero playback proof';
     final status = metrics.isPlaying ? 'Playing' : _statusFromEvent(metrics.lastEvent);
-    return _Panel(padding: const EdgeInsets.all(22), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(crossAxisAlignment: CrossAxisAlignment.start, children: [_Artwork(artworkUrl: manifest?.artworkUrl), const SizedBox(width: 18), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(status, style: const TextStyle(color: Color(0xFF8D7CFF), fontSize: 13, fontWeight: FontWeight.w700)), const SizedBox(height: 8), Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.4)), const SizedBox(height: 8), Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFA6AEC2)))]))]), const SizedBox(height: 24), Slider(value: progressValue, onChanged: onSeekChanged, onChangeEnd: onSeekEnd), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(_formatTime(displayedPositionMs), style: _timeStyle), Text(_formatTime(durationMs), style: _timeStyle)]), if (nextTrack != null) ...[const SizedBox(height: 10), Text('Up next: ${nextTrack!.title}', maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))], const SizedBox(height: 22), Row(mainAxisAlignment: MainAxisAlignment.center, children: [IconButton.filledTonal(onPressed: controlsDisabled || !canPlayPrevious ? null : onPrevious, icon: const Icon(Icons.skip_previous)), const SizedBox(width: 8), IconButton.filledTonal(onPressed: controlsDisabled ? null : onRetry, icon: const Icon(Icons.replay)), const SizedBox(width: 14), SizedBox(width: 72, height: 72, child: FilledButton(onPressed: controlsDisabled ? null : onPlayPause, style: FilledButton.styleFrom(shape: const CircleBorder()), child: Icon(metrics.isPlaying ? Icons.pause : Icons.play_arrow, size: 36))), const SizedBox(width: 14), IconButton.filledTonal(onPressed: controlsDisabled ? null : onStop, icon: const Icon(Icons.stop)), const SizedBox(width: 8), IconButton.filledTonal(onPressed: controlsDisabled || !canPlayNext ? null : onNext, icon: const Icon(Icons.skip_next))]) ]));
+    return _Panel(
+      padding: const EdgeInsets.all(_WzTokens.space6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Artwork(artworkUrl: manifest?.artworkUrl),
+              const SizedBox(width: _WzTokens.space5),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(status.toUpperCase(), style: _WzTokens.eyebrow),
+                    const SizedBox(height: _WzTokens.space2),
+                    Text(
+                      title,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                    ),
+                    const SizedBox(height: _WzTokens.space2),
+                    Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.body),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: _WzTokens.space6),
+          Slider(value: progressValue, onChanged: onSeekChanged, onChangeEnd: onSeekEnd),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [Text(_formatTime(displayedPositionMs), style: _timeStyle), Text(_formatTime(durationMs), style: _timeStyle)],
+          ),
+          if (nextTrack != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Up next: ${nextTrack!.title}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: _WzTokens.caption,
+            ),
+          ],
+          const SizedBox(height: _WzTokens.space6),
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: _WzTokens.space3,
+            runSpacing: _WzTokens.space3,
+            children: [
+              IconButton.filledTonal(
+                tooltip: 'Previous',
+                onPressed: controlsDisabled || !canPlayPrevious ? null : onPrevious,
+                icon: const Icon(Icons.skip_previous),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Retry',
+                onPressed: controlsDisabled ? null : onRetry,
+                icon: const Icon(Icons.replay),
+              ),
+              SizedBox(
+                width: 70,
+                height: 70,
+                child: FilledButton(
+                  onPressed: controlsDisabled ? null : onPlayPause,
+                  style: FilledButton.styleFrom(shape: const CircleBorder()),
+                  child: Icon(metrics.isPlaying ? Icons.pause : Icons.play_arrow, size: 36),
+                ),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Stop',
+                onPressed: controlsDisabled ? null : onStop,
+                icon: const Icon(Icons.stop),
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Next',
+                onPressed: controlsDisabled || !canPlayNext ? null : onNext,
+                icon: const Icon(Icons.skip_next),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
 class _Artwork extends StatelessWidget {
   const _Artwork({this.artworkUrl, this.size = 118});
+
   final String? artworkUrl;
   final double size;
-  @override
-  Widget build(BuildContext context) { final url = artworkUrl; return Container(width: size, height: size, clipBehavior: Clip.antiAlias, decoration: BoxDecoration(borderRadius: BorderRadius.circular(size > 60 ? 28 : 14), gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF7C5CFF), Color(0xFF14182A), Color(0xFF00D4FF)])), child: url == null || url.trim().isEmpty ? Icon(Icons.music_note_rounded, size: size * 0.4, color: Colors.white) : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.music_note_rounded, size: size * 0.4, color: Colors.white))); }
-}
 
+  @override
+  Widget build(BuildContext context) {
+    final url = artworkUrl;
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size > 60 ? 28 : 14),
+        color: _WzTokens.surfaceElevated,
+        border: Border.all(color: _WzTokens.borderSoft),
+      ),
+      child: url == null || url.trim().isEmpty
+          ? Icon(Icons.music_note_rounded, size: size * 0.4, color: _WzTokens.textPrimary)
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Icon(Icons.music_note_rounded, size: size * 0.4, color: _WzTokens.textPrimary),
+            ),
+    );
+  }
+}
 
 class _PerformanceBaselinePanel extends StatelessWidget {
   const _PerformanceBaselinePanel({
@@ -889,45 +1147,31 @@ class _PerformanceBaselinePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Panel(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(_WzTokens.space5),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Row(
-              children: [
-                Icon(Icons.speed, color: Color(0xFF8D7CFF)),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Performance Baseline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                      SizedBox(height: 3),
-                      Text('Developer snapshot before Phase 2B native audio prebuffering.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ],
+            const _PanelHeader(
+              icon: Icons.speed,
+              title: 'Performance Baseline',
+              subtitle: 'Clean session signals for startup, Next handoff, recovery, and playback health.',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: _WzTokens.space4),
             Wrap(
-              spacing: 10,
-              runSpacing: 10,
+              spacing: _WzTokens.space3,
+              runSpacing: _WzTokens.space3,
               children: [
-                _HealthChip(label: 'tapToAudioMs', value: _formatMetric(metrics.tapToFirstAudioMs), good: metrics.tapToFirstAudioMs != null),
-                _HealthChip(label: 'nextTapToAudioMs', value: _formatMetric(nextTapToAudioMs), good: nextTapToAudioMs != null),
-                _HealthChip(label: 'prefetchHitCount', value: prefetchHitCount.toString(), good: prefetchHitCount > 0),
-                _HealthChip(label: 'prefetchMissCount', value: prefetchMissCount.toString(), good: prefetchMissCount == 0),
-                _HealthChip(label: 'stopToPlayRecoveryMs', value: _formatMetric(stopToPlayRecoveryMs), good: stopToPlayRecoveryMs != null),
-                _HealthChip(label: 'sessionRecoveryMs', value: _formatMetric(sessionRecoveryMs), good: sessionRecoveryMs != null),
-                _HealthChip(label: 'audioPreparedBeforeNext', value: audioPreparedBeforeNext ? 'true' : 'false', good: !audioPreparedBeforeNext),
-                _HealthChip(label: 'nextPreparedBeforePlay', value: nextPreparedBeforePlay ? 'true' : 'false', good: !nextPreparedBeforePlay),
+                _MetricCard(label: 'Tap to audio', value: _formatMetric(metrics.tapToFirstAudioMs), active: metrics.tapToFirstAudioMs != null),
+                _MetricCard(label: 'Next to audio', value: _formatMetric(nextTapToAudioMs), active: nextTapToAudioMs != null),
+                _MetricCard(label: 'Stop recovery', value: _formatMetric(stopToPlayRecoveryMs), active: stopToPlayRecoveryMs != null),
+                _MetricCard(label: 'Session recovery', value: _formatMetric(sessionRecoveryMs), active: sessionRecoveryMs != null),
+                _MetricCard(label: 'Playback error', value: metrics.playbackError ?? 'none', active: metrics.playbackError == null),
               ],
             ),
-            const SizedBox(height: 10),
-            const Text(
-              'Unavailable means the current session has not observed that flow yet; false prebuffer flags are expected until native preparation exists.',
-              style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+            const SizedBox(height: _WzTokens.space3),
+            Text(
+              'Hit/miss and prepared handoff detail now lives in Smart Preload. Unavailable values simply mean that flow has not been observed this session.',
+              style: _WzTokens.caption,
             ),
           ],
         ),
@@ -935,7 +1179,23 @@ class _PerformanceBaselinePanel extends StatelessWidget {
 }
 
 class _SmartPreloadCard extends StatelessWidget {
-  const _SmartPreloadCard({required this.metrics, required this.enabled, required this.prefetchedTrackId, required this.prefetchedTrackTitle, required this.prefetchInFlight, required this.manifestPrefetched, required this.audioPreparedBeforeNext, required this.lastPrefetchHit, required this.prefetchHitCount, required this.prefetchMissCount, required this.nextTapToAudioMs, required this.nextPreparedBeforePlay, required this.controlsDisabled, required this.onToggle});
+  const _SmartPreloadCard({
+    required this.metrics,
+    required this.enabled,
+    required this.prefetchedTrackId,
+    required this.prefetchedTrackTitle,
+    required this.prefetchInFlight,
+    required this.manifestPrefetched,
+    required this.audioPreparedBeforeNext,
+    required this.lastPrefetchHit,
+    required this.prefetchHitCount,
+    required this.prefetchMissCount,
+    required this.nextTapToAudioMs,
+    required this.nextPreparedBeforePlay,
+    required this.controlsDisabled,
+    required this.onToggle,
+  });
+
   final PlaybackMetrics metrics;
   final bool enabled;
   final String? prefetchedTrackId;
@@ -950,12 +1210,153 @@ class _SmartPreloadCard extends StatelessWidget {
   final bool nextPreparedBeforePlay;
   final bool controlsDisabled;
   final ValueChanged<bool> onToggle;
+
   @override
   Widget build(BuildContext context) {
-    final result = lastPrefetchHit == null ? 'none' : lastPrefetchHit! ? 'hit' : 'miss';
-    final title = prefetchedTrackTitle ?? 'No track prefetched';
-    return _Panel(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Icon(Icons.auto_awesome, color: Color(0xFF8D7CFF)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Smart Preload', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), SizedBox(height: 3), Text('Phase 2A manifests + Phase 2B native audio prebuffer foundation.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12))])), Switch(value: enabled, onChanged: controlsDisabled ? null : onToggle)]), const SizedBox(height: 12), Wrap(spacing: 10, runSpacing: 10, children: [_HealthChip(label: 'prefetchEnabled', value: enabled ? 'on' : 'off', good: enabled), _HealthChip(label: 'prefetchInFlight', value: prefetchInFlight ? 'true' : 'false', good: !prefetchInFlight), _HealthChip(label: 'lastPrefetchResult', value: result, good: lastPrefetchHit == true), _HealthChip(label: 'manifestPrefetched', value: manifestPrefetched ? 'true' : 'false', good: manifestPrefetched), _HealthChip(label: 'audioPreparedBeforeNext', value: audioPreparedBeforeNext ? 'true' : 'false', good: audioPreparedBeforeNext), _HealthChip(label: 'nextTapToAudioMs', value: _formatMetric(nextTapToAudioMs), good: nextTapToAudioMs != null), _HealthChip(label: 'nextPreparedBeforePlay', value: nextPreparedBeforePlay ? 'true' : 'false', good: nextPreparedBeforePlay), _HealthChip(label: 'nativePrebufferInFlight', value: metrics.nativePrebufferInFlight ? 'true' : 'false', good: !metrics.nativePrebufferInFlight), _HealthChip(label: 'nativePrebufferReady', value: metrics.nativePrebufferReady ? 'true' : 'false', good: metrics.nativePrebufferReady), _HealthChip(label: 'nativePrebufferPrepareMs', value: _formatMetric(metrics.nativePrebufferPrepareMs), good: metrics.nativePrebufferPrepareMs != null), _HealthChip(label: 'lastNativePrebufferPrepareMs', value: _formatMetric(metrics.lastNativePrebufferPrepareMs), good: metrics.lastNativePrebufferPrepareMs != null), _HealthChip(label: 'nativeHandoffToPlayingMs', value: _formatMetric(metrics.nativeHandoffToPlayingMs), good: metrics.nativeHandoffToPlayingMs != null)]), const SizedBox(height: 12), Text('prefetchedTrackTitle: $title', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12)), const SizedBox(height: 4), Text('prefetchedTrackId: ${prefetchedTrackId ?? 'none'} • prefetchHitCount: $prefetchHitCount • prefetchMissCount: $prefetchMissCount', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 4), Text('nativePrebufferTrackId: ${metrics.nativePrebufferTrackId ?? 'none'} • nativePrebufferHitCount: ${metrics.nativePrebufferHitCount} • nativePrebufferMissCount: ${metrics.nativePrebufferMissCount}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 4), Text('lastNativePrebufferTrackTitle: ${metrics.lastNativePrebufferTrackTitle ?? 'none'} • lastNativePrebufferTrackId: ${metrics.lastNativePrebufferTrackId ?? 'none'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))]));
+    final prepareMs = metrics.nativePrebufferPrepareMs ?? metrics.lastNativePrebufferPrepareMs;
+    return _Panel(
+      padding: const EdgeInsets.all(_WzTokens.space5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: _PanelHeader(
+                  icon: Icons.auto_awesome,
+                  title: 'Smart Preload',
+                  subtitle: 'Predictive manifest, native prebuffer, and prepared handoff signals.',
+                ),
+              ),
+              Switch(value: enabled, onChanged: controlsDisabled ? null : onToggle),
+            ],
+          ),
+          const SizedBox(height: _WzTokens.space4),
+          _MetricSection(
+            title: 'Manifest Prefetch',
+            description: prefetchedTrackTitle ?? 'No manifest candidate yet',
+            metrics: [
+              _MetricCard(label: 'Enabled', value: enabled ? 'on' : 'off', active: enabled),
+              _MetricCard(label: 'Manifest ready', value: manifestPrefetched ? 'true' : 'false', active: manifestPrefetched),
+              _MetricCard(label: 'Last result', value: _prefetchResultLabel(lastPrefetchHit), active: lastPrefetchHit == true),
+            ],
+          ),
+          const SizedBox(height: _WzTokens.space4),
+          _MetricSection(
+            title: 'Native Prebuffer',
+            description: metrics.nativePrebufferTrackTitle ?? prefetchedTrackId ?? 'Waiting for the up-next native candidate',
+            metrics: [
+              _MetricCard(label: 'nativePrebufferReady', value: metrics.nativePrebufferReady ? 'true' : 'false', active: metrics.nativePrebufferReady),
+              _MetricCard(label: metrics.nativePrebufferPrepareMs == null ? 'lastNativePrebufferPrepareMs' : 'nativePrebufferPrepareMs', value: _formatMetric(prepareMs), active: prepareMs != null),
+              _MetricCard(label: 'nativePrebufferHit / Miss', value: '${metrics.nativePrebufferHitCount} / ${metrics.nativePrebufferMissCount}', active: metrics.nativePrebufferHitCount > 0),
+            ],
+          ),
+          const SizedBox(height: _WzTokens.space4),
+          _MetricSection(
+            title: 'Prepared Handoff',
+            description: metrics.lastNativePrebufferTrackTitle ?? 'Explicit Next and auto-advance prepared handoff telemetry',
+            metrics: [
+              _MetricCard(label: 'nativeHandoffToPlayingMs', value: _formatMetric(metrics.nativeHandoffToPlayingMs), active: metrics.nativeHandoffToPlayingMs != null),
+              _MetricCard(label: 'nextPreparedBeforePlay', value: nextPreparedBeforePlay ? 'true' : 'false', active: nextPreparedBeforePlay),
+              _MetricCard(label: 'auto prepared', value: metrics.autoAdvancePreparedBeforePlay ? 'true' : 'false', active: metrics.autoAdvancePreparedBeforePlay),
+            ],
+          ),
+          const SizedBox(height: _WzTokens.space3),
+          Text(
+            'Track IDs, in-flight flags, clear reasons, and full counters remain available in Show raw metrics.',
+            style: _WzTokens.caption,
+          ),
+        ],
+      ),
+    );
   }
+}
+
+class _PanelHeader extends StatelessWidget {
+  const _PanelHeader({required this.icon, required this.title, required this.subtitle});
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, color: _WzTokens.accent),
+          const SizedBox(width: _WzTokens.space3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: _WzTokens.title),
+                const SizedBox(height: _WzTokens.space1),
+                Text(subtitle, style: _WzTokens.caption),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _MetricSection extends StatelessWidget {
+  const _MetricSection({required this.title, required this.description, required this.metrics});
+
+  final String title;
+  final String description;
+  final List<Widget> metrics;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(_WzTokens.space4),
+        decoration: BoxDecoration(
+          color: _WzTokens.surfaceMuted,
+          borderRadius: BorderRadius.circular(_WzTokens.radiusLg),
+          border: Border.all(color: _WzTokens.borderSoft),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900)),
+            const SizedBox(height: _WzTokens.space1),
+            Text(description, maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            const SizedBox(height: _WzTokens.space3),
+            Wrap(spacing: _WzTokens.space3, runSpacing: _WzTokens.space3, children: metrics),
+          ],
+        ),
+      );
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({required this.label, required this.value, required this.active});
+
+  final String label;
+  final String value;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(minWidth: 132, maxWidth: 218),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? _WzTokens.successSoft : _WzTokens.surfaceElevated,
+          borderRadius: BorderRadius.circular(_WzTokens.radiusMd),
+          border: Border.all(color: active ? const Color(0x5538D996) : _WzTokens.borderSoft),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            const SizedBox(height: _WzTokens.space1),
+            Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+          ],
+        ),
+      );
+}
+
+String _prefetchResultLabel(bool? value) {
+  if (value == null) return 'none';
+  return value ? 'hit' : 'miss';
 }
 
 class _QueueCard extends StatelessWidget { const _QueueCard({required this.queue, required this.currentTrackId, required this.currentIndex, required this.status, required this.controlsDisabled, required this.autoAdvanceEnabled, required this.autoAdvanceCount, required this.onToggleAutoAdvance, required this.onPlayTrack, required this.onRemoveTrack, required this.onClearQueue}); final List<CatalogTrackSummary> queue; final String? currentTrackId; final int currentIndex; final String status; final bool controlsDisabled; final bool autoAdvanceEnabled; final int autoAdvanceCount; final ValueChanged<bool> onToggleAutoAdvance; final ValueChanged<CatalogTrackSummary> onPlayTrack; final ValueChanged<CatalogTrackSummary> onRemoveTrack; final VoidCallback onClearQueue; @override Widget build(BuildContext context) { final nextTrack = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null; return _Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Queue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), SizedBox(height: 4), Text('Current, up next, auto-advance, and recovery.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13))])), Text('${queue.length} tracks', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(width: 8), IconButton.outlined(onPressed: queue.isEmpty || controlsDisabled ? null : onClearQueue, icon: const Icon(Icons.clear_all))]), const SizedBox(height: 12), Row(children: [Expanded(child: Text(nextTrack == null ? 'No next track yet.' : 'Auto-advance to ${nextTrack.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12))), Text('$autoAdvanceCount auto', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 11)), Switch(value: autoAdvanceEnabled, onChanged: controlsDisabled ? null : onToggleAutoAdvance)]), Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 12), if (queue.isEmpty) const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from the catalog.') else ...queue.indexed.map((entry) => _QueueRow(track: entry.$2, index: entry.$1, current: entry.$2.trackId == currentTrackId, upNext: entry.$1 == currentIndex + 1, disabled: controlsDisabled, onPlay: () => onPlayTrack(entry.$2), onRemove: () => onRemoveTrack(entry.$2)))])); }}
@@ -968,18 +1369,168 @@ class _CatalogRow extends StatelessWidget { const _CatalogRow({required this.tra
 
 class _TrackSetupCard extends StatelessWidget { const _TrackSetupCard({required this.titleController, required this.urlController, required this.apiBaseUrlController, required this.catalogStatus, required this.loading, required this.onLoadCatalog, required this.onLoadTrack}); final TextEditingController titleController; final TextEditingController urlController; final TextEditingController apiBaseUrlController; final String catalogStatus; final bool loading; final VoidCallback onLoadCatalog; final VoidCallback onLoadTrack; @override Widget build(BuildContext context) => _Panel(child: ExpansionTile(tilePadding: EdgeInsets.zero, title: const Text('Manual / API setup'), subtitle: Text(catalogStatus, maxLines: 2, overflow: TextOverflow.ellipsis), children: [TextField(controller: apiBaseUrlController, decoration: const InputDecoration(labelText: 'API base URL')), const SizedBox(height: 12), TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Manual title')), const SizedBox(height: 12), TextField(controller: urlController, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Manual audio URL')), const SizedBox(height: 16), Wrap(spacing: 10, runSpacing: 10, children: [FilledButton.tonalIcon(onPressed: loading ? null : onLoadCatalog, icon: loading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_download), label: const Text('Reload selected/API')), OutlinedButton.icon(onPressed: loading ? null : onLoadTrack, icon: const Icon(Icons.bolt), label: const Text('Load manual track'))]) ])); }
 
-class _HealthStrip extends StatelessWidget { const _HealthStrip({required this.metrics}); final PlaybackMetrics metrics; @override Widget build(BuildContext context) => Wrap(spacing: 10, runSpacing: 10, children: [_HealthChip(label: 'Tap to audio', value: _formatMetric(metrics.tapToFirstAudioMs), good: metrics.tapToFirstAudioMs != null && metrics.tapToFirstAudioMs! < 800), _HealthChip(label: 'Preload ready', value: _formatMetric(metrics.loadToReadyMs), good: metrics.preparedBeforePlay), _HealthChip(label: 'Rebuffers', value: metrics.rebufferCount.toString(), good: metrics.rebufferCount == 0), _HealthChip(label: 'Error', value: metrics.playbackError == null ? 'None' : 'Check', good: metrics.playbackError == null)]); }
+class _HealthStrip extends StatelessWidget {
+  const _HealthStrip({required this.metrics});
 
-class _HealthChip extends StatelessWidget { const _HealthChip({required this.label, required this.value, required this.good}); final String label; final String value; final bool good; @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12), decoration: BoxDecoration(color: good ? const Color(0x1725D882) : const Color(0x22FFB020), borderRadius: BorderRadius.circular(18)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [Text(label, style: const TextStyle(color: Color(0xFF9BA3B4), fontSize: 12)), const SizedBox(height: 4), Text(value, style: const TextStyle(fontWeight: FontWeight.w800))])); }
+  final PlaybackMetrics metrics;
 
-class _MetricsToggle extends StatelessWidget { const _MetricsToggle({required this.showMetrics, required this.operationBusy, required this.onToggle, required this.onCopyMetrics, required this.onResetMetrics}); final bool showMetrics; final bool operationBusy; final VoidCallback onToggle; final VoidCallback onCopyMetrics; final VoidCallback onResetMetrics; @override Widget build(BuildContext context) => Row(children: [Expanded(child: OutlinedButton.icon(onPressed: onToggle, icon: Icon(showMetrics ? Icons.expand_less : Icons.analytics_outlined), label: Text(showMetrics ? 'Hide metrics' : 'Show metrics'))), const SizedBox(width: 10), IconButton.outlined(onPressed: operationBusy ? null : onCopyMetrics, icon: const Icon(Icons.copy)), const SizedBox(width: 10), IconButton.outlined(onPressed: operationBusy ? null : onResetMetrics, icon: const Icon(Icons.restart_alt))]); }
+  @override
+  Widget build(BuildContext context) => Wrap(
+        spacing: _WzTokens.space3,
+        runSpacing: _WzTokens.space3,
+        children: [
+          _MetricCard(
+            label: 'Tap to audio',
+            value: _formatMetric(metrics.tapToFirstAudioMs),
+            active: metrics.tapToFirstAudioMs != null && metrics.tapToFirstAudioMs! < 800,
+          ),
+          _MetricCard(
+            label: 'Ready',
+            value: _formatMetric(metrics.loadToReadyMs),
+            active: metrics.preparedBeforePlay,
+          ),
+          _MetricCard(label: 'Rebuffers', value: metrics.rebufferCount.toString(), active: metrics.rebufferCount == 0),
+          _MetricCard(label: 'Error', value: metrics.playbackError == null ? 'none' : 'check', active: metrics.playbackError == null),
+        ],
+      );
+}
 
-class _MetricsPanel extends StatelessWidget { const _MetricsPanel({required this.metrics}); final PlaybackMetrics metrics; @override Widget build(BuildContext context) => _Panel(child: SelectableText(metrics.toDisplayText(), style: const TextStyle(color: Color(0xFFD7DDF0), fontFamily: 'monospace', height: 1.45))); }
+class _HealthChip extends StatelessWidget {
+  const _HealthChip({required this.label, required this.value, required this.good});
 
-class _MiniPlayer extends StatelessWidget { const _MiniPlayer({required this.metrics, required this.manifest}); final PlaybackMetrics metrics; final CatalogTrackManifest? manifest; @override Widget build(BuildContext context) => SafeArea(top: false, child: Container(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), color: const Color(0xFF0B0E18), child: Row(children: [const Icon(Icons.album, color: Color(0xFF8D7CFF)), const SizedBox(width: 12), Expanded(child: Text(metrics.trackTitle ?? manifest?.title ?? 'No track loaded', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))), const SizedBox(width: 12), Text(_formatTime(metrics.currentPositionMs), style: _timeStyle)]))); }
+  final String label;
+  final String value;
+  final bool good;
 
-class _Panel extends StatelessWidget { const _Panel({required this.child, this.padding = const EdgeInsets.all(18)}); final Widget child; final EdgeInsetsGeometry padding; @override Widget build(BuildContext context) => DecoratedBox(decoration: BoxDecoration(color: const Color(0xFF111521), borderRadius: BorderRadius.circular(26), border: Border.all(color: const Color(0xFF273048))), child: Padding(padding: padding, child: child)); }
-class _EmptyCatalogMessage extends StatelessWidget { const _EmptyCatalogMessage({required this.message}); final String message; @override Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18)), child: Text(message, style: const TextStyle(color: Color(0xFF98A1B8)))); }
+  @override
+  Widget build(BuildContext context) => _MetricCard(label: label, value: value, active: good);
+}
+
+class _MetricsToggle extends StatelessWidget {
+  const _MetricsToggle({
+    required this.showMetrics,
+    required this.operationBusy,
+    required this.onToggle,
+    required this.onCopyMetrics,
+    required this.onResetMetrics,
+  });
+
+  final bool showMetrics;
+  final bool operationBusy;
+  final VoidCallback onToggle;
+  final VoidCallback onCopyMetrics;
+  final VoidCallback onResetMetrics;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: onToggle,
+              icon: Icon(showMetrics ? Icons.expand_less : Icons.analytics_outlined),
+              label: Text(showMetrics ? 'Hide raw metrics' : 'Show raw metrics'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          IconButton.outlined(onPressed: operationBusy ? null : onCopyMetrics, icon: const Icon(Icons.copy), tooltip: 'Copy metrics'),
+          const SizedBox(width: 10),
+          IconButton.outlined(onPressed: operationBusy ? null : onResetMetrics, icon: const Icon(Icons.restart_alt), tooltip: 'Reset metrics'),
+        ],
+      );
+}
+
+class _MetricsPanel extends StatelessWidget {
+  const _MetricsPanel({required this.metrics});
+
+  final PlaybackMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _PanelHeader(
+              icon: Icons.data_object,
+              title: 'Raw metrics',
+              subtitle: 'Complete developer telemetry without changing metric names or meaning.',
+            ),
+            const SizedBox(height: _WzTokens.space4),
+            SelectableText(
+              metrics.toDisplayText(),
+              style: const TextStyle(color: Color(0xFFD7DDF0), fontFamily: 'monospace', height: 1.45),
+            ),
+          ],
+        ),
+      );
+}
+
+class _MiniPlayer extends StatelessWidget {
+  const _MiniPlayer({required this.metrics, required this.manifest});
+
+  final PlaybackMetrics metrics;
+  final CatalogTrackManifest? manifest;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: const BoxDecoration(
+            color: _WzTokens.surfaceMuted,
+            border: Border(top: BorderSide(color: _WzTokens.borderSoft)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.album, color: _WzTokens.accent),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  metrics.trackTitle ?? manifest?.title ?? 'No track loaded',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(_formatTime(metrics.currentPositionMs), style: _timeStyle),
+            ],
+          ),
+        ),
+      );
+}
+
+class _Panel extends StatelessWidget {
+  const _Panel({required this.child, this.padding = const EdgeInsets.all(18)});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: _WzTokens.surface,
+          borderRadius: BorderRadius.circular(_WzTokens.radiusXl),
+          border: Border.all(color: _WzTokens.border),
+          boxShadow: const [
+            BoxShadow(color: Color(0x66000000), blurRadius: 30, offset: Offset(0, 18)),
+          ],
+        ),
+        child: Padding(padding: padding, child: child),
+      );
+}
+
+class _EmptyCatalogMessage extends StatelessWidget {
+  const _EmptyCatalogMessage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: _WzTokens.surfaceMuted, borderRadius: BorderRadius.circular(_WzTokens.radiusMd)),
+        child: Text(message, style: _WzTokens.body),
+      );
+}
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
 String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); return parts.join(' • '); }

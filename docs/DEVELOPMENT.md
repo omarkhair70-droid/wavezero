@@ -142,3 +142,15 @@ Use this checklist when validating the Phase 2B secondary ExoPlayer prebuffer fo
 4. Change the up-next track and confirm `nativePrebufferTrackId` updates to the new candidate.
 5. Tap Next and confirm playback still uses the safe fallback path.
 6. Confirm `nextPreparedBeforePlay` remains `false` until a future prepared-player handoff is implemented.
+
+## WaveZero design system foundation metrics layout
+
+The Flutter player shell now uses a calmer dark design-system foundation for the current single-screen music engine experience. The default screen keeps playback controls, queue, Smart Preload, and metrics copy/reset behavior intact, but presents engine telemetry with clearer hierarchy instead of a raw debug-dashboard layout.
+
+Smart Preload telemetry is grouped into three visible sections:
+
+1. **Manifest Prefetch** — user-facing predictive manifest state and last prefetch result.
+2. **Native Prebuffer** — the key native prebuffer readiness, prepare latency, and hit/miss counters.
+3. **Prepared Handoff** — explicit Next / auto-advance prepared handoff timing and readiness signals.
+
+Only the most important playback engine numbers are emphasized by default. The complete unchanged metrics payload remains available from the collapsed **Show raw metrics** control for developer inspection, copying, and reset workflows.
