@@ -224,24 +224,36 @@ Outcome:
 - The catalog/core asset model supports `mp3`.
 - Manual testing verified a real locally hosted MP3 track through the catalog/search flow.
 
+### Phase 1E — Queue Foundation
+
+Status: Completed
+
+Outcome:
+
+- A simple in-memory Flutter queue exists.
+- The Queue card shows current tracks and supports remove/clear actions.
+- Catalog rows can add tracks to the queue.
+- Previous/next controls load neighboring catalog tracks through the existing native playback bridge.
+- Catalog, search, local MP3 playback, background playback, notification controls, and metrics remain intact.
+
 ## Next Phases
 
-### Phase 1E — Queue Foundation
+### Phase 1F — Queue Polish and Auto-Advance
 
 Status: In progress
 
 Goal:
 
-Introduce the first queue model after catalog selection is stable.
+Make the first queue feel closer to a real music app queue.
 
 Scope:
 
-- Add a simple in-memory Flutter queue state.
-- Add a Queue card with current track state and remove/clear actions.
-- Add an Add to Queue action from catalog rows.
-- Add previous/next controls in the Flutter player shell.
-- Keep the native playback bridge as the playback execution layer.
-- Keep catalog, search, local MP3 playback, background playback, notification controls, and metrics intact.
+- Improve queue row UX with numbered, current, and up-next labels.
+- Show the next queued track in the player shell.
+- Add an auto-advance toggle and status copy.
+- Auto-load/play the next queue item when the current track reaches the end.
+- Add lightweight auto-advance count/status diagnostics.
+- Keep native playback bridge ownership unchanged.
 
 Non-goals:
 
@@ -249,15 +261,14 @@ Non-goals:
 - No shuffle/repeat yet.
 - No server-side queue model yet.
 
-### Phase 1F — Queue Polish and Auto-Advance
+### Phase 1G — Queue Persistence and Session Recovery
 
 Goal:
 
-Make the first queue feel closer to a music app queue.
+Make the queue survive app restarts and recover the last selected track.
 
 Scope:
 
-- Improve queue row UX and current/next labels.
-- Consider auto-advance when a track reaches end.
-- Add lightweight queue metrics if needed.
-- Keep native playback bridge ownership unchanged.
+- Persist the queue locally on device.
+- Restore current queue item and selected track on app launch.
+- Keep queue persistence client-side until a production user/account model exists.
