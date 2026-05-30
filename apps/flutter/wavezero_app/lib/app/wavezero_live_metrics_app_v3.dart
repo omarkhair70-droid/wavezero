@@ -507,11 +507,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           title: manifest.title,
           url: manifest.streamUrl,
         );
-        if (!mounted || generation != _prefetchGeneration) return;
-        setState(() {
-          _smartQueueCandidateTrackId = manifest.trackId;
-          _smartQueueReason = SmartQueueReason.alreadyPrepared;
-        });
       } catch (error) {
         if (!mounted || generation != _prefetchGeneration) return;
         await _clearNativeNextPrebuffer();
