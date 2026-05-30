@@ -63,7 +63,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   PlaybackMetrics _metrics = const PlaybackMetrics();
   CatalogTrackManifest? _catalogManifest;
   List<CatalogTrackSummary> _catalogTracks = const [];
+  List<CatalogTrackSummary> _queue = const [];
   String? _selectedTrackId;
+  String? _queueCurrentTrackId;
   bool _busy = false;
   bool _refreshing = false;
   bool _showMetrics = false;
@@ -77,6 +79,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<CatalogTrackSummary> get _filteredCatalogTracks => _catalogTracks
       .where((track) => track.matchesQuery(_catalogQuery))
       .toList(growable: false);
+
+  int get _queueCurrentIndex {
+    final id = _queueCurrentTrackId ?? _selectedTrackId;
+    if (id == null) return -1;
+    return _queue.indexWhere((track) => track.trackId == id);
+  }
+
+  bool get _canPlayPrevious => _queueCurrentIndex > 0;
+  bool get _canPlayNext => _queueCurrentIndex >= 0 && _queueCurrentIndex < _queue.length - 1;
 
   @override
   void initState() {
@@ -142,6 +153,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           (catalog.tracks.isEmpty ? null : catalog.tracks.first);
       setState(() {
         _catalogTracks = catalog.tracks;
+        if (_queue.isEmpty) {
+          _queue = catalog.tracks;
+          _queueCurrentTrackId = preferredTrack?.trackId;
+        } else {
+          _queue = _queue
+              .map((queued) => _findTrack(catalog.tracks, queued.trackId) ?? queued)
+              .toList(growable: false);
+        }
         _selectedTrackId = preferredTrack?.trackId;
         _catalogListStatus = catalog.tracks.isEmpty
             ? 'Catalog API returned no tracks.'
@@ -184,6 +203,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _catalogLoading = true;
       _catalogStatus = 'Loading catalog manifest...';
       _selectedTrackId = targetTrackId;
+      _queueCurrentTrackId = targetTrackId;
     });
 
     final activeClient = client ?? CatalogClient(baseUrl: _apiBaseUrlController.text);
@@ -195,6 +215,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       setState(() {
         _catalogManifest = manifest;
         _selectedTrackId = manifest.trackId;
+        _queueCurrentTrackId = manifest.trackId;
         _catalogStatus = 'Loaded from catalog API: ${manifest.title}';
       });
       await _loadTrack(source: TrackLoadSource.catalog);
@@ -236,6 +257,53 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return _runCommand(() => widget.playbackBridge.seekTo(positionMs.round()));
   }
 
+  void _addToQueue(CatalogTrackSummary track) {
+    setState(() {
+      final exists = _queue.any((queued) => queued.trackId == track.trackId);
+      if (!exists) _queue = [..._queue, track];
+      _queueCurrentTrackId ??= track.trackId;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${track.title} added to queue')),
+    );
+  }
+
+  void _removeFromQueue(CatalogTrackSummary track) {
+    setState(() {
+      final wasCurrent = track.trackId == _queueCurrentTrackId;
+      _queue = _queue.where((queued) => queued.trackId != track.trackId).toList(growable: false);
+      if (_queue.isEmpty) {
+        _queueCurrentTrackId = null;
+      } else if (wasCurrent) {
+        _queueCurrentTrackId = _queue.first.trackId;
+      }
+    });
+  }
+
+  void _clearQueue() {
+    setState(() {
+      _queue = const [];
+      _queueCurrentTrackId = null;
+    });
+  }
+
+  Future<void> _playQueueTrack(CatalogTrackSummary track) {
+    setState(() => _queueCurrentTrackId = track.trackId);
+    return _loadCatalogTrack(trackId: track.trackId, closeClient: true);
+  }
+
+  Future<void> _playNextQueueTrack() async {
+    final index = _queueCurrentIndex;
+    if (index < 0 || index >= _queue.length - 1) return;
+    await _playQueueTrack(_queue[index + 1]);
+  }
+
+  Future<void> _playPreviousQueueTrack() async {
+    final index = _queueCurrentIndex;
+    if (index <= 0) return;
+    await _playQueueTrack(_queue[index - 1]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final durationMs = _metrics.durationMs ?? _catalogManifest?.durationMs;
@@ -265,6 +333,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     displayedPositionMs: displayedPositionMs,
                     durationMs: durationMs,
                     busy: _busy,
+                    canPlayPrevious: _canPlayPrevious,
+                    canPlayNext: _canPlayNext,
                     onPlayPause: () => _runCommand(
                       _metrics.isPlaying
                           ? widget.playbackBridge.pause
@@ -272,6 +342,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     ),
                     onStop: () => _runCommand(widget.playbackBridge.stop),
                     onRetry: () => _runCommand(widget.playbackBridge.retry),
+                    onPrevious: _playPreviousQueueTrack,
+                    onNext: _playNextQueueTrack,
                     onSeekChanged: durationMs == null || durationMs <= 0
                         ? null
                         : (value) => setState(() => _dragPositionMs = value * durationMs),
@@ -282,6 +354,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                             setState(() => _dragPositionMs = null);
                             await _seekTo(target);
                           },
+                  ),
+                  const SizedBox(height: 16),
+                  _QueueCard(
+                    queue: _queue,
+                    currentTrackId: _queueCurrentTrackId,
+                    busy: _busy || _catalogLoading,
+                    onPlayTrack: _playQueueTrack,
+                    onRemoveTrack: _removeFromQueue,
+                    onClearQueue: _clearQueue,
                   ),
                   const SizedBox(height: 16),
                   _CatalogListCard(
@@ -298,6 +379,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                       trackId: track.trackId,
                       closeClient: true,
                     ),
+                    onAddToQueue: _addToQueue,
                   ),
                   const SizedBox(height: 16),
                   _TrackSetupCard(
@@ -357,7 +439,7 @@ class _TopBar extends StatelessWidget {
               ),
               SizedBox(height: 4),
               Text(
-                'Native playback. Fast start. Searchable catalog.',
+                'Native playback. Fast start. Searchable catalog. Queue ready.',
                 style: TextStyle(color: Color(0xFF98A1B8), fontSize: 14),
               ),
             ],
@@ -377,9 +459,13 @@ class _NowPlayingCard extends StatelessWidget {
     required this.displayedPositionMs,
     required this.durationMs,
     required this.busy,
+    required this.canPlayPrevious,
+    required this.canPlayNext,
     required this.onPlayPause,
     required this.onStop,
     required this.onRetry,
+    required this.onPrevious,
+    required this.onNext,
     required this.onSeekChanged,
     required this.onSeekEnd,
   });
@@ -390,9 +476,13 @@ class _NowPlayingCard extends StatelessWidget {
   final int displayedPositionMs;
   final int? durationMs;
   final bool busy;
+  final bool canPlayPrevious;
+  final bool canPlayNext;
   final VoidCallback onPlayPause;
   final VoidCallback onStop;
   final VoidCallback onRetry;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
   final ValueChanged<double>? onSeekChanged;
   final ValueChanged<double>? onSeekEnd;
 
@@ -465,10 +555,15 @@ class _NowPlayingCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton.filledTonal(
+                onPressed: busy || !canPlayPrevious ? null : onPrevious,
+                icon: const Icon(Icons.skip_previous),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
                 onPressed: busy ? null : onRetry,
                 icon: const Icon(Icons.replay),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 14),
               SizedBox(
                 width: 72,
                 height: 72,
@@ -478,10 +573,15 @@ class _NowPlayingCard extends StatelessWidget {
                   child: Icon(metrics.isPlaying ? Icons.pause : Icons.play_arrow, size: 36),
                 ),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 14),
               IconButton.filledTonal(
                 onPressed: busy ? null : onStop,
                 icon: const Icon(Icons.stop),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: busy || !canPlayNext ? null : onNext,
+                icon: const Icon(Icons.skip_next),
               ),
             ],
           ),
@@ -548,6 +648,123 @@ class _Artwork extends StatelessWidget {
   }
 }
 
+class _QueueCard extends StatelessWidget {
+  const _QueueCard({
+    required this.queue,
+    required this.currentTrackId,
+    required this.busy,
+    required this.onPlayTrack,
+    required this.onRemoveTrack,
+    required this.onClearQueue,
+  });
+
+  final List<CatalogTrackSummary> queue;
+  final String? currentTrackId;
+  final bool busy;
+  final ValueChanged<CatalogTrackSummary> onPlayTrack;
+  final ValueChanged<CatalogTrackSummary> onRemoveTrack;
+  final VoidCallback onClearQueue;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Queue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    SizedBox(height: 4),
+                    Text('First in-memory playback queue.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                  ],
+                ),
+              ),
+              Text('${queue.length} tracks', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                onPressed: queue.isEmpty || busy ? null : onClearQueue,
+                icon: const Icon(Icons.clear_all),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (queue.isEmpty)
+            const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from the catalog.')
+          else
+            ...queue.map(
+              (track) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _QueueTrackTile(
+                  track: track,
+                  current: track.trackId == currentTrackId,
+                  busy: busy,
+                  onPlay: () => onPlayTrack(track),
+                  onRemove: () => onRemoveTrack(track),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QueueTrackTile extends StatelessWidget {
+  const _QueueTrackTile({
+    required this.track,
+    required this.current,
+    required this.busy,
+    required this.onPlay,
+    required this.onRemove,
+  });
+
+  final CatalogTrackSummary track;
+  final bool current;
+  final bool busy;
+  final VoidCallback onPlay;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: current ? const Color(0x227C5CFF) : const Color(0xFF0B0E18),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: current ? const Color(0xFF8D7CFF) : const Color(0xFF20273A)),
+      ),
+      child: Row(
+        children: [
+          Icon(current ? Icons.equalizer : Icons.queue_music, color: const Color(0xFF8D7CFF)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: busy ? null : onPlay,
+            icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF)),
+          ),
+          IconButton(
+            onPressed: busy ? null : onRemove,
+            icon: const Icon(Icons.close, color: Color(0xFF98A1B8)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CatalogListCard extends StatelessWidget {
   const _CatalogListCard({
     required this.tracks,
@@ -560,6 +777,7 @@ class _CatalogListCard extends StatelessWidget {
     required this.onClearSearch,
     required this.onRefresh,
     required this.onSelectTrack,
+    required this.onAddToQueue,
   });
 
   final List<CatalogTrackSummary> tracks;
@@ -572,6 +790,7 @@ class _CatalogListCard extends StatelessWidget {
   final VoidCallback onClearSearch;
   final VoidCallback onRefresh;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
+  final ValueChanged<CatalogTrackSummary> onAddToQueue;
 
   @override
   Widget build(BuildContext context) {
@@ -592,7 +811,7 @@ class _CatalogListCard extends StatelessWidget {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Search and choose a track from the API.',
+                      'Search, play, or add to queue.',
                       style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13),
                     ),
                   ],
@@ -626,9 +845,7 @@ class _CatalogListCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            hasQuery
-                ? '$status Showing ${tracks.length} of $totalTrackCount.'
-                : status,
+            hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status,
             style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -645,6 +862,7 @@ class _CatalogListCard extends StatelessWidget {
                   selected: track.trackId == selectedTrackId,
                   busy: busy,
                   onTap: () => onSelectTrack(track),
+                  onAddToQueue: () => onAddToQueue(track),
                 ),
               ),
             ),
@@ -679,12 +897,14 @@ class _CatalogTrackTile extends StatelessWidget {
     required this.selected,
     required this.busy,
     required this.onTap,
+    required this.onAddToQueue,
   });
 
   final CatalogTrackSummary track;
   final bool selected;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback onAddToQueue;
 
   @override
   Widget build(BuildContext context) {
@@ -726,7 +946,11 @@ class _CatalogTrackTile extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(_formatTime(track.durationMs), style: _timeStyle),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            IconButton(
+              onPressed: busy ? null : onAddToQueue,
+              icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF)),
+            ),
             Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
           ],
         ),
