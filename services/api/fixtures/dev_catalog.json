@@ -1,69 +1,41 @@
 {
   "artists": [
     {
-      "id": "artist-wavezero-labs",
-      "name": "WaveZero Labs",
-      "image_url": "https://images.unsplash.com/photo-1516280440614-37939bbacd81"
-    },
-    {
-      "id": "artist-demo-signal",
-      "name": "Demo Signal",
-      "image_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f"
-    },
-    {
       "id": "artist-local-lab",
       "name": "Local Lab",
-      "image_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f"
+      "image_url": null
     }
   ],
   "tracks": [
-    {
-      "id": "track-apple-bipbop-hls",
-      "artist_id": "artist-wavezero-labs",
-      "title": "Apple BipBop HLS Demo",
-      "duration_ms": 1800000,
-      "artwork_url": "https://images.unsplash.com/photo-1511379938547-c1f69419868d",
-      "assets": [
-        {
-          "id": "asset-apple-bipbop-aac",
-          "track_id": "track-apple-bipbop-hls",
-          "manifest_url": "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/gear0/prog_index.m3u8",
-          "codec": "aac_lc",
-          "bitrate_kbps": 256,
-          "segment_count": 450,
-          "is_primary": true
-        }
-      ]
-    },
-    {
-      "id": "track-independent-frequency",
-      "artist_id": "artist-demo-signal",
-      "title": "Independent Frequency",
-      "duration_ms": 30000,
-      "artwork_url": "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
-      "assets": [
-        {
-          "id": "asset-independent-frequency-aac",
-          "track_id": "track-independent-frequency",
-          "manifest_url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
-          "codec": "aac_lc",
-          "bitrate_kbps": 192,
-          "segment_count": 53,
-          "is_primary": true
-        }
-      ]
-    },
     {
       "id": "track-local-real-song",
       "artist_id": "artist-local-lab",
       "title": "Local Real Song",
       "duration_ms": 189000,
-      "artwork_url": "https://images.unsplash.com/photo-1516280440614-37939bbacd81",
+      "artwork_url": null,
       "assets": [
         {
           "id": "asset-local-real-song-mp3",
           "track_id": "track-local-real-song",
           "manifest_url": "http://192.168.1.7:8090/song.mp3",
+          "codec": "mp3",
+          "bitrate_kbps": 128,
+          "segment_count": 1,
+          "is_primary": true
+        }
+      ]
+    },
+    {
+      "id": "track-local-song-3",
+      "artist_id": "artist-local-lab",
+      "title": "Song 3",
+      "duration_ms": 240000,
+      "artwork_url": null,
+      "assets": [
+        {
+          "id": "asset-local-song-3-mp3",
+          "track_id": "track-local-song-3",
+          "manifest_url": "http://192.168.1.7:8090/song3.mp3",
           "codec": "mp3",
           "bitrate_kbps": 128,
           "segment_count": 1,
