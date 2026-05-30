@@ -323,12 +323,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
       setState(() {
         _nextTapToAudioMs = null;
+        // Phase 2A only prefetches manifests. Keep this false until native audio
+        // preparation exists and can set _audioPreparedBeforeNext truthfully.
         _nextPreparedBeforePlay = _audioPreparedBeforeNext;
       });
     }
     unawaited(_updatePredictivePreloadCandidate());
   }
 
+  void _clearNextPlaybackAttemptMetrics() {
+    _nextTapStartedAtMs = null;
+    _nextTapToAudioMs = null;
+    _nextPreparedBeforePlay = false;
+  }
 
   void _setPrefetchEnabled(bool value) {
     setState(() {
@@ -415,7 +422,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
   }
 
-  Future<void> _stop() => _runOperation(PlayerOperation.playbackCommand, widget.playbackBridge.stop);
+  Future<void> _stop() => _runOperation(PlayerOperation.playbackCommand, () async {
+        await widget.playbackBridge.stop();
+        if (!mounted) return;
+        setState(_clearNextPlaybackAttemptMetrics);
+      });
+
   Future<void> _retry() => _runOperation(PlayerOperation.playbackCommand, widget.playbackBridge.retry);
   Future<void> _seekTo(double positionMs) => _runOperation(PlayerOperation.seeking, () => widget.playbackBridge.seekTo(positionMs.round()));
 
