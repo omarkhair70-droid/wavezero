@@ -22,9 +22,19 @@ abstract class PlaybackBridge {
     required String url,
   });
 
+  Future<bool> playPreparedAutoAdvanceTrackIfReady({
+    required String trackId,
+    required String title,
+    required String url,
+  });
+
   Future<void> recordNextTrackPrebufferOutcome({
     required String trackId,
     required bool usedPreparedPath,
+  });
+
+  Future<void> recordAutoAdvancePreparedFallback({
+    required String trackId,
   });
 
   Future<void> play();
@@ -83,10 +93,38 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
     required String trackId,
     required String title,
     required String url,
+  }) {
+    return _playPreparedTrackIfReady(
+      method: 'playPreparedNextTrackIfReady',
+      trackId: trackId,
+      title: title,
+      url: url,
+    );
+  }
+
+  @override
+  Future<bool> playPreparedAutoAdvanceTrackIfReady({
+    required String trackId,
+    required String title,
+    required String url,
+  }) {
+    return _playPreparedTrackIfReady(
+      method: 'playPreparedAutoAdvanceTrackIfReady',
+      trackId: trackId,
+      title: title,
+      url: url,
+    );
+  }
+
+  Future<bool> _playPreparedTrackIfReady({
+    required String method,
+    required String trackId,
+    required String title,
+    required String url,
   }) async {
     try {
       final usedPreparedPath = await _channel.invokeMethod<bool>(
-        'playPreparedNextTrackIfReady',
+        method,
         <String, Object?>{
           'trackId': trackId,
           'title': title,
@@ -112,6 +150,13 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
     return _invokeVoid('recordNextTrackPrebufferOutcome', <String, Object?>{
       'trackId': trackId,
       'usedPreparedPath': usedPreparedPath,
+    });
+  }
+
+  @override
+  Future<void> recordAutoAdvancePreparedFallback({required String trackId}) {
+    return _invokeVoid('recordAutoAdvancePreparedFallback', <String, Object?>{
+      'trackId': trackId,
     });
   }
 
@@ -287,6 +332,34 @@ class MockPlaybackBridge implements PlaybackBridge {
   }
 
   @override
+  Future<bool> playPreparedAutoAdvanceTrackIfReady({
+    required String trackId,
+    required String title,
+    required String url,
+  }) async {
+    final matchedReady = await playPreparedNextTrackIfReady(
+      trackId: trackId,
+      title: title,
+      url: url,
+    );
+    _metrics = _metrics.copyWith(
+      autoAdvancePreparedAttempted: _metrics.autoAdvancePreparedAttempted + 1,
+      autoAdvancePreparedSucceeded: matchedReady
+          ? _metrics.autoAdvancePreparedSucceeded + 1
+          : _metrics.autoAdvancePreparedSucceeded,
+      autoAdvancePreparedFallback: matchedReady
+          ? _metrics.autoAdvancePreparedFallback
+          : _metrics.autoAdvancePreparedFallback + 1,
+      autoAdvancePreparedBeforePlay: matchedReady,
+      lastAutoAdvancePreparedTrackId: trackId,
+      lastEvent: matchedReady
+          ? 'auto_advance_prepared_succeeded'
+          : 'auto_advance_prepared_fallback',
+    );
+    return matchedReady;
+  }
+
+  @override
   Future<void> recordNextTrackPrebufferOutcome({
     required String trackId,
     required bool usedPreparedPath,
@@ -298,6 +371,18 @@ class MockPlaybackBridge implements PlaybackBridge {
       nativePrebufferHandoffFallback: usedPreparedPath && matchedReady ? _metrics.nativePrebufferHandoffFallback : _metrics.nativePrebufferHandoffFallback + 1,
       nextPreparedBeforePlay: usedPreparedPath && matchedReady,
       lastEvent: 'native_prebuffer_outcome',
+    );
+  }
+
+  @override
+  Future<void> recordAutoAdvancePreparedFallback({required String trackId}) async {
+    await recordNextTrackPrebufferOutcome(trackId: trackId, usedPreparedPath: false);
+    _metrics = _metrics.copyWith(
+      autoAdvancePreparedAttempted: _metrics.autoAdvancePreparedAttempted + 1,
+      autoAdvancePreparedFallback: _metrics.autoAdvancePreparedFallback + 1,
+      autoAdvancePreparedBeforePlay: false,
+      lastAutoAdvancePreparedTrackId: trackId,
+      lastEvent: 'auto_advance_prepared_fallback',
     );
   }
 

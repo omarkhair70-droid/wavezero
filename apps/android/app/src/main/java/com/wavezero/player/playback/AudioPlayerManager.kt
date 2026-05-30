@@ -243,53 +243,21 @@ class AudioPlayerManager(
 
 
     fun playPreparedNextTrackIfReady(trackId: String, title: String, hlsUrl: String): Boolean {
-        val safeTrackId = trackId.trim()
-        val safeTitle = title.ifBlank { nativePrebufferTitle ?: "Up next" }
-        publish(metricsTracker.markNativePrebufferHandoffAttempted())
-        if (!isPreparedNextTrackReady(safeTrackId, hlsUrl)) {
-            recordNextTrackPrebufferOutcome(safeTrackId, usedPreparedPath = false)
-            return false
-        }
-
-        val preparedPlayer = prebufferPlayer
-        val previousPrimaryPlayer = player
-        positionJob?.cancel()
-        softStopped = false
-        playCommandInFlight = true
-        currentTrackTitle = safeTitle
-        currentHlsUrl = hlsUrl
-
-        previousPrimaryPlayer.playWhenReady = false
-        previousPrimaryPlayer.pause()
-        previousPrimaryPlayer.stop()
-        previousPrimaryPlayer.clearMediaItems()
-        previousPrimaryPlayer.removeListener(playerListener)
-        previousPrimaryPlayer.removeAnalyticsListener(analyticsListener)
-
-        preparedPlayer.removeListener(prebufferListener)
-        configurePrimaryPlayer(preparedPlayer)
-        preparedPlayer.addListener(playerListener)
-        preparedPlayer.addAnalyticsListener(analyticsListener)
-
-        player = preparedPlayer
-        prebufferPlayer = previousPrimaryPlayer
-        configurePrebufferPlayer(prebufferPlayer)
-        prebufferPlayer.addListener(prebufferListener)
-        mediaSession?.setPlayer(player)
-
-        publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
-        publish(metricsTracker.markPlayTapped())
-        publish(metricsTracker.markReady())
-        publish(metricsTracker.markNativePrebufferHandoffSucceeded(safeTrackId))
-        clearNativePrebufferState()
-
-        player.playWhenReady = true
-        mutablePlaybackState.value = PlaybackState(
-            status = PlaybackStatus.Ready,
-            trackTitle = currentTrackTitle,
+        return playPreparedNextTrackIfReady(
+            trackId = trackId,
+            title = title,
+            hlsUrl = hlsUrl,
+            source = PreparedHandoffSource.ExplicitNext,
         )
-        startPositionUpdates()
-        return true
+    }
+
+    fun playPreparedAutoAdvanceTrackIfReady(trackId: String, title: String, hlsUrl: String): Boolean {
+        return playPreparedNextTrackIfReady(
+            trackId = trackId,
+            title = title,
+            hlsUrl = hlsUrl,
+            source = PreparedHandoffSource.AutoAdvance,
+        )
     }
 
     fun clearNextTrackPrebuffer() {
@@ -299,6 +267,14 @@ class AudioPlayerManager(
     fun recordNextTrackPrebufferOutcome(trackId: String, usedPreparedPath: Boolean) {
         if (trackId.isBlank()) return
         publish(metricsTracker.markNativePrebufferOutcome(trackId, usedPreparedPath))
+    }
+
+    fun recordAutoAdvancePreparedFallback(trackId: String) {
+        val safeTrackId = trackId.trim()
+        if (safeTrackId.isBlank()) return
+        publish(metricsTracker.markAutoAdvancePreparedAttempted())
+        recordNextTrackPrebufferOutcome(safeTrackId, usedPreparedPath = false)
+        publish(metricsTracker.markAutoAdvancePreparedFallback(safeTrackId))
     }
 
     fun play() {
@@ -413,6 +389,71 @@ class AudioPlayerManager(
         managerJob.cancel()
     }
 
+
+    private fun playPreparedNextTrackIfReady(
+        trackId: String,
+        title: String,
+        hlsUrl: String,
+        source: PreparedHandoffSource,
+    ): Boolean {
+        val safeTrackId = trackId.trim()
+        val safeTitle = title.ifBlank { nativePrebufferTitle ?: "Up next" }
+        publish(metricsTracker.markNativePrebufferHandoffAttempted())
+        if (source == PreparedHandoffSource.AutoAdvance) {
+            publish(metricsTracker.markAutoAdvancePreparedAttempted())
+        }
+        if (!isPreparedNextTrackReady(safeTrackId, hlsUrl)) {
+            recordNextTrackPrebufferOutcome(safeTrackId, usedPreparedPath = false)
+            if (source == PreparedHandoffSource.AutoAdvance) {
+                publish(metricsTracker.markAutoAdvancePreparedFallback(safeTrackId))
+            }
+            return false
+        }
+
+        val preparedPlayer = prebufferPlayer
+        val previousPrimaryPlayer = player
+        positionJob?.cancel()
+        softStopped = false
+        playCommandInFlight = true
+        currentTrackTitle = safeTitle
+        currentHlsUrl = hlsUrl
+
+        previousPrimaryPlayer.playWhenReady = false
+        previousPrimaryPlayer.pause()
+        previousPrimaryPlayer.stop()
+        previousPrimaryPlayer.clearMediaItems()
+        previousPrimaryPlayer.removeListener(playerListener)
+        previousPrimaryPlayer.removeAnalyticsListener(analyticsListener)
+
+        preparedPlayer.removeListener(prebufferListener)
+        configurePrimaryPlayer(preparedPlayer)
+        preparedPlayer.addListener(playerListener)
+        preparedPlayer.addAnalyticsListener(analyticsListener)
+
+        player = preparedPlayer
+        prebufferPlayer = previousPrimaryPlayer
+        configurePrebufferPlayer(prebufferPlayer)
+        prebufferPlayer.addListener(prebufferListener)
+        mediaSession?.setPlayer(player)
+
+        publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
+        publish(metricsTracker.markPlayTapped())
+        publish(metricsTracker.markReady())
+        publish(metricsTracker.markNativePrebufferHandoffSucceeded(safeTrackId))
+        if (source == PreparedHandoffSource.AutoAdvance) {
+            publish(metricsTracker.markAutoAdvancePreparedSucceeded(safeTrackId))
+        }
+        clearNativePrebufferState()
+
+        player.playWhenReady = true
+        mutablePlaybackState.value = PlaybackState(
+            status = PlaybackStatus.Ready,
+            trackTitle = currentTrackTitle,
+        )
+        startPositionUpdates()
+        return true
+    }
+
     private fun clearNativePrebufferIfCurrent(hlsUrl: String) {
         if (nativePrebufferUrl == hlsUrl) clearNativePrebuffer()
     }
@@ -498,6 +539,11 @@ class AudioPlayerManager(
 
     private fun publish(nextMetrics: PlaybackMetrics) {
         mutableMetrics.value = nextMetrics
+    }
+
+    private enum class PreparedHandoffSource {
+        ExplicitNext,
+        AutoAdvance,
     }
 
     private companion object {

@@ -43,6 +43,11 @@ data class PlaybackMetrics(
     val nativePrebufferHandoffSucceeded: Int = 0,
     val nativePrebufferHandoffFallback: Int = 0,
     val nextPreparedBeforePlay: Boolean = false,
+    val autoAdvancePreparedAttempted: Int = 0,
+    val autoAdvancePreparedSucceeded: Int = 0,
+    val autoAdvancePreparedFallback: Int = 0,
+    val autoAdvancePreparedBeforePlay: Boolean = false,
+    val lastAutoAdvancePreparedTrackId: String? = null,
     val lastEvent: String = "initialized",
     val trackTitle: String = DemoTrack.title,
     val trackUrl: String = DemoTrack.hlsUrl,
@@ -88,6 +93,11 @@ data class PlaybackMetrics(
         "nativePrebufferHandoffSucceeded" to nativePrebufferHandoffSucceeded,
         "nativePrebufferHandoffFallback" to nativePrebufferHandoffFallback,
         "nextPreparedBeforePlay" to nextPreparedBeforePlay,
+        "autoAdvancePreparedAttempted" to autoAdvancePreparedAttempted,
+        "autoAdvancePreparedSucceeded" to autoAdvancePreparedSucceeded,
+        "autoAdvancePreparedFallback" to autoAdvancePreparedFallback,
+        "autoAdvancePreparedBeforePlay" to autoAdvancePreparedBeforePlay,
+        "lastAutoAdvancePreparedTrackId" to lastAutoAdvancePreparedTrackId,
         "lastEvent" to lastEvent,
         "trackTitle" to trackTitle,
         "trackUrl" to trackUrl,
@@ -149,6 +159,7 @@ class PlaybackMetricsTracker(
                 seekBufferMs = 0,
                 lastSeekToMs = null,
                 nextPreparedBeforePlay = false,
+                autoAdvancePreparedBeforePlay = false,
                 trackTitle = title,
                 trackUrl = hlsUrl,
             )
@@ -371,6 +382,7 @@ class PlaybackMetricsTracker(
                 seekBufferMs = 0,
                 lastSeekToMs = null,
                 nextPreparedBeforePlay = false,
+                autoAdvancePreparedBeforePlay = false,
             )
         }
     }
@@ -395,6 +407,7 @@ class PlaybackMetricsTracker(
                 tapToPositionAdvanceMs = null,
                 lastSeekToMs = null,
                 nextPreparedBeforePlay = false,
+                autoAdvancePreparedBeforePlay = false,
             )
         }
     }
@@ -434,6 +447,7 @@ class PlaybackMetricsTracker(
             nativePrebufferReady = false,
             nativePrebufferPrepareMs = null,
             nextPreparedBeforePlay = nextPreparedBeforePlay,
+            autoAdvancePreparedBeforePlay = false,
         )
     }
 
@@ -449,6 +463,29 @@ class PlaybackMetricsTracker(
                 nextPreparedBeforePlay = succeeded,
             )
         }
+    }
+
+    fun markAutoAdvancePreparedAttempted(): PlaybackMetrics = update("auto_advance_prepared_attempted") {
+        copy(
+            autoAdvancePreparedAttempted = autoAdvancePreparedAttempted + 1,
+            autoAdvancePreparedBeforePlay = false,
+        )
+    }
+
+    fun markAutoAdvancePreparedFallback(trackId: String): PlaybackMetrics = update("auto_advance_prepared_fallback") {
+        copy(
+            autoAdvancePreparedFallback = autoAdvancePreparedFallback + 1,
+            autoAdvancePreparedBeforePlay = false,
+            lastAutoAdvancePreparedTrackId = trackId.takeIf { it.isNotBlank() } ?: lastAutoAdvancePreparedTrackId,
+        )
+    }
+
+    fun markAutoAdvancePreparedSucceeded(trackId: String): PlaybackMetrics = update("auto_advance_prepared_succeeded") {
+        copy(
+            autoAdvancePreparedSucceeded = autoAdvancePreparedSucceeded + 1,
+            autoAdvancePreparedBeforePlay = true,
+            lastAutoAdvancePreparedTrackId = trackId.takeIf { it.isNotBlank() } ?: lastAutoAdvancePreparedTrackId,
+        )
     }
 
     fun markNativePrebufferHandoffAttempted(): PlaybackMetrics = update("native_prebuffer_handoff_attempted") {

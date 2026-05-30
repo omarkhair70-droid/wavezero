@@ -41,6 +41,11 @@ class PlaybackMetrics {
     this.nativePrebufferHandoffSucceeded = 0,
     this.nativePrebufferHandoffFallback = 0,
     this.nextPreparedBeforePlay = false,
+    this.autoAdvancePreparedAttempted = 0,
+    this.autoAdvancePreparedSucceeded = 0,
+    this.autoAdvancePreparedFallback = 0,
+    this.autoAdvancePreparedBeforePlay = false,
+    this.lastAutoAdvancePreparedTrackId,
     this.lastEvent,
     this.trackTitle,
     this.trackUrl,
@@ -87,6 +92,11 @@ class PlaybackMetrics {
   final int nativePrebufferHandoffSucceeded;
   final int nativePrebufferHandoffFallback;
   final bool nextPreparedBeforePlay;
+  final int autoAdvancePreparedAttempted;
+  final int autoAdvancePreparedSucceeded;
+  final int autoAdvancePreparedFallback;
+  final bool autoAdvancePreparedBeforePlay;
+  final String? lastAutoAdvancePreparedTrackId;
   final String? lastEvent;
   final String? trackTitle;
   final String? trackUrl;
@@ -151,6 +161,12 @@ class PlaybackMetrics {
     int? nativePrebufferHandoffSucceeded,
     int? nativePrebufferHandoffFallback,
     bool? nextPreparedBeforePlay,
+    int? autoAdvancePreparedAttempted,
+    int? autoAdvancePreparedSucceeded,
+    int? autoAdvancePreparedFallback,
+    bool? autoAdvancePreparedBeforePlay,
+    String? lastAutoAdvancePreparedTrackId,
+    bool clearLastAutoAdvancePreparedTrackId = false,
     String? lastEvent,
     String? trackTitle,
     String? trackUrl,
@@ -234,6 +250,17 @@ class PlaybackMetrics {
           nativePrebufferHandoffFallback ?? this.nativePrebufferHandoffFallback,
       nextPreparedBeforePlay:
           nextPreparedBeforePlay ?? this.nextPreparedBeforePlay,
+      autoAdvancePreparedAttempted:
+          autoAdvancePreparedAttempted ?? this.autoAdvancePreparedAttempted,
+      autoAdvancePreparedSucceeded:
+          autoAdvancePreparedSucceeded ?? this.autoAdvancePreparedSucceeded,
+      autoAdvancePreparedFallback:
+          autoAdvancePreparedFallback ?? this.autoAdvancePreparedFallback,
+      autoAdvancePreparedBeforePlay:
+          autoAdvancePreparedBeforePlay ?? this.autoAdvancePreparedBeforePlay,
+      lastAutoAdvancePreparedTrackId: clearLastAutoAdvancePreparedTrackId
+          ? null
+          : lastAutoAdvancePreparedTrackId ?? this.lastAutoAdvancePreparedTrackId,
       lastEvent: lastEvent ?? this.lastEvent,
       trackTitle: trackTitle ?? this.trackTitle,
       trackUrl: trackUrl ?? this.trackUrl,
@@ -283,6 +310,11 @@ class PlaybackMetrics {
       'nativePrebufferHandoffSucceeded': nativePrebufferHandoffSucceeded,
       'nativePrebufferHandoffFallback': nativePrebufferHandoffFallback,
       'nextPreparedBeforePlay': nextPreparedBeforePlay,
+      'autoAdvancePreparedAttempted': autoAdvancePreparedAttempted,
+      'autoAdvancePreparedSucceeded': autoAdvancePreparedSucceeded,
+      'autoAdvancePreparedFallback': autoAdvancePreparedFallback,
+      'autoAdvancePreparedBeforePlay': autoAdvancePreparedBeforePlay,
+      'lastAutoAdvancePreparedTrackId': lastAutoAdvancePreparedTrackId,
       'lastEvent': lastEvent,
       'trackTitle': trackTitle,
       'trackUrl': trackUrl,
@@ -343,6 +375,16 @@ class PlaybackMetrics {
       nativePrebufferHandoffFallback:
           _readInt(json['nativePrebufferHandoffFallback']) ?? 0,
       nextPreparedBeforePlay: json['nextPreparedBeforePlay'] == true,
+      autoAdvancePreparedAttempted:
+          _readInt(json['autoAdvancePreparedAttempted']) ?? 0,
+      autoAdvancePreparedSucceeded:
+          _readInt(json['autoAdvancePreparedSucceeded']) ?? 0,
+      autoAdvancePreparedFallback:
+          _readInt(json['autoAdvancePreparedFallback']) ?? 0,
+      autoAdvancePreparedBeforePlay:
+          json['autoAdvancePreparedBeforePlay'] == true,
+      lastAutoAdvancePreparedTrackId:
+          json['lastAutoAdvancePreparedTrackId'] as String?,
       lastEvent: json['lastEvent'] as String?,
       trackTitle: json['trackTitle'] as String?,
       trackUrl: json['trackUrl'] as String?,

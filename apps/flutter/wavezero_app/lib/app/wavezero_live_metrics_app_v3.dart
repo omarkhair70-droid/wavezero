@@ -578,7 +578,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       QueueAdvanceSource.manual => 'Queue selected: ${track.title}.',
     };
     if (source == QueueAdvanceSource.auto) setState(() => _autoAdvanceCount += 1);
-    if (source == QueueAdvanceSource.next) {
+    if (source == QueueAdvanceSource.next || source == QueueAdvanceSource.auto) {
       setState(() {
         _lastPrefetchHit = prefetchHit;
         if (prefetchHit) {
@@ -597,7 +597,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _queueStatus = status;
       _sessionStatus = 'Session saved.';
     });
-    if (source == QueueAdvanceSource.next) {
+    if (source == QueueAdvanceSource.next || source == QueueAdvanceSource.auto) {
       final preparedManifest = prefetchedManifest;
       final canAttemptPreparedHandoff = autoStart &&
           _prefetchEnabled &&
@@ -605,32 +605,28 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _metrics.nativePrebufferReady &&
           _metrics.nativePrebufferTrackId == track.trackId;
       if (canAttemptPreparedHandoff) {
-        final usedPreparedPath = await widget.playbackBridge.playPreparedNextTrackIfReady(
-          trackId: preparedManifest.trackId,
-          title: preparedManifest.title,
-          url: preparedManifest.streamUrl,
-        );
+        final usedPreparedPath = source == QueueAdvanceSource.auto
+            ? await widget.playbackBridge.playPreparedAutoAdvanceTrackIfReady(
+                trackId: preparedManifest.trackId,
+                title: preparedManifest.title,
+                url: preparedManifest.streamUrl,
+              )
+            : await widget.playbackBridge.playPreparedNextTrackIfReady(
+                trackId: preparedManifest.trackId,
+                title: preparedManifest.title,
+                url: preparedManifest.streamUrl,
+              );
         if (usedPreparedPath) {
-          if (!mounted) return;
-          _titleController.text = preparedManifest.title;
-          _urlController.text = preparedManifest.streamUrl;
-          setState(() {
-            _manifest = preparedManifest;
-            _selectedTrackId = preparedManifest.trackId;
-            _queueCurrentTrackId = preparedManifest.trackId;
-            _queueStatus = 'Prepared Next handoff: ${preparedManifest.title}.';
-            _prefetchedTrackId = null;
-            _prefetchedTrackTitle = null;
-            _prefetchedManifest = null;
-            _manifestPrefetched = false;
-            _audioPreparedBeforeNext = false;
-            _nextPreparedBeforePlay = true;
-          });
-          await _refreshMetrics(allowAutoAdvance: false);
-          unawaited(_saveSession());
-          if (_nextQueueTrack != null) unawaited(_updatePredictivePreloadCandidate());
+          await _finishPreparedQueueHandoff(
+            manifest: preparedManifest,
+            status: source == QueueAdvanceSource.auto
+                ? 'Prepared auto-advance handoff: ${preparedManifest.title}.'
+                : 'Prepared Next handoff: ${preparedManifest.title}.',
+          );
           return;
         }
+      } else if (source == QueueAdvanceSource.auto) {
+        await widget.playbackBridge.recordAutoAdvancePreparedFallback(trackId: track.trackId);
       } else {
         await widget.playbackBridge.recordNextTrackPrebufferOutcome(
           trackId: track.trackId,
@@ -639,6 +635,29 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       }
     }
     await _loadCatalogTrack(trackId: track.trackId, autoPlay: autoStart, operation: operation, status: status, prefetchedManifest: prefetchedManifest);
+  }
+
+
+  Future<void> _finishPreparedQueueHandoff({required CatalogTrackManifest manifest, required String status}) async {
+    if (!mounted) return;
+    _titleController.text = manifest.title;
+    _urlController.text = manifest.streamUrl;
+    setState(() {
+      _manifest = manifest;
+      _selectedTrackId = manifest.trackId;
+      _queueCurrentTrackId = manifest.trackId;
+      _lastAutoAdvanceTrackId = manifest.trackId;
+      _queueStatus = status;
+      _prefetchedTrackId = null;
+      _prefetchedTrackTitle = null;
+      _prefetchedManifest = null;
+      _manifestPrefetched = false;
+      _audioPreparedBeforeNext = false;
+      _nextPreparedBeforePlay = true;
+    });
+    await _refreshMetrics(allowAutoAdvance: false);
+    unawaited(_saveSession());
+    if (_nextQueueTrack != null) unawaited(_updatePredictivePreloadCandidate());
   }
 
   Future<void> _playNext({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.next}) async {
