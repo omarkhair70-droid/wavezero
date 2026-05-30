@@ -40,6 +40,7 @@ class AudioPlayerManager(
     private var currentTrackTitle: String = DemoTrack.title
     private var currentHlsUrl: String = hlsUrl
     private var playCommandInFlight = false
+    private var softStopped = false
 
     private val appContext = context.applicationContext
 
@@ -70,6 +71,15 @@ class AudioPlayerManager(
 
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
+            if (softStopped) {
+                playCommandInFlight = false
+                mutablePlaybackState.value = PlaybackState(
+                    status = PlaybackStatus.Paused,
+                    trackTitle = currentTrackTitle,
+                )
+                return
+            }
+
             when (playbackState) {
                 Player.STATE_BUFFERING -> {
                     publish(metricsTracker.markBufferingStarted())
@@ -106,6 +116,11 @@ class AudioPlayerManager(
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (softStopped) {
+                playCommandInFlight = false
+                return
+            }
+
             if (isPlaying) {
                 playCommandInFlight = false
                 publish(metricsTracker.markPlaying(player.currentPosition))
@@ -125,6 +140,11 @@ class AudioPlayerManager(
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            if (softStopped) {
+                playCommandInFlight = false
+                return
+            }
+
             playCommandInFlight = false
             publish(metricsTracker.markError(error.message ?: error.errorCodeName))
             mutablePlaybackState.value = PlaybackState(
@@ -140,6 +160,8 @@ class AudioPlayerManager(
             loadEventInfo: LoadEventInfo,
             mediaLoadData: MediaLoadData,
         ) {
+            if (softStopped) return
+
             if (mediaLoadData.dataType == C.DATA_TYPE_MANIFEST) {
                 publish(metricsTracker.markManifestLoaded(loadEventInfo.loadDurationMs))
             }
@@ -161,6 +183,7 @@ class AudioPlayerManager(
         currentTrackTitle = title.ifBlank { DemoTrack.title }
         currentHlsUrl = hlsUrl
         playCommandInFlight = false
+        softStopped = false
         positionJob?.cancel()
         player.stop()
         player.clearMediaItems()
@@ -174,6 +197,15 @@ class AudioPlayerManager(
     }
 
     fun play() {
+        softStopped = false
+        ensureCurrentMediaItemLoaded()
+
+        if (player.playbackState == Player.STATE_IDLE) {
+            player.prepare()
+        } else if (player.playbackState == Player.STATE_ENDED) {
+            player.seekTo(0)
+        }
+
         if (player.isPlaying || player.playWhenReady || playCommandInFlight) {
             player.playWhenReady = true
             startPositionUpdates()
@@ -192,6 +224,7 @@ class AudioPlayerManager(
     }
 
     fun pause() {
+        softStopped = false
         playCommandInFlight = false
         player.pause()
         publish(metricsTracker.markNotPlaying(player.currentPosition))
@@ -210,24 +243,33 @@ class AudioPlayerManager(
     }
 
     fun stop() {
+        softStopped = true
         playCommandInFlight = false
-        player.stop()
-        player.clearMediaItems()
-        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
+        player.playWhenReady = false
+        player.pause()
+        ensureCurrentMediaItemLoaded()
+        player.seekTo(0)
         positionJob?.cancel()
         publish(metricsTracker.resetForStop())
         mutablePlaybackState.value = PlaybackState(
-            status = PlaybackStatus.Stopped,
+            status = PlaybackStatus.Paused,
             trackTitle = currentTrackTitle,
         )
     }
 
     fun retry() {
-        stop()
+        softStopped = false
+        player.stop()
+        player.clearMediaItems()
+        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
+        playCommandInFlight = false
+        positionJob?.cancel()
+        publish(metricsTracker.resetTransientMetrics())
         play()
     }
 
     fun seekTo(positionMs: Long) {
+        softStopped = false
         val durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
         val safePosition = if (durationMs == null) {
             positionMs.coerceAtLeast(0L)
@@ -261,6 +303,12 @@ class AudioPlayerManager(
         mediaSession?.release()
         player.release()
         managerJob.cancel()
+    }
+
+    private fun ensureCurrentMediaItemLoaded() {
+        if (player.mediaItemCount == 0 || player.currentMediaItem == null) {
+            player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
+        }
     }
 
     private fun startPositionUpdates() {

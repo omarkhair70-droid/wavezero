@@ -751,7 +751,7 @@ class _EmptyCatalogMessage extends StatelessWidget { const _EmptyCatalogMessage(
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
 String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); return parts.join(' • '); }
-String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Stopped'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
+String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
 const _timeStyle = TextStyle(color: Color(0xFF9BA3B4), fontSize: 12);

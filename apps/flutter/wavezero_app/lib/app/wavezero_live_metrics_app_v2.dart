@@ -1020,7 +1020,7 @@ String _statusFromEvent(String? event) {
     case 'not_playing':
       return 'Paused';
     case 'stopped':
-      return 'Stopped';
+      return 'Paused';
     case 'ended':
     case 'playback_ended':
       return 'Ended';

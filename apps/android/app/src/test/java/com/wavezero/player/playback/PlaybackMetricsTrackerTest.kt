@@ -58,4 +58,51 @@ class PlaybackMetricsTrackerTest {
         assertFalse(metrics.isPlaying)
         assertNull(metrics.playbackError)
     }
+
+    @Test
+    fun stopKeepsPreparedPrebufferAndRebufferMetricsHonest() {
+        tracker.loadTrack("Song 3", "https://example.com/song3.m3u8")
+        tracker.markBufferingStarted()
+        nowMs += 40L
+        tracker.markBufferingEnded()
+        tracker.markReady()
+        tracker.markPlayTapped()
+        tracker.markPlaying(positionMs = 1_200L)
+        tracker.markBufferingStarted()
+        nowMs += 80L
+        val beforeStop = tracker.markBufferingEnded()
+        tracker.markError("temporary failure")
+
+        val stopped = tracker.resetForStop()
+
+        assertEquals("Song 3", stopped.trackTitle)
+        assertEquals("https://example.com/song3.m3u8", stopped.trackUrl)
+        assertEquals(1, stopped.prebufferCount)
+        assertEquals(40L, stopped.prebufferMs)
+        assertEquals(beforeStop.rebufferCount, stopped.rebufferCount)
+        assertEquals(beforeStop.rebufferMs, stopped.rebufferMs)
+        assertEquals(beforeStop.totalBufferMs, stopped.totalBufferMs)
+        assertTrue(stopped.totalBufferMs >= stopped.rebufferMs)
+        assertEquals(0L, stopped.currentPositionMs)
+        assertFalse(stopped.isPlaying)
+        assertNull(stopped.playbackError)
+        assertEquals("stopped", stopped.lastEvent)
+    }
+
+    @Test
+    fun manifestLoadAfterStopDoesNotOverwriteStoppedEvent() {
+        tracker.loadTrack("Loaded", "https://example.com/loaded.m3u8")
+        tracker.markManifestLoaded(loadDurationMs = 25L)
+        tracker.markReady()
+        val stopped = tracker.resetForStop()
+
+        val afterStaleManifest = tracker.markManifestLoaded(loadDurationMs = 50L)
+
+        assertEquals("stopped", stopped.lastEvent)
+        assertEquals("stopped", afterStaleManifest.lastEvent)
+        assertEquals(25L, afterStaleManifest.manifestLoadMs)
+        assertEquals(0L, afterStaleManifest.currentPositionMs)
+        assertFalse(afterStaleManifest.isPlaying)
+    }
+
 }
