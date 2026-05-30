@@ -496,7 +496,10 @@ class PlaybackMetricsTracker(
         )
     }
 
-    fun markNativePrebufferHandoffSucceeded(trackId: String): PlaybackMetrics {
+    fun markNativePrebufferHandoffSucceeded(
+        trackId: String,
+        explicitNext: Boolean,
+    ): PlaybackMetrics {
         val matchedReady = metrics.nativePrebufferTrackId == trackId && metrics.nativePrebufferReady
         if (matchedReady) nativeHandoffStartedAtMs = nowMs()
         return update("native_prebuffer_handoff_succeeded") {
@@ -509,7 +512,7 @@ class PlaybackMetricsTracker(
                 nativePrebufferPrepareMs = null,
                 nativePrebufferHitCount = if (matchedReady) nativePrebufferHitCount + 1 else nativePrebufferHitCount,
                 nativePrebufferHandoffSucceeded = if (matchedReady) nativePrebufferHandoffSucceeded + 1 else nativePrebufferHandoffSucceeded,
-                nextPreparedBeforePlay = matchedReady,
+                nextPreparedBeforePlay = matchedReady && explicitNext,
             )
         }
     }
