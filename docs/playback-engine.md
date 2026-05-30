@@ -42,3 +42,35 @@ future FFI boundary.
 
 TODO: Offline cache policy will define which manifests and segments may persist,
 when to evict, and how to respect metered networks and user settings.
+
+## Smart Queue Policy
+
+The Flutter shell now has a small deterministic Smart Queue Policy layer before
+manifest prefetch/native prebuffer. This layer does not recommend music and does
+not change Android playback, ExoPlayer handoff, MediaSession, notification, or
+catalog API behavior. It only decides which already-queued catalog track should
+be prepared next and exposes a developer-visible reason string.
+
+Policy rules:
+
+- If Smart Preload is off, no candidate is selected and `smartQueueReason` is
+  `smart_preload_off`.
+- If the queue is empty, no candidate is selected and `smartQueueReason` is
+  `queue_empty`.
+- If the current track is unknown, the policy falls back to the selected/current
+  queue position safely before looking for an up-next track.
+- If a valid up-next track exists, that track is selected with
+  `smartQueueReason` set to `up_next`.
+- The policy never selects the current track, a removed track, or a track that is
+  not present in both the queue and the current catalog snapshot.
+- If the candidate changes because the user selects another track or the queue
+  changes, the old candidate is invalidated and `smartQueueReason` becomes
+  `candidate_changed`.
+- If the same candidate is already manifest-prefetched and native-prebuffered,
+  the policy reports `already_prepared` and avoids re-preparing it.
+- If there is no up-next track after applying these checks, no candidate is
+  selected and `smartQueueReason` is `no_up_next`.
+
+The Smart Preload panel and Queue card display the current candidate and
+`smartQueueReason` so local verification can confirm queue-policy decisions
+without relying on raw native playback metrics.
