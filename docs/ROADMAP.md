@@ -202,30 +202,40 @@ Outcome:
 - Tapping a catalog track loads that track manifest into the existing player shell.
 - Manual testing verified selecting and playing the second catalog track from Android.
 
+### Phase 1D — Search and Catalog Polish
+
+Status: Completed
+
+Outcome:
+
+- Local catalog search/filtering works in Flutter.
+- Selected-track refresh and reload behavior is stable.
+- Catalog rows show asset metadata such as codec and bitrate.
+- Seeded development tracks are easier to distinguish during manual testing.
+
 ## Next Phases
 
-### Phase 1D — Search and Catalog Polish
+### Phase 1D.1 — Local Real Track Catalog Entry
 
 Status: In progress
 
 Goal:
 
-Make the catalog browsing surface more useful before expanding into queue/library work.
+Make a locally hosted real MP3 track appear as a first-class catalog item so real-audio testing can happen through catalog search and selection, not only manual URL entry.
 
 Scope:
 
-- Add local catalog search/filtering in Flutter.
-- Improve selected-track refresh and reload behavior.
-- Add empty/loading/search-result copy for catalog browsing.
-- Show asset metadata such as codec and bitrate in catalog rows.
-- Make seeded development tracks easier to distinguish during manual testing.
-- Keep native playback, background playback, notification controls, seek, and metrics unchanged.
+- Add a `Local Lab` development artist.
+- Add a `Local Real Song` catalog entry pointing at `http://192.168.1.7:8090/song.mp3`.
+- Support `mp3` as a catalog/core asset codec.
+- Keep the actual MP3 file out of git; it stays local in `Desktop/wavezero-test-audio/song.mp3`.
+- Keep playback, search, metrics, background playback, and notification controls unchanged.
 
 Non-goals:
 
-- No queue or playlist model yet.
-- No database-backed production catalog yet.
-- No authentication or user library yet.
+- No committed copyrighted audio files.
+- No upload UI yet.
+- No production storage or signed URLs yet.
 
 ### Phase 1E — Queue Foundation
 
