@@ -213,31 +213,22 @@ Outcome:
 - Catalog rows show asset metadata such as codec and bitrate.
 - Seeded development tracks are easier to distinguish during manual testing.
 
-## Next Phases
-
 ### Phase 1D.1 — Local Real Track Catalog Entry
 
-Status: In progress
+Status: Completed
 
-Goal:
+Outcome:
 
-Make a locally hosted real MP3 track appear as a first-class catalog item so real-audio testing can happen through catalog search and selection, not only manual URL entry.
+- A `Local Lab` development artist exists in the dev catalog.
+- A `Local Real Song` catalog entry points at the locally hosted MP3 test file.
+- The catalog/core asset model supports `mp3`.
+- Manual testing verified a real locally hosted MP3 track through the catalog/search flow.
 
-Scope:
-
-- Add a `Local Lab` development artist.
-- Add a `Local Real Song` catalog entry pointing at `http://192.168.1.7:8090/song.mp3`.
-- Support `mp3` as a catalog/core asset codec.
-- Keep the actual MP3 file out of git; it stays local in `Desktop/wavezero-test-audio/song.mp3`.
-- Keep playback, search, metrics, background playback, and notification controls unchanged.
-
-Non-goals:
-
-- No committed copyrighted audio files.
-- No upload UI yet.
-- No production storage or signed URLs yet.
+## Next Phases
 
 ### Phase 1E — Queue Foundation
+
+Status: In progress
 
 Goal:
 
@@ -246,6 +237,27 @@ Introduce the first queue model after catalog selection is stable.
 Scope:
 
 - Add a simple in-memory Flutter queue state.
-- Add next/previous controls in the Flutter player shell.
+- Add a Queue card with current track state and remove/clear actions.
+- Add an Add to Queue action from catalog rows.
+- Add previous/next controls in the Flutter player shell.
 - Keep the native playback bridge as the playback execution layer.
-- Keep catalog and metrics intact.
+- Keep catalog, search, local MP3 playback, background playback, notification controls, and metrics intact.
+
+Non-goals:
+
+- No persistent queue storage yet.
+- No shuffle/repeat yet.
+- No server-side queue model yet.
+
+### Phase 1F — Queue Polish and Auto-Advance
+
+Goal:
+
+Make the first queue feel closer to a music app queue.
+
+Scope:
+
+- Improve queue row UX and current/next labels.
+- Consider auto-advance when a track reaches end.
+- Add lightweight queue metrics if needed.
+- Keep native playback bridge ownership unchanged.
