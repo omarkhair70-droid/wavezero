@@ -98,6 +98,23 @@ class PlaybackMethodChannelHandler(
                     result.success(null)
                 }
 
+                "playPreparedNextTrackIfReady" -> {
+                    val trackId = call.argument<String>("trackId").orEmpty()
+                    val title = call.argument<String>("title").orEmpty()
+                    val url = call.argument<String>("url").orEmpty()
+                    if (trackId.isBlank() || url.isBlank()) {
+                        result.error("invalid_arguments", "playPreparedNextTrackIfReady requires non-empty trackId and url", null)
+                        return
+                    }
+                    val usedPreparedPath = audioPlayerManager.playPreparedNextTrackIfReady(
+                        trackId = trackId,
+                        title = title,
+                        hlsUrl = url,
+                    )
+                    if (usedPreparedPath) WaveZeroPlaybackSession.showMediaControls(context)
+                    result.success(usedPreparedPath)
+                }
+
                 "recordNextTrackPrebufferOutcome" -> {
                     val trackId = call.argument<String>("trackId").orEmpty()
                     val usedPreparedPath = call.argument<Boolean>("usedPreparedPath") ?: false

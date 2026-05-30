@@ -16,6 +16,12 @@ abstract class PlaybackBridge {
 
   Future<void> clearNextTrackPrebuffer();
 
+  Future<bool> playPreparedNextTrackIfReady({
+    required String trackId,
+    required String title,
+    required String url,
+  });
+
   Future<void> recordNextTrackPrebufferOutcome({
     required String trackId,
     required bool usedPreparedPath,
@@ -71,6 +77,32 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
 
   @override
   Future<void> clearNextTrackPrebuffer() => _invokeVoid('clearNextTrackPrebuffer');
+
+  @override
+  Future<bool> playPreparedNextTrackIfReady({
+    required String trackId,
+    required String title,
+    required String url,
+  }) async {
+    try {
+      final usedPreparedPath = await _channel.invokeMethod<bool>(
+        'playPreparedNextTrackIfReady',
+        <String, Object?>{
+          'trackId': trackId,
+          'title': title,
+          'url': url,
+        },
+      );
+      _lastBridgeError = null;
+      return usedPreparedPath == true;
+    } on MissingPluginException catch (error) {
+      _lastBridgeError = 'Android playback bridge is not available: $error';
+      return false;
+    } on PlatformException catch (error) {
+      _lastBridgeError = 'Android playback bridge error: ${error.message ?? error.code}';
+      return false;
+    }
+  }
 
   @override
   Future<void> recordNextTrackPrebufferOutcome({
@@ -151,6 +183,7 @@ class MockPlaybackBridge implements PlaybackBridge {
   );
   String? _loadedTitle;
   String? _loadedUrl;
+  String? _prebufferUrl;
 
   @override
   Future<void> loadTrack({
@@ -183,6 +216,7 @@ class MockPlaybackBridge implements PlaybackBridge {
     required String title,
     required String url,
   }) async {
+    _prebufferUrl = url;
     _metrics = _metrics.copyWith(
       nativePrebufferEnabled: true,
       nativePrebufferTrackId: trackId,
@@ -197,6 +231,7 @@ class MockPlaybackBridge implements PlaybackBridge {
 
   @override
   Future<void> clearNextTrackPrebuffer() async {
+    _prebufferUrl = null;
     _metrics = _metrics.copyWith(
       nativePrebufferEnabled: false,
       clearNativePrebufferTrackId: true,
@@ -210,6 +245,44 @@ class MockPlaybackBridge implements PlaybackBridge {
   }
 
   @override
+  Future<bool> playPreparedNextTrackIfReady({
+    required String trackId,
+    required String title,
+    required String url,
+  }) async {
+    final matchedReady = _metrics.nativePrebufferTrackId == trackId &&
+        _metrics.nativePrebufferReady &&
+        _prebufferUrl == url;
+    _metrics = _metrics.copyWith(
+      trackTitle: matchedReady ? title : _metrics.trackTitle,
+      trackUrl: matchedReady ? url : _metrics.trackUrl,
+      isPlaying: matchedReady ? true : _metrics.isPlaying,
+      tapToFirstAudioMs: matchedReady ? (_metrics.tapToFirstAudioMs ?? 24) : _metrics.tapToFirstAudioMs,
+      tapToReadyMs: matchedReady ? (_metrics.tapToReadyMs ?? 0) : _metrics.tapToReadyMs,
+      tapToIsPlayingMs: matchedReady ? (_metrics.tapToIsPlayingMs ?? 24) : _metrics.tapToIsPlayingMs,
+      nativePrebufferHitCount: matchedReady ? _metrics.nativePrebufferHitCount + 1 : _metrics.nativePrebufferHitCount,
+      nativePrebufferMissCount: matchedReady ? _metrics.nativePrebufferMissCount : _metrics.nativePrebufferMissCount + 1,
+      nativePrebufferHandoffAttempted: _metrics.nativePrebufferHandoffAttempted + 1,
+      nativePrebufferHandoffSucceeded: matchedReady ? _metrics.nativePrebufferHandoffSucceeded + 1 : _metrics.nativePrebufferHandoffSucceeded,
+      nativePrebufferHandoffFallback: matchedReady ? _metrics.nativePrebufferHandoffFallback : _metrics.nativePrebufferHandoffFallback + 1,
+      nextPreparedBeforePlay: matchedReady,
+      nativePrebufferEnabled: false,
+      nativePrebufferInFlight: false,
+      nativePrebufferReady: false,
+      clearNativePrebufferTrackId: matchedReady,
+      clearNativePrebufferTrackTitle: matchedReady,
+      clearNativePrebufferPrepareMs: matchedReady,
+      lastEvent: matchedReady ? 'native_prebuffer_handoff_succeeded' : 'native_prebuffer_outcome',
+    );
+    if (matchedReady) {
+      _loadedTitle = title;
+      _loadedUrl = url;
+      _prebufferUrl = null;
+    }
+    return matchedReady;
+  }
+
+  @override
   Future<void> recordNextTrackPrebufferOutcome({
     required String trackId,
     required bool usedPreparedPath,
@@ -218,6 +291,7 @@ class MockPlaybackBridge implements PlaybackBridge {
     _metrics = _metrics.copyWith(
       nativePrebufferHitCount: usedPreparedPath && matchedReady ? _metrics.nativePrebufferHitCount + 1 : _metrics.nativePrebufferHitCount,
       nativePrebufferMissCount: usedPreparedPath && matchedReady ? _metrics.nativePrebufferMissCount : _metrics.nativePrebufferMissCount + 1,
+      nativePrebufferHandoffFallback: usedPreparedPath && matchedReady ? _metrics.nativePrebufferHandoffFallback : _metrics.nativePrebufferHandoffFallback + 1,
       nextPreparedBeforePlay: usedPreparedPath && matchedReady,
       lastEvent: 'native_prebuffer_outcome',
     );

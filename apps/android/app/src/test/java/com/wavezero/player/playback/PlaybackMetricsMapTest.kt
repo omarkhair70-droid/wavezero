@@ -42,6 +42,9 @@ class PlaybackMetricsMapTest {
             nativePrebufferHitCount = 0,
             nativePrebufferMissCount = 1,
             nativePrebufferPrepareMs = 123L,
+            nativePrebufferHandoffAttempted = 1,
+            nativePrebufferHandoffSucceeded = 0,
+            nativePrebufferHandoffFallback = 1,
             nextPreparedBeforePlay = false,
             lastEvent = "playing",
             trackTitle = "Title",
@@ -82,6 +85,9 @@ class PlaybackMetricsMapTest {
         assertEquals(0, map["nativePrebufferHitCount"])
         assertEquals(1, map["nativePrebufferMissCount"])
         assertEquals(123L, map["nativePrebufferPrepareMs"])
+        assertEquals(1, map["nativePrebufferHandoffAttempted"])
+        assertEquals(0, map["nativePrebufferHandoffSucceeded"])
+        assertEquals(1, map["nativePrebufferHandoffFallback"])
         assertEquals(false, map["nextPreparedBeforePlay"])
         assertEquals("playing", map["lastEvent"])
         assertEquals("Title", map["trackTitle"])
@@ -231,6 +237,26 @@ class PlaybackMetricsMapTest {
 
 
 class PlaybackMetricsNativePrebufferTest {
+
+    @Test
+    fun nativePrebufferMetricsTrackPreparedHandoffOutcome() {
+        val tracker = PlaybackMetricsTracker(nowMs = { 1_000L })
+
+        tracker.markNativePrebufferStarted("track-3", "Song 3")
+        tracker.markNativePrebufferReady("track-3", 120L)
+        tracker.markNativePrebufferHandoffAttempted()
+        val handoff = tracker.markNativePrebufferHandoffSucceeded("track-3")
+
+        assertEquals(1, handoff.nativePrebufferHitCount)
+        assertEquals(0, handoff.nativePrebufferMissCount)
+        assertEquals(1, handoff.nativePrebufferHandoffAttempted)
+        assertEquals(1, handoff.nativePrebufferHandoffSucceeded)
+        assertEquals(0, handoff.nativePrebufferHandoffFallback)
+        assertFalse(handoff.nativePrebufferEnabled)
+        assertNull(handoff.nativePrebufferTrackId)
+        assertTrue(handoff.nextPreparedBeforePlay)
+    }
+
     @Test
     fun nativePrebufferMetricsTrackReadinessAndSafeFallbackOutcome() {
         var nowMs = 1_000L
@@ -249,9 +275,13 @@ class PlaybackMetricsNativePrebufferTest {
         assertTrue(ready.nativePrebufferReady)
         assertEquals(240L, ready.nativePrebufferPrepareMs)
 
+        tracker.markNativePrebufferHandoffAttempted()
         val fallback = tracker.markNativePrebufferOutcome("track-3", usedPreparedPath = false)
         assertEquals(0, fallback.nativePrebufferHitCount)
         assertEquals(1, fallback.nativePrebufferMissCount)
+        assertEquals(1, fallback.nativePrebufferHandoffAttempted)
+        assertEquals(0, fallback.nativePrebufferHandoffSucceeded)
+        assertEquals(1, fallback.nativePrebufferHandoffFallback)
         assertFalse(fallback.nextPreparedBeforePlay)
     }
 }

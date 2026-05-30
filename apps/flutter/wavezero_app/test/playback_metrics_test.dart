@@ -36,6 +36,9 @@ void main() {
       nativePrebufferHitCount: 0,
       nativePrebufferMissCount: 1,
       nativePrebufferPrepareMs: 123,
+      nativePrebufferHandoffAttempted: 1,
+      nativePrebufferHandoffSucceeded: 0,
+      nativePrebufferHandoffFallback: 1,
       nextPreparedBeforePlay: false,
       lastEvent: 'playing',
       trackTitle: 'Title',
@@ -62,6 +65,9 @@ void main() {
     expect(metrics.toJson()['nativePrebufferReady'], isTrue);
     expect(metrics.toJson()['nativePrebufferMissCount'], 1);
     expect(metrics.toJson()['nativePrebufferPrepareMs'], 123);
+    expect(metrics.toJson()['nativePrebufferHandoffAttempted'], 1);
+    expect(metrics.toJson()['nativePrebufferHandoffSucceeded'], 0);
+    expect(metrics.toJson()['nativePrebufferHandoffFallback'], 1);
     expect(metrics.toJson()['nextPreparedBeforePlay'], isFalse);
     expect(metrics.toDisplayText(), contains('tapToFirstAudioMs: 20'));
     expect(metrics.toDisplayText(), contains('startupBufferMs: 90'));
@@ -101,6 +107,9 @@ void main() {
       'nativePrebufferHitCount': 2.0,
       'nativePrebufferMissCount': 3.0,
       'nativePrebufferPrepareMs': 81.0,
+      'nativePrebufferHandoffAttempted': 4.0,
+      'nativePrebufferHandoffSucceeded': 2.0,
+      'nativePrebufferHandoffFallback': 2.0,
       'nextPreparedBeforePlay': false,
       'sessionId': 'native-session',
       'lastEvent': 'error',
@@ -132,6 +141,9 @@ void main() {
     expect(metrics.nativePrebufferHitCount, 2);
     expect(metrics.nativePrebufferMissCount, 3);
     expect(metrics.nativePrebufferPrepareMs, 81);
+    expect(metrics.nativePrebufferHandoffAttempted, 4);
+    expect(metrics.nativePrebufferHandoffSucceeded, 2);
+    expect(metrics.nativePrebufferHandoffFallback, 2);
     expect(metrics.nextPreparedBeforePlay, isFalse);
     expect(metrics.sessionId, 'native-session');
     expect(metrics.lastEvent, 'error');
