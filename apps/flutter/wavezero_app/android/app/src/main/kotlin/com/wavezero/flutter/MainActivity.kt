@@ -95,7 +95,7 @@ class PlaybackMethodChannelHandler(
 
                 "stop" -> {
                     audioPlayerManager.stop()
-                    WaveZeroPlaybackSession.dismissMediaControls(context)
+                    WaveZeroPlaybackSession.showMediaControls(context)
                     result.success(null)
                 }
 

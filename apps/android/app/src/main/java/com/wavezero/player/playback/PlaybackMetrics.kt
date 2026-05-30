@@ -328,8 +328,28 @@ class PlaybackMetricsTracker(
         }
     }
 
-    fun resetForStop(): PlaybackMetrics = resetTransientMetrics().copy(lastEvent = "stopped").also {
-        metrics = it
+    fun resetForStop(): PlaybackMetrics {
+        playTappedAtMs = null
+        playStartPositionMs = 0L
+        positionAdvanceObserved = false
+        isBuffering = false
+        bufferStartedAtMs = null
+        bufferPhase = null
+        lastSeekAtMs = null
+        return update("stopped") {
+            copy(
+                tapToFirstAudioMs = null,
+                isPlaying = false,
+                currentPositionMs = 0,
+                playbackError = null,
+                tapToReadyMs = null,
+                tapToIsPlayingMs = null,
+                tapToPositionAdvanceMs = null,
+                startupBufferMs = 0,
+                totalBufferMs = 0,
+                lastSeekToMs = null,
+            )
+        }
     }
 
     private fun elapsedSincePlayTap(): Long? = playTappedAtMs?.let { (nowMs() - it).coerceAtLeast(0) }
