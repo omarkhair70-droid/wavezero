@@ -118,3 +118,16 @@ Use this checklist when validating Smart Preload with Phase 2A.1 Soft Stop recov
 5. Tap Stop again, then tap Next; the queue should advance to the up-next track and the prefetch hit/miss counters should update only for that Next action.
 6. Continue with Play/Pause from the app and notification controls while backgrounding the app; metrics should stay consistent and no playback error should appear.
 7. Confirm Phase 2A metric honesty: `manifestPrefetched` may be `true`, while `audioPreparedBeforeNext` and `nextPreparedBeforePlay` remain `false` until a native audio prebuffer implementation exists.
+
+## Phase 2A.3 Performance baseline checklist
+
+Use this developer-facing baseline before Phase 2B native audio prebuffering changes:
+
+1. Open the Flutter player shell and load the catalog.
+2. Play Local Real Song and record `tapToAudioMs` from the Performance Baseline panel. This is surfaced from the existing native `tapToFirstAudioMs` metric.
+3. Wait for Smart Preload to show a manifest-prefetched up-next track, then tap Next while playback is active.
+4. Confirm `nextTapToAudioMs` appears after playback is observed for the next track; leave it unavailable if the session has not observed a Next-to-audio flow yet.
+5. Record `prefetchHitCount` and `prefetchMissCount` only from explicit Next actions; Stop then Play must not change either counter.
+6. Tap Stop, then Play, and record `stopToPlayRecoveryMs` if it appears. Leave it unavailable if the flow has not been observed yet.
+7. Record `sessionRecoveryMs` when available from startup session-store recovery.
+8. Confirm honesty before Phase 2B: `audioPreparedBeforeNext` and `nextPreparedBeforePlay` must remain `false` unless native audio preparation actually exists.

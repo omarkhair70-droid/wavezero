@@ -79,6 +79,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int _prefetchMissCount = 0;
   int? _nextTapStartedAtMs;
   int? _nextTapToAudioMs;
+  int? _lastStopAtMs;
+  int? _stopRecoveryPlayStartedAtMs;
+  int? _stopToPlayRecoveryMs;
+  int? _sessionRecoveryStartedAtMs;
+  int? _sessionRecoveryMs;
   double? _dragPositionMs;
 
   bool _prefetchEnabled = true;
@@ -146,6 +151,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _sessionRecoveryStartedAtMs = DateTime.now().millisecondsSinceEpoch;
     _titleController = TextEditingController(text: waveZeroTestTrack.title);
     _urlController = TextEditingController(text: waveZeroTestTrack.url);
     _apiBaseUrlController = TextEditingController(text: CatalogClient.defaultBaseUrl);
@@ -189,10 +195,29 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     try {
       final next = await widget.playbackBridge.metricsSnapshot();
       if (!mounted) return;
-      setState(() => _metrics = next);
+      setState(() {
+        _metrics = next;
+        _capturePlaybackBaselineMetrics(next);
+      });
       if (allowAutoAdvance) await _maybeAutoAdvance(next);
     } finally {
       _refreshingMetrics = false;
+    }
+  }
+
+  void _capturePlaybackBaselineMetrics(PlaybackMetrics metrics) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final hasAudioSignal = metrics.isPlaying &&
+        (metrics.tapToFirstAudioMs != null ||
+            metrics.tapToPositionAdvanceMs != null ||
+            metrics.currentPositionMs > 0);
+    if (_nextTapStartedAtMs != null && _nextTapToAudioMs == null && hasAudioSignal) {
+      _nextTapToAudioMs = now - _nextTapStartedAtMs!;
+    }
+    if (_stopRecoveryPlayStartedAtMs != null && _stopToPlayRecoveryMs == null && hasAudioSignal) {
+      _stopToPlayRecoveryMs = now - _stopRecoveryPlayStartedAtMs!;
+      _stopRecoveryPlayStartedAtMs = null;
+      _lastStopAtMs = null;
     }
   }
 
@@ -258,6 +283,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (_sessionRestored) return null;
     _sessionRestored = true;
     final snapshot = await widget.sessionStore.load();
+    _sessionRecoveryMs ??= _elapsedSince(_sessionRecoveryStartedAtMs);
     if (snapshot == null) return null;
     final validIds = catalogTracks.map((track) => track.trackId).toSet();
     final restoredIds = snapshot.queueTrackIds.where(validIds.contains).toList(growable: false);
@@ -268,6 +294,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       selectedTrackId: validIds.contains(snapshot.selectedTrackId) ? snapshot.selectedTrackId : null,
       autoAdvanceEnabled: snapshot.autoAdvanceEnabled,
     );
+  }
+
+  int? _elapsedSince(int? startedAtMs) {
+    if (startedAtMs == null) return null;
+    return DateTime.now().millisecondsSinceEpoch - startedAtMs;
   }
 
   List<CatalogTrackSummary> _queueFromSnapshot(List<CatalogTrackSummary> catalogTracks, QueueSessionSnapshot snapshot) {
@@ -417,6 +448,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       if (_metrics.isPlaying) {
         await widget.playbackBridge.pause();
       } else {
+        if (_lastStopAtMs != null) {
+          setState(() {
+            _stopRecoveryPlayStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+            _stopToPlayRecoveryMs = null;
+          });
+        }
         await widget.playbackBridge.play();
       }
     });
@@ -425,7 +462,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _stop() => _runOperation(PlayerOperation.playbackCommand, () async {
         await widget.playbackBridge.stop();
         if (!mounted) return;
-        setState(_clearNextPlaybackAttemptMetrics);
+        setState(() {
+          _lastStopAtMs = DateTime.now().millisecondsSinceEpoch;
+          _stopRecoveryPlayStartedAtMs = null;
+          _stopToPlayRecoveryMs = null;
+          _clearNextPlaybackAttemptMetrics();
+        });
       });
 
   Future<void> _retry() => _runOperation(PlayerOperation.playbackCommand, widget.playbackBridge.retry);
@@ -510,7 +552,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         } else {
           _prefetchMissCount += 1;
         }
-        _nextTapStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+        _nextTapStartedAtMs = autoStart ? DateTime.now().millisecondsSinceEpoch : null;
         _nextTapToAudioMs = null;
         _audioPreparedBeforeNext = false;
         _nextPreparedBeforePlay = false;
@@ -598,6 +640,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     nextPreparedBeforePlay: _nextPreparedBeforePlay,
                     controlsDisabled: _queueDisabled,
                     onToggle: _setPrefetchEnabled,
+                  ),
+                  const SizedBox(height: 12),
+                  _PerformanceBaselinePanel(
+                    metrics: _metrics,
+                    nextTapToAudioMs: _nextTapToAudioMs,
+                    prefetchHitCount: _prefetchHitCount,
+                    prefetchMissCount: _prefetchMissCount,
+                    stopToPlayRecoveryMs: _stopToPlayRecoveryMs,
+                    sessionRecoveryMs: _sessionRecoveryMs,
+                    audioPreparedBeforeNext: _audioPreparedBeforeNext,
+                    nextPreparedBeforePlay: _nextPreparedBeforePlay,
                   ),
                   const SizedBox(height: 16),
                   _QueueCard(
@@ -714,6 +767,74 @@ class _Artwork extends StatelessWidget {
   Widget build(BuildContext context) { final url = artworkUrl; return Container(width: size, height: size, clipBehavior: Clip.antiAlias, decoration: BoxDecoration(borderRadius: BorderRadius.circular(size > 60 ? 28 : 14), gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF7C5CFF), Color(0xFF14182A), Color(0xFF00D4FF)])), child: url == null || url.trim().isEmpty ? Icon(Icons.music_note_rounded, size: size * 0.4, color: Colors.white) : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.music_note_rounded, size: size * 0.4, color: Colors.white))); }
 }
 
+
+class _PerformanceBaselinePanel extends StatelessWidget {
+  const _PerformanceBaselinePanel({
+    required this.metrics,
+    required this.nextTapToAudioMs,
+    required this.prefetchHitCount,
+    required this.prefetchMissCount,
+    required this.stopToPlayRecoveryMs,
+    required this.sessionRecoveryMs,
+    required this.audioPreparedBeforeNext,
+    required this.nextPreparedBeforePlay,
+  });
+
+  final PlaybackMetrics metrics;
+  final int? nextTapToAudioMs;
+  final int prefetchHitCount;
+  final int prefetchMissCount;
+  final int? stopToPlayRecoveryMs;
+  final int? sessionRecoveryMs;
+  final bool audioPreparedBeforeNext;
+  final bool nextPreparedBeforePlay;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.speed, color: Color(0xFF8D7CFF)),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Performance Baseline', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      SizedBox(height: 3),
+                      Text('Developer snapshot before Phase 2B native audio prebuffering.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _HealthChip(label: 'tapToAudioMs', value: _formatMetric(metrics.tapToFirstAudioMs), good: metrics.tapToFirstAudioMs != null),
+                _HealthChip(label: 'nextTapToAudioMs', value: _formatMetric(nextTapToAudioMs), good: nextTapToAudioMs != null),
+                _HealthChip(label: 'prefetchHitCount', value: prefetchHitCount.toString(), good: prefetchHitCount > 0),
+                _HealthChip(label: 'prefetchMissCount', value: prefetchMissCount.toString(), good: prefetchMissCount == 0),
+                _HealthChip(label: 'stopToPlayRecoveryMs', value: _formatMetric(stopToPlayRecoveryMs), good: stopToPlayRecoveryMs != null),
+                _HealthChip(label: 'sessionRecoveryMs', value: _formatMetric(sessionRecoveryMs), good: sessionRecoveryMs != null),
+                _HealthChip(label: 'audioPreparedBeforeNext', value: audioPreparedBeforeNext ? 'true' : 'false', good: !audioPreparedBeforeNext),
+                _HealthChip(label: 'nextPreparedBeforePlay', value: nextPreparedBeforePlay ? 'true' : 'false', good: !nextPreparedBeforePlay),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Unavailable means the current session has not observed that flow yet; false prebuffer flags are expected until native preparation exists.',
+              style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+            ),
+          ],
+        ),
+      );
+}
 
 class _SmartPreloadCard extends StatelessWidget {
   const _SmartPreloadCard({required this.enabled, required this.prefetchedTrackId, required this.prefetchedTrackTitle, required this.prefetchInFlight, required this.manifestPrefetched, required this.audioPreparedBeforeNext, required this.lastPrefetchHit, required this.prefetchHitCount, required this.prefetchMissCount, required this.nextTapToAudioMs, required this.nextPreparedBeforePlay, required this.controlsDisabled, required this.onToggle});
