@@ -411,16 +411,16 @@ mod tests {
     #[test]
     fn dev_catalog_fixture_loads_real_playable_track() {
         let catalog = CatalogStore::from_dev_fixture();
-        assert_eq!(catalog.artists.len(), 3);
-        assert_eq!(catalog.tracks.len(), 3);
+        assert_eq!(catalog.artists.len(), 1);
+        assert_eq!(catalog.tracks.len(), 2);
 
         let track = catalog
-            .find_track("track-apple-bipbop-hls")
-            .expect("seed track exists");
-        let asset = track.primary_asset().expect("seed track has primary asset");
+            .find_track("track-local-song-3")
+            .expect("song 3 track exists");
+        let asset = track.primary_asset().expect("song 3 has primary asset");
 
-        assert_eq!(track.title, "Apple BipBop HLS Demo");
-        assert!(asset.manifest_url.ends_with("prog_index.m3u8"));
+        assert_eq!(track.title, "Song 3");
+        assert_eq!(asset.manifest_url, "http://192.168.1.7:8090/song3.mp3");
         assert_eq!(
             track.to_core_track().primary_asset().unwrap().manifest_url,
             asset.manifest_url
@@ -449,11 +449,11 @@ mod tests {
         let track = response
             .tracks
             .iter()
-            .find(|track| track.id == "track-apple-bipbop-hls")
-            .expect("seed track response exists");
+            .find(|track| track.id == "track-local-song-3")
+            .expect("song 3 track response exists");
 
-        assert_eq!(track.artist_name.as_deref(), Some("WaveZero Labs"));
-        assert_eq!(track.primary_asset.as_ref().unwrap().codec, "aac_lc");
+        assert_eq!(track.artist_name.as_deref(), Some("Local Lab"));
+        assert_eq!(track.primary_asset.as_ref().unwrap().codec, "mp3");
     }
 
     #[test]
