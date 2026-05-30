@@ -8,6 +8,19 @@ abstract class PlaybackBridge {
     required String url,
   });
 
+  Future<void> prepareNextTrack({
+    required String trackId,
+    required String title,
+    required String url,
+  });
+
+  Future<void> clearNextTrackPrebuffer();
+
+  Future<void> recordNextTrackPrebufferOutcome({
+    required String trackId,
+    required bool usedPreparedPath,
+  });
+
   Future<void> play();
 
   Future<void> pause();
@@ -40,6 +53,33 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
     return _invokeVoid('loadTrack', <String, Object?>{
       'title': title,
       'url': url,
+    });
+  }
+
+  @override
+  Future<void> prepareNextTrack({
+    required String trackId,
+    required String title,
+    required String url,
+  }) {
+    return _invokeVoid('prepareNextTrack', <String, Object?>{
+      'trackId': trackId,
+      'title': title,
+      'url': url,
+    });
+  }
+
+  @override
+  Future<void> clearNextTrackPrebuffer() => _invokeVoid('clearNextTrackPrebuffer');
+
+  @override
+  Future<void> recordNextTrackPrebufferOutcome({
+    required String trackId,
+    required bool usedPreparedPath,
+  }) {
+    return _invokeVoid('recordNextTrackPrebufferOutcome', <String, Object?>{
+      'trackId': trackId,
+      'usedPreparedPath': usedPreparedPath,
     });
   }
 
@@ -134,6 +174,52 @@ class MockPlaybackBridge implements PlaybackBridge {
       clearTapToIsPlayingMs: true,
       clearTapToPositionAdvanceMs: true,
       clearLastSeekToMs: true,
+    );
+  }
+
+  @override
+  Future<void> prepareNextTrack({
+    required String trackId,
+    required String title,
+    required String url,
+  }) async {
+    _metrics = _metrics.copyWith(
+      nativePrebufferEnabled: true,
+      nativePrebufferTrackId: trackId,
+      nativePrebufferTrackTitle: title,
+      nativePrebufferInFlight: false,
+      nativePrebufferReady: true,
+      nativePrebufferPrepareMs: 40,
+      nextPreparedBeforePlay: false,
+      lastEvent: 'native_prebuffer_ready',
+    );
+  }
+
+  @override
+  Future<void> clearNextTrackPrebuffer() async {
+    _metrics = _metrics.copyWith(
+      nativePrebufferEnabled: false,
+      clearNativePrebufferTrackId: true,
+      clearNativePrebufferTrackTitle: true,
+      nativePrebufferInFlight: false,
+      nativePrebufferReady: false,
+      clearNativePrebufferPrepareMs: true,
+      nextPreparedBeforePlay: false,
+      lastEvent: 'native_prebuffer_cleared',
+    );
+  }
+
+  @override
+  Future<void> recordNextTrackPrebufferOutcome({
+    required String trackId,
+    required bool usedPreparedPath,
+  }) async {
+    final matchedReady = _metrics.nativePrebufferTrackId == trackId && _metrics.nativePrebufferReady;
+    _metrics = _metrics.copyWith(
+      nativePrebufferHitCount: usedPreparedPath && matchedReady ? _metrics.nativePrebufferHitCount + 1 : _metrics.nativePrebufferHitCount,
+      nativePrebufferMissCount: usedPreparedPath && matchedReady ? _metrics.nativePrebufferMissCount : _metrics.nativePrebufferMissCount + 1,
+      nextPreparedBeforePlay: usedPreparedPath && matchedReady,
+      lastEvent: 'native_prebuffer_outcome',
     );
   }
 

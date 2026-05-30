@@ -67,7 +67,7 @@ Non-goals:
 
 ### Phase 2B — Native Dual-Player Prebuffer / True Audio Preloading
 
-Status: Planned
+Status: In progress — Phase 2B foundation has a safe secondary ExoPlayer that prepares the predicted next track and reports native readiness. The primary Media3 player remains canonical; prepared-player handoff/swap is explicitly deferred to Phase 2B.1, so Next still records a safe fallback miss until that handoff exists.
 
 Goal:
 

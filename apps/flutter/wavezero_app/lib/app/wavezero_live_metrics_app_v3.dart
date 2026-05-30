@@ -219,6 +219,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _stopRecoveryPlayStartedAtMs = null;
       _lastStopAtMs = null;
     }
+    _audioPreparedBeforeNext = _prefetchEnabled &&
+        _prefetchedTrackId != null &&
+        metrics.nativePrebufferTrackId == _prefetchedTrackId &&
+        metrics.nativePrebufferReady;
+    _nextPreparedBeforePlay = metrics.nextPreparedBeforePlay;
   }
 
   Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {
@@ -354,9 +359,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
       setState(() {
         _nextTapToAudioMs = null;
-        // Phase 2A only prefetches manifests. Keep this false until native audio
-        // preparation exists and can set _audioPreparedBeforeNext truthfully.
-        _nextPreparedBeforePlay = _audioPreparedBeforeNext;
+        // Phase 2B prepares native audio with a secondary ExoPlayer, but this PR
+        // keeps primary playback canonical. The prepared player is not handed off
+        // yet, so Next remains on the safe fallback path.
+        _nextPreparedBeforePlay = false;
       });
     }
     unawaited(_updatePredictivePreloadCandidate());
@@ -423,6 +429,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _manifestPrefetched = true;
         _audioPreparedBeforeNext = false;
       });
+      await widget.playbackBridge.prepareNextTrack(
+        trackId: manifest.trackId,
+        title: manifest.title,
+        url: manifest.streamUrl,
+      );
     } catch (error) {
       if (!mounted || generation != _prefetchGeneration) return;
       setState(() {
@@ -554,7 +565,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         }
         _nextTapStartedAtMs = autoStart ? DateTime.now().millisecondsSinceEpoch : null;
         _nextTapToAudioMs = null;
-        _audioPreparedBeforeNext = false;
+        _audioPreparedBeforeNext = _metrics.nativePrebufferTrackId == track.trackId && _metrics.nativePrebufferReady;
         _nextPreparedBeforePlay = false;
       });
     }
@@ -563,6 +574,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _queueStatus = status;
       _sessionStatus = 'Session saved.';
     });
+    if (source == QueueAdvanceSource.next) {
+      await widget.playbackBridge.recordNextTrackPrebufferOutcome(
+        trackId: track.trackId,
+        usedPreparedPath: false,
+      );
+    }
     await _loadCatalogTrack(trackId: track.trackId, autoPlay: autoStart, operation: operation, status: status, prefetchedManifest: prefetchedManifest);
   }
 
@@ -627,6 +644,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   _SessionStrip(status: _sessionStatus),
                   const SizedBox(height: 12),
                   _SmartPreloadCard(
+                    metrics: _metrics,
                     enabled: _prefetchEnabled,
                     prefetchedTrackId: _prefetchedTrackId,
                     prefetchedTrackTitle: _prefetchedTrackTitle,
@@ -837,7 +855,8 @@ class _PerformanceBaselinePanel extends StatelessWidget {
 }
 
 class _SmartPreloadCard extends StatelessWidget {
-  const _SmartPreloadCard({required this.enabled, required this.prefetchedTrackId, required this.prefetchedTrackTitle, required this.prefetchInFlight, required this.manifestPrefetched, required this.audioPreparedBeforeNext, required this.lastPrefetchHit, required this.prefetchHitCount, required this.prefetchMissCount, required this.nextTapToAudioMs, required this.nextPreparedBeforePlay, required this.controlsDisabled, required this.onToggle});
+  const _SmartPreloadCard({required this.metrics, required this.enabled, required this.prefetchedTrackId, required this.prefetchedTrackTitle, required this.prefetchInFlight, required this.manifestPrefetched, required this.audioPreparedBeforeNext, required this.lastPrefetchHit, required this.prefetchHitCount, required this.prefetchMissCount, required this.nextTapToAudioMs, required this.nextPreparedBeforePlay, required this.controlsDisabled, required this.onToggle});
+  final PlaybackMetrics metrics;
   final bool enabled;
   final String? prefetchedTrackId;
   final String? prefetchedTrackTitle;
@@ -855,7 +874,7 @@ class _SmartPreloadCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final result = lastPrefetchHit == null ? 'none' : lastPrefetchHit! ? 'hit' : 'miss';
     final title = prefetchedTrackTitle ?? 'No track prefetched';
-    return _Panel(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Icon(Icons.auto_awesome, color: Color(0xFF8D7CFF)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Smart Preload', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), SizedBox(height: 3), Text('Phase 2A manifest prefetch only; true audio prebuffering is Phase 2B.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12))])), Switch(value: enabled, onChanged: controlsDisabled ? null : onToggle)]), const SizedBox(height: 12), Wrap(spacing: 10, runSpacing: 10, children: [_HealthChip(label: 'prefetchEnabled', value: enabled ? 'on' : 'off', good: enabled), _HealthChip(label: 'prefetchInFlight', value: prefetchInFlight ? 'true' : 'false', good: !prefetchInFlight), _HealthChip(label: 'lastPrefetchResult', value: result, good: lastPrefetchHit == true), _HealthChip(label: 'manifestPrefetched', value: manifestPrefetched ? 'true' : 'false', good: manifestPrefetched), _HealthChip(label: 'audioPreparedBeforeNext', value: audioPreparedBeforeNext ? 'true' : 'false', good: audioPreparedBeforeNext), _HealthChip(label: 'nextTapToAudioMs', value: _formatMetric(nextTapToAudioMs), good: nextTapToAudioMs != null), _HealthChip(label: 'nextPreparedBeforePlay', value: nextPreparedBeforePlay ? 'true' : 'false', good: nextPreparedBeforePlay)]), const SizedBox(height: 12), Text('prefetchedTrackTitle: $title', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12)), const SizedBox(height: 4), Text('prefetchedTrackId: ${prefetchedTrackId ?? 'none'} • prefetchHitCount: $prefetchHitCount • prefetchMissCount: $prefetchMissCount', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))]));
+    return _Panel(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Icon(Icons.auto_awesome, color: Color(0xFF8D7CFF)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Smart Preload', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)), SizedBox(height: 3), Text('Phase 2A manifests + Phase 2B native audio prebuffer foundation.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 12))])), Switch(value: enabled, onChanged: controlsDisabled ? null : onToggle)]), const SizedBox(height: 12), Wrap(spacing: 10, runSpacing: 10, children: [_HealthChip(label: 'prefetchEnabled', value: enabled ? 'on' : 'off', good: enabled), _HealthChip(label: 'prefetchInFlight', value: prefetchInFlight ? 'true' : 'false', good: !prefetchInFlight), _HealthChip(label: 'lastPrefetchResult', value: result, good: lastPrefetchHit == true), _HealthChip(label: 'manifestPrefetched', value: manifestPrefetched ? 'true' : 'false', good: manifestPrefetched), _HealthChip(label: 'audioPreparedBeforeNext', value: audioPreparedBeforeNext ? 'true' : 'false', good: audioPreparedBeforeNext), _HealthChip(label: 'nextTapToAudioMs', value: _formatMetric(nextTapToAudioMs), good: nextTapToAudioMs != null), _HealthChip(label: 'nextPreparedBeforePlay', value: nextPreparedBeforePlay ? 'true' : 'false', good: nextPreparedBeforePlay), _HealthChip(label: 'nativePrebufferInFlight', value: metrics.nativePrebufferInFlight ? 'true' : 'false', good: !metrics.nativePrebufferInFlight), _HealthChip(label: 'nativePrebufferReady', value: metrics.nativePrebufferReady ? 'true' : 'false', good: metrics.nativePrebufferReady), _HealthChip(label: 'nativePrebufferPrepareMs', value: _formatMetric(metrics.nativePrebufferPrepareMs), good: metrics.nativePrebufferPrepareMs != null)]), const SizedBox(height: 12), Text('prefetchedTrackTitle: $title', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12)), const SizedBox(height: 4), Text('prefetchedTrackId: ${prefetchedTrackId ?? 'none'} • prefetchHitCount: $prefetchHitCount • prefetchMissCount: $prefetchMissCount', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 4), Text('nativePrebufferTrackId: ${metrics.nativePrebufferTrackId ?? 'none'} • nativePrebufferHitCount: ${metrics.nativePrebufferHitCount} • nativePrebufferMissCount: ${metrics.nativePrebufferMissCount}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))]));
   }
 }
 

@@ -34,6 +34,15 @@ class PlaybackMetricsMapTest {
             seekCount = 2,
             seekBufferMs = 35L,
             lastSeekToMs = 12_000L,
+            nativePrebufferEnabled = true,
+            nativePrebufferTrackId = "track-3",
+            nativePrebufferTrackTitle = "Song 3",
+            nativePrebufferInFlight = false,
+            nativePrebufferReady = true,
+            nativePrebufferHitCount = 0,
+            nativePrebufferMissCount = 1,
+            nativePrebufferPrepareMs = 123L,
+            nextPreparedBeforePlay = false,
             lastEvent = "playing",
             trackTitle = "Title",
             trackUrl = "https://example.test/stream.m3u8",
@@ -65,6 +74,15 @@ class PlaybackMetricsMapTest {
         assertEquals(2, map["seekCount"])
         assertEquals(35L, map["seekBufferMs"])
         assertEquals(12_000L, map["lastSeekToMs"])
+        assertEquals(true, map["nativePrebufferEnabled"])
+        assertEquals("track-3", map["nativePrebufferTrackId"])
+        assertEquals("Song 3", map["nativePrebufferTrackTitle"])
+        assertEquals(false, map["nativePrebufferInFlight"])
+        assertEquals(true, map["nativePrebufferReady"])
+        assertEquals(0, map["nativePrebufferHitCount"])
+        assertEquals(1, map["nativePrebufferMissCount"])
+        assertEquals(123L, map["nativePrebufferPrepareMs"])
+        assertEquals(false, map["nextPreparedBeforePlay"])
         assertEquals("playing", map["lastEvent"])
         assertEquals("Title", map["trackTitle"])
         assertEquals("https://example.test/stream.m3u8", map["trackUrl"])
@@ -208,5 +226,32 @@ class PlaybackMetricsMapTest {
         assertEquals(0L, seekEnded.rebufferMs)
         assertEquals(0L, seekEnded.totalBufferMs)
         assertEquals(300L, seekEnded.seekBufferMs)
+    }
+}
+
+
+class PlaybackMetricsNativePrebufferTest {
+    @Test
+    fun nativePrebufferMetricsTrackReadinessAndSafeFallbackOutcome() {
+        var nowMs = 1_000L
+        val tracker = PlaybackMetricsTracker(nowMs = { nowMs })
+
+        val started = tracker.markNativePrebufferStarted("track-3", "Song 3")
+        assertTrue(started.nativePrebufferEnabled)
+        assertEquals("track-3", started.nativePrebufferTrackId)
+        assertEquals("Song 3", started.nativePrebufferTrackTitle)
+        assertTrue(started.nativePrebufferInFlight)
+        assertFalse(started.nativePrebufferReady)
+
+        nowMs += 240L
+        val ready = tracker.markNativePrebufferReady("track-3", 240L)
+        assertFalse(ready.nativePrebufferInFlight)
+        assertTrue(ready.nativePrebufferReady)
+        assertEquals(240L, ready.nativePrebufferPrepareMs)
+
+        val fallback = tracker.markNativePrebufferOutcome("track-3", usedPreparedPath = false)
+        assertEquals(0, fallback.nativePrebufferHitCount)
+        assertEquals(1, fallback.nativePrebufferMissCount)
+        assertFalse(fallback.nextPreparedBeforePlay)
     }
 }

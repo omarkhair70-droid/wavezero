@@ -41,6 +41,10 @@ class AudioPlayerManager(
     private var currentHlsUrl: String = hlsUrl
     private var playCommandInFlight = false
     private var softStopped = false
+    private var nativePrebufferTrackId: String? = null
+    private var nativePrebufferTitle: String? = null
+    private var nativePrebufferUrl: String? = null
+    private var nativePrebufferStartedAtMs: Long? = null
 
     private val appContext = context.applicationContext
 
@@ -53,6 +57,18 @@ class AudioPlayerManager(
             /* handleAudioFocus = */ true,
         )
         exoPlayer.setHandleAudioBecomingNoisy(true)
+    }
+
+    private val prebufferPlayer: ExoPlayer = ExoPlayer.Builder(appContext).build().also { exoPlayer ->
+        exoPlayer.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(),
+            /* handleAudioFocus = */ false,
+        )
+        exoPlayer.playWhenReady = false
+        exoPlayer.volume = 0f
     }
 
     val mediaSession: MediaSession? = if (enableMediaSession) {
@@ -154,6 +170,25 @@ class AudioPlayerManager(
         }
     }
 
+    private val prebufferListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            val trackId = nativePrebufferTrackId ?: return
+            when (playbackState) {
+                Player.STATE_READY -> {
+                    val startedAt = nativePrebufferStartedAtMs ?: SystemClock.elapsedRealtime()
+                    publish(metricsTracker.markNativePrebufferReady(trackId, SystemClock.elapsedRealtime() - startedAt))
+                }
+
+                Player.STATE_ENDED, Player.STATE_IDLE -> Unit
+                Player.STATE_BUFFERING -> Unit
+            }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            clearNativePrebuffer()
+        }
+    }
+
     private val analyticsListener = object : AnalyticsListener {
         override fun onLoadCompleted(
             eventTime: AnalyticsListener.EventTime,
@@ -173,6 +208,7 @@ class AudioPlayerManager(
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         player.addListener(playerListener)
         player.addAnalyticsListener(analyticsListener)
+        prebufferPlayer.addListener(prebufferListener)
     }
 
     fun markScreenReady() {
@@ -185,6 +221,7 @@ class AudioPlayerManager(
         playCommandInFlight = false
         softStopped = false
         positionJob?.cancel()
+        clearNativePrebufferIfCurrent(hlsUrl)
         player.stop()
         player.clearMediaItems()
         player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
@@ -194,6 +231,42 @@ class AudioPlayerManager(
             trackTitle = currentTrackTitle,
         )
         player.prepare()
+    }
+
+    fun prepareNextTrack(trackId: String, title: String, hlsUrl: String) {
+        val safeTrackId = trackId.trim()
+        val safeTitle = title.ifBlank { "Up next" }
+        if (safeTrackId.isBlank() || hlsUrl.isBlank()) {
+            clearNativePrebuffer()
+            return
+        }
+        if (
+            nativePrebufferTrackId == safeTrackId &&
+            nativePrebufferUrl == hlsUrl &&
+            (prebufferPlayer.playbackState == Player.STATE_BUFFERING || prebufferPlayer.playbackState == Player.STATE_READY)
+        ) {
+            return
+        }
+
+        nativePrebufferTrackId = safeTrackId
+        nativePrebufferTitle = safeTitle
+        nativePrebufferUrl = hlsUrl
+        nativePrebufferStartedAtMs = SystemClock.elapsedRealtime()
+        prebufferPlayer.playWhenReady = false
+        prebufferPlayer.stop()
+        prebufferPlayer.clearMediaItems()
+        prebufferPlayer.setMediaItem(mediaItemFor(safeTitle, hlsUrl))
+        publish(metricsTracker.markNativePrebufferStarted(safeTrackId, safeTitle))
+        prebufferPlayer.prepare()
+    }
+
+    fun clearNextTrackPrebuffer() {
+        clearNativePrebuffer()
+    }
+
+    fun recordNextTrackPrebufferOutcome(trackId: String, usedPreparedPath: Boolean) {
+        if (trackId.isBlank()) return
+        publish(metricsTracker.markNativePrebufferOutcome(trackId, usedPreparedPath))
     }
 
     fun play() {
@@ -259,6 +332,7 @@ class AudioPlayerManager(
 
     fun retry() {
         softStopped = false
+        clearNativePrebufferIfCurrent(currentHlsUrl)
         player.stop()
         player.clearMediaItems()
         player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
@@ -300,9 +374,26 @@ class AudioPlayerManager(
         positionJob?.cancel()
         player.removeListener(playerListener)
         player.removeAnalyticsListener(analyticsListener)
+        prebufferPlayer.removeListener(prebufferListener)
         mediaSession?.release()
         player.release()
+        prebufferPlayer.release()
         managerJob.cancel()
+    }
+
+    private fun clearNativePrebufferIfCurrent(hlsUrl: String) {
+        if (nativePrebufferUrl == hlsUrl) clearNativePrebuffer()
+    }
+
+    private fun clearNativePrebuffer() {
+        nativePrebufferTrackId = null
+        nativePrebufferTitle = null
+        nativePrebufferUrl = null
+        nativePrebufferStartedAtMs = null
+        prebufferPlayer.playWhenReady = false
+        prebufferPlayer.stop()
+        prebufferPlayer.clearMediaItems()
+        publish(metricsTracker.markNativePrebufferCleared())
     }
 
     private fun ensureCurrentMediaItemLoaded() {
