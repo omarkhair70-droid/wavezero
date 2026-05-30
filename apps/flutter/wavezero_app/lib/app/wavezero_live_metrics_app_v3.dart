@@ -646,7 +646,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _manifest = manifest;
       _selectedTrackId = manifest.trackId;
       _queueCurrentTrackId = manifest.trackId;
-      _lastAutoAdvanceTrackId = manifest.trackId;
       _queueStatus = status;
       _prefetchedTrackId = null;
       _prefetchedTrackTitle = null;
