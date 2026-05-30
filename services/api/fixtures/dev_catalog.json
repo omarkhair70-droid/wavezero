@@ -9,6 +9,11 @@
       "id": "artist-demo-signal",
       "name": "Demo Signal",
       "image_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f"
+    },
+    {
+      "id": "artist-local-lab",
+      "name": "Local Lab",
+      "image_url": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f"
     }
   ],
   "tracks": [
@@ -44,6 +49,24 @@
           "codec": "aac_lc",
           "bitrate_kbps": 192,
           "segment_count": 53,
+          "is_primary": true
+        }
+      ]
+    },
+    {
+      "id": "track-local-real-song",
+      "artist_id": "artist-local-lab",
+      "title": "Local Real Song",
+      "duration_ms": 189000,
+      "artwork_url": "https://images.unsplash.com/photo-1516280440614-37939bbacd81",
+      "assets": [
+        {
+          "id": "asset-local-real-song-mp3",
+          "track_id": "track-local-real-song",
+          "manifest_url": "http://192.168.1.7:8090/song.mp3",
+          "codec": "mp3",
+          "bitrate_kbps": 128,
+          "segment_count": 1,
           "is_primary": true
         }
       ]
