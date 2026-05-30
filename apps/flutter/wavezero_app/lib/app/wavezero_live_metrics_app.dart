@@ -163,7 +163,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       return;
     }
 
-    final currentTrackId = _queueCurrentTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
+    final currentTrackId = _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
     if (currentTrackId == null || _lastAutoAdvanceTrackId == currentTrackId) return;
 
     _lastAutoAdvanceTrackId = currentTrackId;
