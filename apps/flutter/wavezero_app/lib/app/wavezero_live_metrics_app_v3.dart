@@ -338,6 +338,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _loadManifestAndNativeTrack(String trackId, {required CatalogClient client, bool autoPlay = false, String? status, CatalogTrackManifest? prefetchedManifest}) async {
     if (!mounted) return;
+    await _clearNativeNextPrebuffer();
+    if (!mounted) return;
     setState(() {
       _catalogStatus = 'Loading catalog manifest...';
       _selectedTrackId = trackId;
@@ -371,26 +373,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _nextPreparedBeforePlay = false;
   }
 
-  Future<void> _clearNativeNextPrebuffer() async {
+  void _clearFlutterPrebufferState({bool invalidateInFlight = true}) {
+    if (invalidateInFlight) _prefetchGeneration++;
+    _prefetchedTrackId = null;
+    _prefetchedTrackTitle = null;
+    _prefetchedManifest = null;
+    _prefetchInFlight = false;
+    _manifestPrefetched = false;
+    _audioPreparedBeforeNext = false;
+    _nextPreparedBeforePlay = false;
+  }
+
+  Future<void> _clearNativeNextPrebuffer({bool clearFlutterState = true}) async {
     await widget.playbackBridge.clearNextTrackPrebuffer();
-    if (!mounted) return;
-    setState(() {
-      _audioPreparedBeforeNext = false;
-      _nextPreparedBeforePlay = false;
-    });
+    if (!mounted || !clearFlutterState) return;
+    setState(() => _clearFlutterPrebufferState());
   }
 
   void _setPrefetchEnabled(bool value) {
     setState(() {
       _prefetchEnabled = value;
-      if (!value) {
-        _prefetchedTrackId = null;
-        _prefetchedTrackTitle = null;
-        _prefetchedManifest = null;
-        _prefetchInFlight = false;
-        _manifestPrefetched = false;
-        _audioPreparedBeforeNext = false;
-      }
+      if (!value) _clearFlutterPrebufferState();
       _queueStatus = value ? 'Smart preload enabled.' : 'Smart preload disabled.';
     });
     if (value) {
@@ -404,21 +407,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final candidate = _prefetchEnabled ? _nextQueueTrack : null;
     if (candidate == null) {
       if (!mounted) return;
-      setState(() {
-        _prefetchedTrackId = null;
-        _prefetchedTrackTitle = null;
-        _prefetchedManifest = null;
-        _prefetchInFlight = false;
-        _manifestPrefetched = false;
-        _audioPreparedBeforeNext = false;
-      });
-      unawaited(_clearNativeNextPrebuffer());
+      await _clearNativeNextPrebuffer();
       return;
     }
 
-    if (_prefetchedTrackId == candidate.trackId && (_prefetchedManifest != null || _prefetchInFlight)) return;
+    final nativeCandidateId = _metrics.nativePrebufferTrackId;
+    final sameFlutterCandidate = _prefetchedTrackId == candidate.trackId;
+    final sameNativeCandidate = nativeCandidateId == candidate.trackId;
+    if (sameFlutterCandidate && (_prefetchInFlight || (_prefetchedManifest != null && sameNativeCandidate))) return;
 
-    final previousNativeCandidateId = _prefetchedTrackId;
+    final previousNativeCandidateId = nativeCandidateId ?? _prefetchedTrackId;
     if (previousNativeCandidateId != null && previousNativeCandidateId != candidate.trackId) {
       await _clearNativeNextPrebuffer();
       if (!mounted || !_prefetchEnabled || _nextQueueTrack?.trackId != candidate.trackId) return;
@@ -471,6 +469,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _loadManualTrack() {
     return _runOperation(PlayerOperation.loadingManualTrack, () async {
+      await _clearNativeNextPrebuffer();
       final title = _titleController.text.trim().isEmpty ? waveZeroTestTrack.title : _titleController.text.trim();
       await widget.playbackBridge.loadTrack(title: title, url: _urlController.text.trim());
       if (mounted) setState(() => _catalogStatus = 'Manual track loaded.');
@@ -501,10 +500,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _stopRecoveryPlayStartedAtMs = null;
           _stopToPlayRecoveryMs = null;
           _clearNextPlaybackAttemptMetrics();
+          _clearFlutterPrebufferState();
         });
       });
 
-  Future<void> _retry() => _runOperation(PlayerOperation.playbackCommand, widget.playbackBridge.retry);
+  Future<void> _retry() => _runOperation(PlayerOperation.playbackCommand, () async {
+        await widget.playbackBridge.retry();
+        if (!mounted) return;
+        setState(() => _clearFlutterPrebufferState());
+      });
   Future<void> _seekTo(double positionMs) => _runOperation(PlayerOperation.seeking, () => widget.playbackBridge.seekTo(positionMs.round()));
 
   Future<void> _copyMetrics() {
