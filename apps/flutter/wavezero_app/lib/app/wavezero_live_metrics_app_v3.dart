@@ -359,9 +359,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
       setState(() {
         _nextTapToAudioMs = null;
-        // Phase 2B prepares native audio with a secondary ExoPlayer, but this PR
-        // keeps primary playback canonical. The prepared player is not handed off
-        // yet, so Next remains on the safe fallback path.
         _nextPreparedBeforePlay = false;
       });
     }
@@ -601,10 +598,45 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session saved.';
     });
     if (source == QueueAdvanceSource.next) {
-      await widget.playbackBridge.recordNextTrackPrebufferOutcome(
-        trackId: track.trackId,
-        usedPreparedPath: false,
-      );
+      final preparedManifest = prefetchedManifest;
+      final canAttemptPreparedHandoff = autoStart &&
+          _prefetchEnabled &&
+          preparedManifest != null &&
+          _metrics.nativePrebufferReady &&
+          _metrics.nativePrebufferTrackId == track.trackId;
+      if (canAttemptPreparedHandoff) {
+        final usedPreparedPath = await widget.playbackBridge.playPreparedNextTrackIfReady(
+          trackId: preparedManifest.trackId,
+          title: preparedManifest.title,
+          url: preparedManifest.streamUrl,
+        );
+        if (usedPreparedPath) {
+          if (!mounted) return;
+          _titleController.text = preparedManifest.title;
+          _urlController.text = preparedManifest.streamUrl;
+          setState(() {
+            _manifest = preparedManifest;
+            _selectedTrackId = preparedManifest.trackId;
+            _queueCurrentTrackId = preparedManifest.trackId;
+            _queueStatus = 'Prepared Next handoff: ${preparedManifest.title}.';
+            _prefetchedTrackId = null;
+            _prefetchedTrackTitle = null;
+            _prefetchedManifest = null;
+            _manifestPrefetched = false;
+            _audioPreparedBeforeNext = false;
+            _nextPreparedBeforePlay = true;
+          });
+          await _refreshMetrics(allowAutoAdvance: false);
+          unawaited(_saveSession());
+          if (_nextQueueTrack != null) unawaited(_updatePredictivePreloadCandidate());
+          return;
+        }
+      } else {
+        await widget.playbackBridge.recordNextTrackPrebufferOutcome(
+          trackId: track.trackId,
+          usedPreparedPath: false,
+        );
+      }
     }
     await _loadCatalogTrack(trackId: track.trackId, autoPlay: autoStart, operation: operation, status: status, prefetchedManifest: prefetchedManifest);
   }

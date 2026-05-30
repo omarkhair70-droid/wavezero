@@ -35,6 +35,9 @@ data class PlaybackMetrics(
     val nativePrebufferHitCount: Int = 0,
     val nativePrebufferMissCount: Int = 0,
     val nativePrebufferPrepareMs: Long? = null,
+    val nativePrebufferHandoffAttempted: Int = 0,
+    val nativePrebufferHandoffSucceeded: Int = 0,
+    val nativePrebufferHandoffFallback: Int = 0,
     val nextPreparedBeforePlay: Boolean = false,
     val lastEvent: String = "initialized",
     val trackTitle: String = DemoTrack.title,
@@ -73,6 +76,9 @@ data class PlaybackMetrics(
         "nativePrebufferHitCount" to nativePrebufferHitCount,
         "nativePrebufferMissCount" to nativePrebufferMissCount,
         "nativePrebufferPrepareMs" to nativePrebufferPrepareMs,
+        "nativePrebufferHandoffAttempted" to nativePrebufferHandoffAttempted,
+        "nativePrebufferHandoffSucceeded" to nativePrebufferHandoffSucceeded,
+        "nativePrebufferHandoffFallback" to nativePrebufferHandoffFallback,
         "nextPreparedBeforePlay" to nextPreparedBeforePlay,
         "lastEvent" to lastEvent,
         "trackTitle" to trackTitle,
@@ -383,7 +389,6 @@ class PlaybackMetricsTracker(
             nativePrebufferInFlight = true,
             nativePrebufferReady = false,
             nativePrebufferPrepareMs = null,
-            nextPreparedBeforePlay = false,
         )
     }
 
@@ -399,7 +404,7 @@ class PlaybackMetricsTracker(
         }
     }
 
-    fun markNativePrebufferCleared(): PlaybackMetrics = update("native_prebuffer_cleared") {
+    fun markNativePrebufferCleared(nextPreparedBeforePlay: Boolean = false): PlaybackMetrics = update("native_prebuffer_cleared") {
         copy(
             nativePrebufferEnabled = false,
             nativePrebufferTrackId = null,
@@ -407,17 +412,40 @@ class PlaybackMetricsTracker(
             nativePrebufferInFlight = false,
             nativePrebufferReady = false,
             nativePrebufferPrepareMs = null,
-            nextPreparedBeforePlay = false,
+            nextPreparedBeforePlay = nextPreparedBeforePlay,
         )
     }
 
     fun markNativePrebufferOutcome(trackId: String, usedPreparedPath: Boolean): PlaybackMetrics {
         val matchedReady = metrics.nativePrebufferTrackId == trackId && metrics.nativePrebufferReady
+        val succeeded = usedPreparedPath && matchedReady
         return update("native_prebuffer_outcome") {
             copy(
-                nativePrebufferHitCount = if (usedPreparedPath && matchedReady) nativePrebufferHitCount + 1 else nativePrebufferHitCount,
-                nativePrebufferMissCount = if (usedPreparedPath && matchedReady) nativePrebufferMissCount else nativePrebufferMissCount + 1,
-                nextPreparedBeforePlay = usedPreparedPath && matchedReady,
+                nativePrebufferHitCount = if (succeeded) nativePrebufferHitCount + 1 else nativePrebufferHitCount,
+                nativePrebufferMissCount = if (succeeded) nativePrebufferMissCount else nativePrebufferMissCount + 1,
+                nativePrebufferHandoffFallback = if (succeeded) nativePrebufferHandoffFallback else nativePrebufferHandoffFallback + 1,
+                nextPreparedBeforePlay = succeeded,
+            )
+        }
+    }
+
+    fun markNativePrebufferHandoffAttempted(): PlaybackMetrics = update("native_prebuffer_handoff_attempted") {
+        copy(nativePrebufferHandoffAttempted = nativePrebufferHandoffAttempted + 1)
+    }
+
+    fun markNativePrebufferHandoffSucceeded(trackId: String): PlaybackMetrics {
+        val matchedReady = metrics.nativePrebufferTrackId == trackId && metrics.nativePrebufferReady
+        return update("native_prebuffer_handoff_succeeded") {
+            copy(
+                nativePrebufferEnabled = false,
+                nativePrebufferTrackId = null,
+                nativePrebufferTrackTitle = null,
+                nativePrebufferInFlight = false,
+                nativePrebufferReady = false,
+                nativePrebufferPrepareMs = null,
+                nativePrebufferHitCount = if (matchedReady) nativePrebufferHitCount + 1 else nativePrebufferHitCount,
+                nativePrebufferHandoffSucceeded = if (matchedReady) nativePrebufferHandoffSucceeded + 1 else nativePrebufferHandoffSucceeded,
+                nextPreparedBeforePlay = matchedReady,
             )
         }
     }
