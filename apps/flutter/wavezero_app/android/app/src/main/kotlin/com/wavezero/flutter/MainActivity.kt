@@ -16,6 +16,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
+private const val DEVICE_MUSIC_PERMISSION_PREFS = "wavezero.device_music"
+private const val DEVICE_MUSIC_PERMISSION_REQUESTED_KEY = "wavezero.device_music_permission_requested"
+
 class MainActivity : FlutterActivity() {
     private var appStartedAtMs: Long = 0L
     private var audioPlayerManager: AudioPlayerManager? = null
@@ -74,6 +77,10 @@ class MainActivity : FlutterActivity() {
             return
         }
         pendingDeviceMusicPermissionResult = result
+        getSharedPreferences(DEVICE_MUSIC_PERMISSION_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(DEVICE_MUSIC_PERMISSION_REQUESTED_KEY, true)
+            .apply()
         requestPermissions(arrayOf(deviceMusicPermissionName()), REQUEST_DEVICE_MUSIC_PERMISSION)
     }
 
@@ -85,9 +92,11 @@ class MainActivity : FlutterActivity() {
     private fun deviceMusicPermissionStatusMap(status: String? = null, message: String? = null): Map<String, Any?> {
         val permission = deviceMusicPermissionName()
         val granted = hasDeviceMusicPermission()
+        val wasRequested = getSharedPreferences(DEVICE_MUSIC_PERMISSION_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(DEVICE_MUSIC_PERMISSION_REQUESTED_KEY, false)
         val resolvedStatus = status ?: if (granted) {
             "granted"
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !shouldShowRequestPermissionRationale(permission)) {
+        } else if (wasRequested && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !shouldShowRequestPermissionRationale(permission)) {
             "denied_permanently"
         } else {
             "denied"
@@ -313,9 +322,11 @@ class PlaybackMethodChannelHandler(
     private fun deviceMusicPermissionStatusMap(): Map<String, Any?> {
         val permission = deviceMusicPermissionName()
         val granted = hasDeviceMusicPermission()
+        val wasRequested = context.getSharedPreferences(DEVICE_MUSIC_PERMISSION_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(DEVICE_MUSIC_PERMISSION_REQUESTED_KEY, false)
         val status = if (granted) {
             "granted"
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !activity.shouldShowRequestPermissionRationale(permission)) {
+        } else if (wasRequested && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !activity.shouldShowRequestPermissionRationale(permission)) {
             "denied_permanently"
         } else {
             "denied"
@@ -396,7 +407,7 @@ class PlaybackMethodChannelHandler(
         }
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?"
         val selectionArgs = arrayOf(MIN_DEVICE_AUDIO_DURATION_MS.toString())
-        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC, ${MediaStore.Audio.Media.TITLE} ASC LIMIT $DEVICE_AUDIO_SCAN_LIMIT"
+        val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC, ${MediaStore.Audio.Media.TITLE} ASC"
         val tracks = mutableListOf<Map<String, Any?>>()
         context.contentResolver.query(collection, projection.toTypedArray(), selection, selectionArgs, sortOrder)?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
