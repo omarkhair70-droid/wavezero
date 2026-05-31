@@ -32,7 +32,7 @@ class CatalogClient {
   }
 
   Future<ContentStatus> fetchContentStatus() async {
-    final json = await _getJsonObject('$baseUrl/content/status');
+    final json = await _getJsonObject('$baseUrl/api/content/status');
     return ContentStatus.fromJson(json);
   }
 

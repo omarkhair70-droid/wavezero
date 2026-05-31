@@ -131,6 +131,7 @@ Supported formats:
 - `.m4a`
 - `.wav`
 - `.aac`
+- `.flac`
 
 If a supported file is present in the local audio folder, the API will add a catalog track such as `track-local-song6` with a generated title like `Song 6` and a manifest URL under `http://<ip>:8090/<filename>`. This is a dev-only local catalog discovery feature, not a production upload path.
 If auto-detection fails, run `.\scripts\wavezero-local-ip.ps1` to verify your local address or use a fixed `WAVEZERO_AUDIO_BASE_URL` during API startup as a fallback.
@@ -1844,12 +1845,90 @@ WaveZero #84 does not add auth, login, cloud sync, Supabase, a database, hosted 
 
 ## WaveZero #83 — Production Content Server Foundation
 
-WaveZero #83 established the production content server foundation that #84 now builds on. Keep this behavior intact when resolving release-config conflicts:
+WaveZero now has explicit Rust API content modes so the local dev catalog can remain useful without being confused with a production catalog.
 
-- The Flutter catalog client can fetch catalog indexes, track manifests, and content server status.
-- Catalog responses may include a content mode so the Flutter app can label demo, production-ready, or unavailable catalog states without exposing raw endpoint details to consumers.
-- Content status is surfaced as friendly consumer labels such as `Catalog ready`, `Demo catalog`, or `Catalog unavailable` while developer-only Engine diagnostics may show deeper content/server details.
-- Beta and production-style builds should use explicit `WAVEZERO_API_BASE_URL` and content mode labels rather than local laptop defaults.
-- Production content server behavior remains metadata-first: catalog tracks require rights metadata, dev-only tracks are not production-safe, and no upload/auth/payment/content-moderation system is implied by this foundation.
+### Content modes
 
-#83 and #84 are intentionally complementary: #83 defines safe content server status and catalog metadata plumbing, while #84 defines app environment boundaries, consumer-safe copy, and beta release checklist behavior.
+- `dev` is the default and preserves the bundled dev fixture catalog plus dev-only local folder discovery.
+- `demo` expects `WAVEZERO_CATALOG_PATH` and does not auto-scan local audio folders.
+- `production` expects `WAVEZERO_CATALOG_PATH`, filters unsafe tracks, and never silently exposes local dev files.
+
+### API/content environment variables
+
+- `WAVEZERO_CONTENT_MODE=dev|demo|production`
+- `WAVEZERO_CATALOG_PATH=`
+- `WAVEZERO_CONTENT_BASE_URL=`
+- `WAVEZERO_AUDIO_BASE_URL=`
+- `WAVEZERO_ARTWORK_BASE_URL=`
+- `WAVEZERO_LOCAL_AUDIO_DIR=`
+- `WAVEZERO_ENABLE_LOCAL_FOLDER_CATALOG=true|false`
+
+Local dev does not require every variable. Demo and production should use an explicit catalog file and production-appropriate base URLs.
+
+### Catalog format and URL behavior
+
+The catalog remains compatible with `services/api/fixtures/dev_catalog.json` and now supports production-oriented fields such as `artist_name`, `album_name`, `artwork_path`, `sourceType`, `productionSafe`, and asset URL/path fields including `manifest_url`, `stream_url`, `asset_url`, and `asset_path`. Relative audio paths resolve through `WAVEZERO_AUDIO_BASE_URL` or `WAVEZERO_CONTENT_BASE_URL`; relative artwork paths resolve through `WAVEZERO_ARTWORK_BASE_URL` or `WAVEZERO_CONTENT_BASE_URL`.
+
+### Manifest behavior
+
+`GET /tracks/:id/manifest` still returns `track`, `asset`, and `stream_url` for existing Flutter compatibility. Missing tracks return a JSON `track_not_found` response. Missing assets or assets without a URL return `asset_not_available`.
+
+### Health/status endpoints
+
+- `GET /health`
+- `GET /api/content/status`
+
+The status response reports content mode, catalog load state, track count, asset count, local folder catalog enablement, production-safe count, server version, and safe config-presence booleans. Production mode does not expose raw local filesystem paths.
+
+### Dev local folder behavior
+
+Local folder auto catalog is dev-only and only includes `.mp3`, `.m4a`, `.aac`, `.wav`, and `.flac`. Generated tracks are marked `dev_only`, `Local Folder / Local Dev Audio`, `commercialUseAllowed: false`, `redistributionAllowed: false`, and `productionSafe: false`.
+
+### Legal safety
+
+No real copyrighted/commercial music is added. Nothing is treated as verified unless metadata explicitly says so. `dev_only`, `license_pending`, `unknown`, and `user_device` server catalog tracks are not production-safe. Device Music remains user-owned/user-device context and is separate from the server catalog.
+
+### Flutter integration
+
+The Flutter catalog client can read content status. Consumer library/search surfaces keep friendly statuses such as Catalog ready, Catalog unavailable, Demo catalog, Device music, and Downloaded. API base URL and content mode details stay in developer/Engine diagnostics.
+
+See [`docs/production-content-server.md`](production-content-server.md) for the longer content-server checklist.
+
+### Intentionally not changed
+
+WaveZero #83 does not add auth, cloud sync, database storage, backend uploads, payments, DRM, CDN/object storage, signed URLs, real music files, Android native playback changes, Device Music MediaStore changes, CacheService file format changes, Queue Engine v2 rewrites, Smart Downloads logic changes, Audio Quality selection changes, Audio Effects bridge changes, or a new bottom-nav item.
+
+### Future work
+
+- Hosted production API deployment
+- CDN/object storage
+- Signed URLs
+- Artist uploads
+- Auth
+- Moderation/review workflow
+- Database-backed catalog
+- Admin catalog dashboard
+- Payments/subscriptions
+- Analytics
+- DRM/licensing integrations
+
+### Manual checklist
+
+1. Start API in default dev mode.
+2. Confirm current dev catalog still loads.
+3. Confirm local folder auto catalog still works in dev if enabled.
+4. Confirm local folder tracks are `dev_only`/license pending-safe and never production-safe.
+5. Start API with `WAVEZERO_CONTENT_MODE=demo`.
+6. Confirm demo mode does not auto-expose local folder tracks.
+7. Start API with `WAVEZERO_CONTENT_MODE=production` and no catalog path.
+8. Confirm it returns a safe empty/status response.
+9. Configure `WAVEZERO_CATALOG_PATH` and confirm catalog loads.
+10. Confirm `/health` works.
+11. Confirm `/api/content/status` works.
+12. Confirm manifest endpoint still returns `track`/`asset`/`stream_url`.
+13. Confirm Flutter Library still loads catalog in dev.
+14. Confirm Search/Now/Queue/Downloads still work with catalog tracks.
+15. Confirm consumer mode does not show raw server config.
+16. Confirm developer mode can inspect content status.
+17. Confirm no real copyrighted/commercial music was added.
+18. Confirm dev-only tracks are not treated as production-safe.

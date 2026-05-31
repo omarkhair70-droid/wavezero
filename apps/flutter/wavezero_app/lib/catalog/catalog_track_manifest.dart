@@ -22,35 +22,60 @@ class CatalogIndex {
 
 class ContentStatus {
   const ContentStatus({
-    required this.available,
+    required this.ok,
     this.contentMode,
-    this.trackCount,
-    this.message,
+    this.catalogLoaded = false,
+    this.trackCount = 0,
+    this.assetCount = 0,
+    this.localFolderCatalogEnabled = false,
+    this.productionSafeTrackCount = 0,
+    this.serverVersion,
+    this.errorMessage,
   });
 
-  final bool available;
+  final bool ok;
   final String? contentMode;
-  final int? trackCount;
-  final String? message;
+  final bool catalogLoaded;
+  final int trackCount;
+  final int assetCount;
+  final bool localFolderCatalogEnabled;
+  final int productionSafeTrackCount;
+  final String? serverVersion;
+  final String? errorMessage;
+
+  bool get available => ok && catalogLoaded;
+  String? get message => errorMessage;
 
   factory ContentStatus.fromJson(Map<String, Object?> json) {
-    final contentMode = _readString(json['contentMode'] ?? json['content_mode'] ?? json['mode']);
+    final error = _readMap(json['error']);
     return ContentStatus(
-      available: _readBool(json['available'] ?? json['ready']) ?? true,
-      contentMode: contentMode,
-      trackCount: _readInt(json['trackCount'] ?? json['track_count'] ?? json['tracks']),
-      message: _readString(json['message'] ?? json['status']),
+      ok: _readBool(json['ok']) ?? _readBool(json['available']) ?? _readBool(json['ready']) ?? false,
+      contentMode: _readString(json['contentMode'] ?? json['content_mode'] ?? json['mode']),
+      catalogLoaded: _readBool(json['catalogLoaded'] ?? json['catalog_loaded']) ?? false,
+      trackCount: _readInt(json['trackCount'] ?? json['track_count'] ?? json['tracks']) ?? 0,
+      assetCount: _readInt(json['assetCount'] ?? json['asset_count']) ?? 0,
+      localFolderCatalogEnabled: _readBool(json['localFolderCatalogEnabled'] ?? json['local_folder_catalog_enabled']) ?? false,
+      productionSafeTrackCount: _readInt(json['productionSafeTrackCount'] ?? json['production_safe_track_count']) ?? 0,
+      serverVersion: _readString(json['serverVersion'] ?? json['server_version']),
+      errorMessage: _readString(error?['message']) ?? _readString(error?['error']) ?? _readString(json['message'] ?? json['status']),
     );
   }
 
   String get friendlyLabel {
-    if (!available) return 'Catalog unavailable';
-    final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
-    if (normalized == 'demo' || normalized == 'demo_catalog' || normalized == 'legal_demo') return 'Demo catalog';
-    if (normalized == 'production' || normalized == 'prod' || normalized == 'catalog_ready') return 'Catalog ready';
-    final count = trackCount;
-    if (count != null && count > 0) return 'Catalog ready';
-    return message?.trim().isNotEmpty == true ? message!.trim() : 'Catalog ready';
+    if (!ok || !catalogLoaded) return 'Catalog unavailable';
+    return switch (contentMode) {
+      'demo' => 'Demo catalog',
+      'production' => 'Catalog ready',
+      'dev' => localFolderCatalogEnabled ? 'Catalog ready (dev)' : 'Catalog ready',
+      _ => 'Catalog ready',
+    };
+  }
+
+  String get developerSummary {
+    final mode = contentMode ?? 'unknown';
+    final error = errorMessage;
+    final base = '$friendlyLabel • mode $mode • $trackCount tracks • $assetCount assets • $productionSafeTrackCount production-safe';
+    return error == null || error.isEmpty ? base : '$base • $error';
   }
 }
 
@@ -158,6 +183,7 @@ class CatalogTrackSummary {
     this.albumName,
     this.displayName,
     this.source = 'api',
+    this.productionSafe = false,
     this.license = LicenseMetadata.unknown,
     this.primaryAsset,
     this.assets = const [],
@@ -172,6 +198,7 @@ class CatalogTrackSummary {
   final String? albumName;
   final String? displayName;
   final String source;
+  final bool productionSafe;
   final LicenseMetadata license;
   final CatalogTrackAssetSummary? primaryAsset;
   final List<CatalogTrackAssetSummary> assets;
@@ -206,7 +233,8 @@ class CatalogTrackSummary {
       artworkUrl: _readString(json['artwork_url']),
       albumName: _readString(json['album_name']),
       displayName: _readString(json['display_name']),
-      source: _readString(json['source']) ?? 'api',
+      source: _readString(json['source']) ?? _readString(json['source_type']) ?? 'api',
+      productionSafe: _readBool(json['production_safe']) ?? _readBool(json['productionSafe']) ?? false,
       license: LicenseMetadata.fromJson(json, fallbackStatus: _readString(json['source']) == 'device' ? LicenseStatus.userDevice : LicenseStatus.unknown),
       primaryAsset: primaryAsset,
       assets: assets.isEmpty && primaryAsset != null ? [primaryAsset] : assets,
