@@ -1005,3 +1005,108 @@ The page explains that WaveZero separates user device music, local dev audio, de
 14. Confirm notification/Now/Queue still work.
 15. Confirm no copyrighted/commercial track was added.
 16. Confirm no raw debug/legal internals appear in consumer mode.
+
+## WaveZero #77 — Playlists / Collections Foundation
+
+WaveZero now includes a local-first Collections v1 foundation so users can organize music without accounts, backend APIs, cloud sync, uploads, payments, DRM, or database complexity.
+
+### Local-first collections
+
+- Collections are stored only on the device with `SharedPreferences` JSON.
+- Persistence key: `wavezero.collections.v1`.
+- The store persists lightweight collection and track snapshot metadata only.
+- It does not store raw debug data, large blobs, or copied audio files.
+
+### Collection model/store behavior
+
+- `WzCollection` stores an id, name, optional description, type, created/updated timestamps, and track snapshots.
+- `WzCollectionTrackSnapshot` stores lightweight rendering/playback-resolution metadata: track id, title, subtitle, optional album/artwork, source, optional URL metadata, quality/codec, license metadata, and added time.
+- `CollectionsService` restores saved JSON and always normalizes the default liked collection back into the list.
+- Duplicate tracks inside one collection are prevented by replacing the existing snapshot for the same track id.
+
+### Liked Tracks behavior
+
+- `Liked Tracks` always exists.
+- It cannot be deleted or renamed.
+- It can be emptied by removing tracks or unliking them.
+- Library rows and Now Playing expose heart actions where the current track can be mapped to a known library item.
+
+### User collections behavior
+
+- Users can create, rename, open, and delete local user collections.
+- Deleting a user collection only removes the collection metadata; it does not delete audio files, downloads, or cache entries.
+- Empty collection copy guides users to save tracks from Library or Now Playing.
+
+### Source handling
+
+- API catalog tracks save snapshots with source `api` and resolve by track id from the current catalog/library.
+- Device Music tracks save snapshots with source `device`, preserve the user-device legal distinction, and resolve against the current MediaStore import list.
+- Downloads/Cached tracks save snapshots with source `cached`, preserve original license metadata where available, and resolve against the current cached library or a matching API catalog track if present.
+- If a saved snapshot cannot be resolved to a current playable track, the UI shows the friendly unavailable path: `Track is not available right now.`
+
+### Add/remove behavior
+
+- Library rows include like/unlike and add-to-collection actions alongside existing play/cache/queue controls.
+- Now Playing includes like/unlike and add-to-collection actions when the current track maps to a known library item.
+- The add-to-collection sheet includes Liked Tracks, existing user collections, and a quick `Create New Collection` action.
+- Removing a track from a collection does not delete downloaded/cache files or device music.
+
+### Queue integration
+
+- Collection detail can play the first available track, add one resolved track to Queue, or add all resolved tracks to Queue.
+- Unavailable tracks are skipped for bulk queue adds and counted in user-facing copy.
+- Queue Engine v2 semantics, queue persistence, smart preload, and Smart Downloads behavior are not changed.
+
+### Legal metadata preservation
+
+- Collection snapshots include existing `LicenseMetadata` fields.
+- Device Music remains labeled as user device music / your device, and WaveZero does not claim catalog rights for it.
+- API and cached tracks preserve license badges such as Dev only, License pending, Verified, Public domain, or Unknown.
+- Legal catalog rules and production-rights claims are not changed.
+
+### Storage relationship
+
+- Deleting a collection does not delete downloads/cache.
+- Removing a track from a collection does not delete downloads/cache.
+- Clearing downloads/cache does not delete collections; cached-only tracks may become unavailable until another playable source is available.
+
+### Intentionally not changed
+
+- No auth, account sync, cloud sync, backend APIs, database, uploads, payments/subscriptions, DRM, or real music files were added.
+- Rust API, Android native playback, Android MediaStore behavior, CacheService file format, Queue Engine v2 semantics, Smart Downloads logic, Audio Quality logic, Audio Effects bridge, and legal catalog rules remain unchanged.
+- No bottom navigation item was added for Collections; entry points live inside Home, Library, and Now Playing.
+- Consumer mode does not expose raw JSON, SharedPreferences keys, stack traces, or Engine/raw metrics.
+
+### Future work
+
+- Cloud sync
+- Account sync
+- Playlist covers
+- Drag/drop ordering
+- Playlist downloads
+- Collaborative playlists
+- Public sharing
+- Import/export
+- Artist/album collection pages
+
+### Manual checklist
+
+1. Start app.
+2. Open Collections from Home/Library.
+3. Confirm Liked Tracks exists.
+4. Create a collection.
+5. Rename a collection.
+6. Add API track to Liked Tracks.
+7. Add API track to user collection.
+8. Import Device Music and add a device track to collection.
+9. Download/cache a track and add cached track to collection.
+10. Open collection detail.
+11. Play a collection track.
+12. Add one collection track to Queue.
+13. Add all available collection tracks to Queue.
+14. Remove a track from collection.
+15. Delete user collection.
+16. Restart app and confirm collections persist.
+17. Clear downloads and confirm collections remain but removed cached-only tracks show unavailable if needed.
+18. Confirm no raw debug UI appears in consumer mode.
+19. Confirm Library, Queue, Now, Downloads, Storage Manager, Settings, Legal/Licenses, and notifications still work.
