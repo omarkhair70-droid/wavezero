@@ -103,6 +103,29 @@ Run this before sharing a build or debugging a local setup:
 
 It prints the current Git branch and checks Java, `adb`, Flutter, `FIREBASE_APP_ID`, and expected project directories.
 
+## Auto local development workflow
+
+Use the new local startup scripts to avoid editing IP addresses when your hotspot or Wi-Fi address changes.
+
+Terminal 1:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wavezero-run-audio.ps1
+```
+
+Terminal 2:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wavezero-run-api.ps1
+```
+
+Terminal 3:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wavezero-run-flutter.ps1
+```
+
+These scripts auto-detect your active local IPv4 address and update `WAVEZERO_AUDIO_BASE_URL` for the Rust API at startup. That means `services/api/fixtures/dev_catalog.json` can keep its existing hardcoded local URLs without manual editing.
+
+If auto-detection fails, run `.\scripts\wavezero-local-ip.ps1` to verify your local address or use a fixed `WAVEZERO_AUDIO_BASE_URL` during API startup as a fallback.
+
 ## CI status
 
 Phase 0E adds stable Rust CI only. Android and Flutter CI are intentionally documented as future work until the local Android and Flutter build paths are verified without committing Gradle wrapper binaries or secrets.
