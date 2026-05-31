@@ -28,6 +28,7 @@ class CachedTrackMetadata {
     required this.localFilePath,
     required this.originalRemoteUrl,
     required this.cachedAt,
+    this.downloadSource = 'unknown',
   });
 
   final String trackId;
@@ -38,6 +39,7 @@ class CachedTrackMetadata {
   final String localFilePath;
   final String originalRemoteUrl;
   final int cachedAt;
+  final String downloadSource;
 
   String get localFileUrl => 'file://$localFilePath';
 
@@ -56,6 +58,7 @@ class CachedTrackMetadata {
     String? localFilePath,
     String? originalRemoteUrl,
     int? cachedAt,
+    String? downloadSource,
   }) {
     return CachedTrackMetadata(
       trackId: trackId ?? this.trackId,
@@ -66,6 +69,7 @@ class CachedTrackMetadata {
       localFilePath: localFilePath ?? this.localFilePath,
       originalRemoteUrl: originalRemoteUrl ?? this.originalRemoteUrl,
       cachedAt: cachedAt ?? this.cachedAt,
+      downloadSource: downloadSource ?? this.downloadSource,
     );
   }
 
@@ -78,6 +82,7 @@ class CachedTrackMetadata {
         'localFilePath': localFilePath,
         'originalRemoteUrl': originalRemoteUrl,
         'cachedAt': cachedAt,
+        'downloadSource': downloadSource,
       };
 
   factory CachedTrackMetadata.fromJson(Map<String, Object?> json) {
@@ -97,6 +102,7 @@ class CachedTrackMetadata {
       localFilePath: localFilePath,
       originalRemoteUrl: originalRemoteUrl,
       cachedAt: _readInt(json['cachedAt']) ?? DateTime.now().millisecondsSinceEpoch,
+      downloadSource: _readString(json['downloadSource']) ?? _readString(json['cacheSource']) ?? 'unknown',
     );
   }
 }
@@ -144,9 +150,9 @@ class CacheService {
       try {
         final Map<String, dynamic> json = jsonDecode(rawMetadata);
         json.forEach((k, v) {
-          if (v is Map<String, Object?>) {
+          if (v is Map) {
             try {
-              _metadata[k] = CachedTrackMetadata.fromJson(v);
+              _metadata[k] = CachedTrackMetadata.fromJson(Map<String, Object?>.from(v));
             } catch (_) {}
           }
         });
@@ -227,6 +233,30 @@ class CacheService {
     }
   }
 
+  Future<bool> deleteCachedTrack(String trackId) async {
+    await ensureInitialized();
+    final path = _index[trackId] ?? _metadata[trackId]?.localFilePath;
+    var deletedFile = false;
+    if (path != null && path.isNotEmpty) {
+      try {
+        final f = File(path);
+        if (await f.exists()) {
+          await f.delete();
+          deletedFile = true;
+        }
+      } catch (error) {
+        lastCacheResult = 'delete_error:$trackId:${error.toString()}';
+        return false;
+      }
+    }
+    _index.remove(trackId);
+    _metadata.remove(trackId);
+    _status[trackId] = TrackCacheStatus.notCached;
+    await _persistIndex();
+    lastCacheResult = deletedFile ? 'deleted:$trackId' : 'deleted_metadata:$trackId';
+    return true;
+  }
+
   Future<void> clearCache() async {
     await ensureInitialized();
     for (final path in _index.values) {
@@ -243,7 +273,7 @@ class CacheService {
   }
 
   int cachedTrackCount() {
-    return _index.keys.where((k) => _status[k] == TrackCacheStatus.cached).length;
+    return _metadata.values.where((entry) => statusForTrack(entry.trackId) == TrackCacheStatus.cached).length;
   }
 
   Future<int> cacheBytes() async {

@@ -126,7 +126,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   final CacheService _cacheService = CacheService();
   int _cachedTrackCount = 0;
   int _cacheBytes = 0;
+  List<CachedTrackMetadata> _cachedLibrary = const [];
   String? _lastCacheResult;
+  String? _lastCacheDeleteResult;
+  int _manualDownloadedCount = 0;
+  int _smartDownloadedCount = 0;
   int _offlineCachedTrackCount = 0;
   bool _offlineLibraryAvailable = false;
   bool _offlineLibraryMode = false;
@@ -273,6 +277,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       setState(() {
         _cachedTrackCount = _cacheService.cachedTrackCount();
         _cacheBytes = bytes;
+        _cachedLibrary = cachedLibrary;
+        _manualDownloadedCount = cachedLibrary.where((entry) => entry.downloadSource == 'manual').length;
+        _smartDownloadedCount = cachedLibrary.where((entry) => entry.downloadSource.startsWith('smart_')).length;
         _offlineCachedTrackCount = cachedLibrary.length;
         _offlineLibraryAvailable = cachedLibrary.isNotEmpty;
         _lastCacheResult = _cacheService.lastCacheResult;
@@ -355,7 +362,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return true;
   }
 
-  Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto'}) async {
+  Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto', String downloadSource = 'unknown'}) async {
     // Gatekeeper checks: do not early-return before updating diagnostics.
     if (!_smartDownloadsEnabled) {
       _lastSmartDownloadReason = 'smart downloads disabled';
@@ -409,6 +416,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           localFilePath: '',
           originalRemoteUrl: url,
           cachedAt: DateTime.now().millisecondsSinceEpoch,
+          downloadSource: downloadSource,
         ),
       );
       _lastSmartDownloadResult = ok ? 'cached' : 'error';
@@ -437,6 +445,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       durationMs: manifest.durationMs,
       artworkUrl: manifest.artworkUrl,
       reason: 'current_played',
+      downloadSource: 'smart_current',
     ));
   }
 
@@ -445,7 +454,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (next == null) return;
     final assetUrl = next.primaryAsset?.manifestUrl;
     if (assetUrl != null && assetUrl.isNotEmpty) {
-      unawaited(_autoCacheTrack(trackId: next.trackId, url: assetUrl, title: next.title, artistName: next.artistName, durationMs: next.durationMs, artworkUrl: next.artworkUrl, reason: 'up_next'));
+      unawaited(_autoCacheTrack(trackId: next.trackId, url: assetUrl, title: next.title, artistName: next.artistName, durationMs: next.durationMs, artworkUrl: next.artworkUrl, reason: 'up_next', downloadSource: 'smart_up_next'));
       return;
     }
     // fallback: try to fetch manifest to find a streamUrl
@@ -454,7 +463,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       final manifest = await client.fetchTrackManifest(trackId: next.trackId);
       final url2 = manifest.streamUrl;
       if (url2 != null && url2.isNotEmpty) {
-        unawaited(_autoCacheTrack(trackId: manifest.trackId, url: url2, title: manifest.title, artistName: manifest.artistName, durationMs: manifest.durationMs, artworkUrl: manifest.artworkUrl, reason: 'up_next_fetched'));
+        unawaited(_autoCacheTrack(trackId: manifest.trackId, url: url2, title: manifest.title, artistName: manifest.artistName, durationMs: manifest.durationMs, artworkUrl: manifest.artworkUrl, reason: 'up_next_fetched', downloadSource: 'smart_up_next'));
       }
     } catch (_) {
       // manifest fetch failed — mark skip reason once
@@ -879,6 +888,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           localFilePath: '',
           originalRemoteUrl: assetUrl,
           cachedAt: DateTime.now().millisecondsSinceEpoch,
+          downloadSource: 'manual',
         ),
       );
       await _refreshCacheStats();
@@ -889,12 +899,59 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
   }
 
+  Future<void> _deleteCachedTrack(CachedTrackMetadata track) async {
+    if (_operation != PlayerOperation.idle) return;
+    setState(() => _operation = PlayerOperation.loadingCatalog);
+    try {
+      final ok = await _cacheService.deleteCachedTrack(track.trackId);
+      _lastCacheDeleteResult = ok ? 'deleted:${track.trackId}' : 'delete failed:${track.trackId}';
+      await _refreshCacheStats();
+      _refreshOfflineLibraryIfNeeded();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? 'Deleted cached ${track.title}' : 'Delete failed for ${track.title}')),
+      );
+    } finally {
+      if (mounted) setState(() => _operation = PlayerOperation.idle);
+    }
+  }
+
+  void _refreshOfflineLibraryIfNeeded() {
+    if (!_offlineLibraryMode) return;
+    final offlineTracks = _cachedLibrary
+        .map((entry) => CatalogTrackSummary(
+              trackId: entry.trackId,
+              title: entry.title,
+              artistId: null,
+              artistName: entry.artistName,
+              durationMs: entry.durationMs,
+              artworkUrl: entry.artworkUrl,
+              primaryAsset: null,
+            ))
+        .toList(growable: false);
+    if (!mounted) return;
+    setState(() {
+      _catalog = offlineTracks;
+      _queue = offlineTracks;
+      if (!offlineTracks.any((track) => track.trackId == _selectedTrackId)) {
+        _selectedTrackId = offlineTracks.isEmpty ? null : offlineTracks.first.trackId;
+      }
+      if (!offlineTracks.any((track) => track.trackId == _queueCurrentTrackId)) {
+        _queueCurrentTrackId = _selectedTrackId;
+      }
+      _catalogStatus = offlineTracks.isEmpty ? 'Offline library is empty.' : 'Offline cached library refreshed.';
+      _queueStatus = offlineTracks.isEmpty ? 'Queue cleared.' : 'Offline cache available. Choose a cached track to play.';
+    });
+  }
+
   Future<void> _clearCache() async {
     if (_operation != PlayerOperation.idle) return;
     setState(() => _operation = PlayerOperation.loadingCatalog);
     try {
       await _cacheService.clearCache();
+      _lastCacheDeleteResult = 'cleared all cache';
       await _refreshCacheStats();
+      _refreshOfflineLibraryIfNeeded();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cache cleared')));
     } finally {
@@ -910,6 +967,45 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       if (!exists) _queue = [..._queue, track];
       _queueCurrentTrackId ??= track.trackId;
       _queueStatus = exists ? '${track.title} is already in queue.' : '${track.title} added to queue.';
+      _sessionStatus = 'Session saved.';
+    });
+    unawaited(_saveSession());
+    unawaited(_updatePredictivePreloadCandidate());
+    unawaited(_maybeAutoCacheNextQueuedTrack());
+  }
+
+  void _moveQueueTrack(CatalogTrackSummary track, int delta) {
+    if (_queueDisabled) return;
+    final index = _queue.indexWhere((item) => item.trackId == track.trackId);
+    if (index < 0) return;
+    final target = (index + delta).clamp(0, _queue.length - 1).toInt();
+    if (target == index) return;
+    final nextQueue = [..._queue];
+    final moved = nextQueue.removeAt(index);
+    nextQueue.insert(target, moved);
+    setState(() {
+      _queue = nextQueue;
+      _queueStatus = '${track.title} moved ${delta < 0 ? 'up' : 'down'}.';
+      _sessionStatus = 'Session saved.';
+    });
+    unawaited(_saveSession());
+    unawaited(_updatePredictivePreloadCandidate());
+    unawaited(_maybeAutoCacheNextQueuedTrack());
+  }
+
+  void _playTrackNext(CatalogTrackSummary track) {
+    if (_queueDisabled) return;
+    final currentIndex = _queueIndex;
+    final sourceIndex = _queue.indexWhere((item) => item.trackId == track.trackId);
+    if (currentIndex < 0 || sourceIndex < 0 || sourceIndex == currentIndex) return;
+    final nextQueue = [..._queue];
+    final moved = nextQueue.removeAt(sourceIndex);
+    final adjustedCurrentIndex = nextQueue.indexWhere((item) => item.trackId == _queueCurrentTrackId);
+    final insertIndex = (adjustedCurrentIndex + 1).clamp(0, nextQueue.length).toInt();
+    nextQueue.insert(insertIndex, moved);
+    setState(() {
+      _queue = nextQueue;
+      _queueStatus = '${track.title} will play next.';
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
@@ -1168,6 +1264,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               unawaited(_updatePredictivePreloadCandidate());
             },
             onPlayTrack: (track) => _playQueueTrack(track, autoStart: _metrics.isPlaying),
+            onMoveUp: (track) => _moveQueueTrack(track, -1),
+            onMoveDown: (track) => _moveQueueTrack(track, 1),
+            onPlayNext: _playTrackNext,
             onRemoveTrack: _removeFromQueue,
             onClearQueue: _clearQueue,
           ),
@@ -1231,6 +1330,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
         ]),
       ),
+      // Downloads: cached tracks and storage actions
+      SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SizedBox(height: 8),
+          _DownloadsCard(
+            downloads: _cachedLibrary,
+            cacheBytes: _cacheBytes,
+            controlsDisabled: _queueDisabled,
+            onPlay: (track) => _loadCatalogTrack(trackId: track.trackId, autoPlay: _metrics.isPlaying),
+            onDelete: _deleteCachedTrack,
+            onClearAll: _clearCache,
+          ),
+        ]),
+      ),
       // Engine: smart preload, baseline, raw metrics
       SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
@@ -1276,8 +1390,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     Text('Cached tracks: $_cachedTrackCount • ${(_cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
                     Text('Offline cached library: ${_offlineLibraryAvailable ? 'available' : 'unavailable'}', style: _WzTokens.caption),
                     Text('Offline cache items: $_offlineCachedTrackCount', style: _WzTokens.caption),
+                    Text('downloadedTrackCount: $_cachedTrackCount', style: _WzTokens.caption),
+                    Text('totalCacheBytes: $_cacheBytes', style: _WzTokens.caption),
+                    Text('manualDownloadedCount: $_manualDownloadedCount', style: _WzTokens.caption),
+                    Text('smartDownloadedCount: $_smartDownloadedCount', style: _WzTokens.caption),
                     Text('Offline status: $_lastOfflineLibraryStatus', style: _WzTokens.caption),
                     if (_lastCacheResult != null) Text('Last: $_lastCacheResult', style: _WzTokens.caption),
+                    if (_lastCacheDeleteResult != null) Text('lastCacheDeleteResult: $_lastCacheDeleteResult', style: _WzTokens.caption),
                   ]),
                 ),
                 FilledButton.tonalIcon(onPressed: _queueDisabled ? null : () async { await _clearCache(); }, icon: const Icon(Icons.clear_all), label: const Text('Clear cache'))
@@ -1318,6 +1437,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                 BottomNavigationBarItem(icon: Icon(Icons.play_circle_fill), label: 'Now'),
                 BottomNavigationBarItem(icon: Icon(Icons.queue_music), label: 'Queue'),
                 BottomNavigationBarItem(icon: Icon(Icons.library_music), label: 'Library'),
+                BottomNavigationBarItem(icon: Icon(Icons.download_done), label: 'Downloads'),
                 BottomNavigationBarItem(icon: Icon(Icons.engineering), label: 'Engine'),
               ],
             ),
@@ -1956,9 +2076,311 @@ String _prefetchResultLabel(bool? value) {
   return value ? 'hit' : 'miss';
 }
 
-class _QueueCard extends StatelessWidget { const _QueueCard({required this.queue, required this.currentTrackId, required this.currentIndex, required this.status, required this.controlsDisabled, required this.autoAdvanceEnabled, required this.autoAdvanceCount, required this.smartQueueCandidateTrackId, required this.smartQueueReason, required this.onToggleAutoAdvance, required this.onPlayTrack, required this.onRemoveTrack, required this.onClearQueue}); final List<CatalogTrackSummary> queue; final String? currentTrackId; final int currentIndex; final String status; final bool controlsDisabled; final bool autoAdvanceEnabled; final int autoAdvanceCount; final String? smartQueueCandidateTrackId; final String smartQueueReason; final ValueChanged<bool> onToggleAutoAdvance; final ValueChanged<CatalogTrackSummary> onPlayTrack; final ValueChanged<CatalogTrackSummary> onRemoveTrack; final VoidCallback onClearQueue; @override Widget build(BuildContext context) { final nextTrack = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null; return _Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Queue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), SizedBox(height: 4), Text('Current, up next, auto-advance, and recovery.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13))])), Text('${queue.length} tracks', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(width: 8), IconButton.outlined(onPressed: queue.isEmpty || controlsDisabled ? null : onClearQueue, icon: const Icon(Icons.clear_all))]), const SizedBox(height: 12), Row(children: [Expanded(child: Text(nextTrack == null ? 'No next track yet.' : 'Auto-advance to ${nextTrack.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFFD7DDF0), fontSize: 12))), Text('$autoAdvanceCount auto', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 11)), Switch(value: autoAdvanceEnabled, onChanged: controlsDisabled ? null : onToggleAutoAdvance)]), const SizedBox(height: 8), Text('smartQueueReason: $smartQueueReason • candidate: ${smartQueueCandidateTrackId ?? 'none'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 8), Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 12), if (queue.isEmpty) const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from the catalog.') else ...queue.indexed.map((entry) => _QueueRow(track: entry.$2, index: entry.$1, current: entry.$2.trackId == currentTrackId, upNext: entry.$1 == currentIndex + 1, disabled: controlsDisabled, onPlay: () => onPlayTrack(entry.$2), onRemove: () => onRemoveTrack(entry.$2)))])); }}
+class _QueueCard extends StatelessWidget {
+  const _QueueCard({
+    required this.queue,
+    required this.currentTrackId,
+    required this.currentIndex,
+    required this.status,
+    required this.controlsDisabled,
+    required this.autoAdvanceEnabled,
+    required this.autoAdvanceCount,
+    required this.smartQueueCandidateTrackId,
+    required this.smartQueueReason,
+    required this.onToggleAutoAdvance,
+    required this.onPlayTrack,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onPlayNext,
+    required this.onRemoveTrack,
+    required this.onClearQueue,
+  });
 
-class _QueueRow extends StatelessWidget { const _QueueRow({required this.track, required this.index, required this.current, required this.upNext, required this.disabled, required this.onPlay, required this.onRemove}); final CatalogTrackSummary track; final int index; final bool current; final bool upNext; final bool disabled; final VoidCallback onPlay; final VoidCallback onRemove; @override Widget build(BuildContext context) { final label = current ? 'Now' : upNext ? 'Up next' : '#${index + 1}'; return Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: current ? const Color(0x227C5CFF) : const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: current ? const Color(0xFF8D7CFF) : const Color(0xFF20273A))), child: Row(children: [Icon(current ? Icons.equalizer : Icons.queue_music, color: const Color(0xFF8D7CFF)), const SizedBox(width: 12), Expanded(child: Text('${track.title}  $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))), IconButton(onPressed: disabled ? null : onPlay, icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF))), IconButton(onPressed: disabled ? null : onRemove, icon: const Icon(Icons.close, color: Color(0xFF98A1B8)))])); }}
+  final List<CatalogTrackSummary> queue;
+  final String? currentTrackId;
+  final int currentIndex;
+  final String status;
+  final bool controlsDisabled;
+  final bool autoAdvanceEnabled;
+  final int autoAdvanceCount;
+  final String? smartQueueCandidateTrackId;
+  final String smartQueueReason;
+  final ValueChanged<bool> onToggleAutoAdvance;
+  final ValueChanged<CatalogTrackSummary> onPlayTrack;
+  final ValueChanged<CatalogTrackSummary> onMoveUp;
+  final ValueChanged<CatalogTrackSummary> onMoveDown;
+  final ValueChanged<CatalogTrackSummary> onPlayNext;
+  final ValueChanged<CatalogTrackSummary> onRemoveTrack;
+  final VoidCallback onClearQueue;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentTrack = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
+    final nextTrack = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Queue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    SizedBox(height: 4),
+                    Text('Queue Engine v2: reorder, remove, Play Next, and persistence.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                  ],
+                ),
+              ),
+              Text('${queue.length} tracks', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+              const SizedBox(width: 8),
+              IconButton.outlined(
+                tooltip: 'Clear queue',
+                onPressed: queue.isEmpty || controlsDisabled ? null : onClearQueue,
+                icon: const Icon(Icons.clear_all),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              _QueueStateChip(label: 'Current', value: currentTrack?.title ?? 'none', active: currentTrack != null),
+              _QueueStateChip(label: 'Up next', value: nextTrack?.title ?? 'none', active: nextTrack != null),
+              _QueueStateChip(label: 'Auto', value: '$autoAdvanceCount advances', active: autoAdvanceEnabled),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))),
+              Switch(value: autoAdvanceEnabled, onChanged: controlsDisabled ? null : onToggleAutoAdvance),
+            ],
+          ),
+          Text(
+            'smartQueueReason: $smartQueueReason • candidate: ${smartQueueCandidateTrackId ?? 'none'}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          if (queue.isEmpty)
+            const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from the catalog.')
+          else
+            ...queue.indexed.map((entry) => _QueueRow(
+                  track: entry.$2,
+                  index: entry.$1,
+                  current: entry.$2.trackId == currentTrackId,
+                  upNext: entry.$1 == currentIndex + 1,
+                  disabled: controlsDisabled,
+                  canMoveUp: entry.$1 > 0,
+                  canMoveDown: entry.$1 < queue.length - 1,
+                  onPlay: () => onPlayTrack(entry.$2),
+                  onMoveUp: () => onMoveUp(entry.$2),
+                  onMoveDown: () => onMoveDown(entry.$2),
+                  onPlayNext: () => onPlayNext(entry.$2),
+                  onRemove: () => onRemoveTrack(entry.$2),
+                )),
+        ],
+      ),
+    );
+  }
+}
+
+class _QueueStateChip extends StatelessWidget {
+  const _QueueStateChip({required this.label, required this.value, required this.active});
+
+  final String label;
+  final String value;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? const Color(0x227C5CFF) : _WzTokens.surfaceMuted,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: active ? _WzTokens.accent : _WzTokens.border),
+        ),
+        child: Text('$label: $value', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+      );
+}
+
+class _QueueRow extends StatelessWidget {
+  const _QueueRow({
+    required this.track,
+    required this.index,
+    required this.current,
+    required this.upNext,
+    required this.disabled,
+    required this.canMoveUp,
+    required this.canMoveDown,
+    required this.onPlay,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onPlayNext,
+    required this.onRemove,
+  });
+
+  final CatalogTrackSummary track;
+  final int index;
+  final bool current;
+  final bool upNext;
+  final bool disabled;
+  final bool canMoveUp;
+  final bool canMoveDown;
+  final VoidCallback onPlay;
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
+  final VoidCallback onPlayNext;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = current ? 'Now playing' : upNext ? 'Up next' : '#${index + 1}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: current ? const Color(0x227C5CFF) : const Color(0xFF0B0E18),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: current ? const Color(0xFF8D7CFF) : upNext ? const Color(0xFF38D996) : const Color(0xFF20273A)),
+      ),
+      child: Row(
+        children: [
+          Icon(current ? Icons.equalizer : upNext ? Icons.next_plan : Icons.queue_music, color: current || upNext ? const Color(0xFF8D7CFF) : const Color(0xFF98A1B8)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 3),
+                Text(label, style: _WzTokens.caption),
+              ],
+            ),
+          ),
+          IconButton(tooltip: 'Play/select', onPressed: disabled ? null : onPlay, icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF))),
+          IconButton(tooltip: 'Move up', onPressed: disabled || !canMoveUp ? null : onMoveUp, icon: const Icon(Icons.keyboard_arrow_up, color: Color(0xFF98A1B8))),
+          IconButton(tooltip: 'Move down', onPressed: disabled || !canMoveDown ? null : onMoveDown, icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF98A1B8))),
+          IconButton(tooltip: 'Play next', onPressed: disabled || current || upNext ? null : onPlayNext, icon: const Icon(Icons.low_priority, color: Color(0xFF38D996))),
+          IconButton(tooltip: 'Remove', onPressed: disabled ? null : onRemove, icon: const Icon(Icons.close, color: Color(0xFF98A1B8))),
+        ],
+      ),
+    );
+  }
+}
+
+class _DownloadsCard extends StatelessWidget {
+  const _DownloadsCard({
+    required this.downloads,
+    required this.cacheBytes,
+    required this.controlsDisabled,
+    required this.onPlay,
+    required this.onDelete,
+    required this.onClearAll,
+  });
+
+  final List<CachedTrackMetadata> downloads;
+  final int cacheBytes;
+  final bool controlsDisabled;
+  final ValueChanged<CachedTrackMetadata> onPlay;
+  final ValueChanged<CachedTrackMetadata> onDelete;
+  final VoidCallback onClearAll;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Downloads', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                      SizedBox(height: 4),
+                      Text('Cached tracks available for offline playback.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                    ],
+                  ),
+                ),
+                Text('${downloads.length} • ${(cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
+                const SizedBox(width: 8),
+                IconButton.outlined(
+                  tooltip: 'Clear all cache',
+                  onPressed: downloads.isEmpty || controlsDisabled ? null : onClearAll,
+                  icon: const Icon(Icons.clear_all),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (downloads.isEmpty)
+              const _EmptyCatalogMessage(message: 'No downloaded tracks yet. Cache a track manually or let Smart Downloads fill this list.')
+            else
+              ...downloads.map((track) => _DownloadRow(
+                    track: track,
+                    disabled: controlsDisabled,
+                    onPlay: () => onPlay(track),
+                    onDelete: () => onDelete(track),
+                  )),
+          ],
+        ),
+      );
+}
+
+class _DownloadRow extends StatelessWidget {
+  const _DownloadRow({required this.track, required this.disabled, required this.onPlay, required this.onDelete});
+
+  final CachedTrackMetadata track;
+  final bool disabled;
+  final VoidCallback onPlay;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0B0E18),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFF20273A)),
+        ),
+        child: Row(
+          children: [
+            _Artwork(artworkUrl: track.artworkUrl, size: 48),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text('${track.subtitle} • source: ${_downloadSourceLabel(track.downloadSource)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                ],
+              ),
+            ),
+            IconButton(tooltip: 'Play cached track', onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow, color: Color(0xFF8D7CFF))),
+            IconButton(tooltip: 'Delete cached track', onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
+          ],
+        ),
+      );
+}
+
+String _downloadSourceLabel(String source) {
+  switch (source) {
+    case 'manual':
+      return 'manual';
+    case 'smart_current':
+      return 'smart current';
+    case 'smart_up_next':
+      return 'smart up-next';
+    default:
+      return 'unknown';
+  }
+}
 
 class _CatalogListCard extends StatelessWidget {
   const _CatalogListCard({
