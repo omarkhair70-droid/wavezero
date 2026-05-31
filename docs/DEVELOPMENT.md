@@ -305,6 +305,27 @@ For the current safe foundation, Android accepts the method channel call and ret
 8. Restart app and confirm selected profile persists.
 9. Play an original/high-quality track and confirm effects are only applied by explicit user selection.
 
+## WaveZero #68 — Now Playing Experience v1
+
+WaveZero #68 upgrades Now Playing into the core premium playback screen while preserving engine behavior. The screen now emphasizes large artwork or a generated gradient placeholder, real track identity, live playback state, quality/effects/cache badges, an up-next preview, a larger progress area, and a centered player control row.
+
+The implementation uses existing real engine state only. Quality reflects the selected manifest/cache/preferred quality state, effects reflect the selected profile and native effect status, cache/offline reflects current cached playback and offline-library availability, and Queue context reflects the existing Queue Engine v2 position and up-next track.
+
+This work does not change native Android playback, the native playback bridge, queue/cache/download behavior, Smart Downloads, Audio Quality selection logic, or the Audio Effects bridge behavior. It also intentionally does not add lyrics, a visualizer, theme customization, AI recommendations, login/cloud features, upload, database, DRM, payments, or fake data. Engine diagnostics remain available.
+
+Manual checklist:
+1. Start app.
+2. Open Now page before loading a track and confirm empty/placeholder state looks good.
+3. Play a track from Library.
+4. Confirm Now shows title, artwork/placeholder, playback state, quality, effects, cache/offline state.
+5. Confirm play/pause works.
+6. Confirm seek works.
+7. Confirm previous/next still work.
+8. Add multiple tracks to queue and confirm up-next preview updates.
+9. Cache a track and confirm source/cache badge updates.
+10. Open Downloads and play a cached track; confirm Now reflects cached/offline context.
+11. Confirm Engine diagnostics still exist and behavior did not change.
+
 ## WaveZero #67 — Real Design System v1 + Product Shell Upgrade
 
 WaveZero #67 starts moving the Flutter player from a developer-dashboard feel toward a real premium music app shell while preserving the playback engine. This is a UI/product-architecture pass only: Android native playback, Rust API behavior, cache/download behavior, queue behavior, audio quality selection logic, audio effects bridge behavior, local catalog behavior, and session persistence remain unchanged.
