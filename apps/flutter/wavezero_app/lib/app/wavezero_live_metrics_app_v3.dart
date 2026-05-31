@@ -356,8 +356,37 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto'}) async {
-    final can = await _canAutoCacheTrack(trackId: trackId, url: url);
-    if (!can) {
+    // Gatekeeper checks: do not early-return before updating diagnostics.
+    if (!_smartDownloadsEnabled) {
+      _lastSmartDownloadReason = 'smart downloads disabled';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
+    if (url.isEmpty) {
+      _lastSmartDownloadReason = 'no remote url';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
+    await _cacheService.ensureInitialized();
+    final status = _cacheService.statusForTrack(trackId);
+    if (status == TrackCacheStatus.cached) {
+      _lastSmartDownloadReason = 'already cached';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
+    if (status == TrackCacheStatus.caching) {
+      _lastSmartDownloadReason = 'already caching';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
+    if (_autoCacheInFlight.contains(trackId)) {
+      _lastSmartDownloadReason = 'already in-flight';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
+    final cachedLibrary = await _cacheService.cachedLibrary();
+    if (cachedLibrary.length >= _maxSmartDownloadCachedTracks) {
+      _lastSmartDownloadReason = 'smart download cache limit reached';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
       return;
     }
@@ -400,12 +429,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _maybeAutoCacheCurrentTrack(CatalogTrackManifest manifest) async {
     if (manifest.trackId.isEmpty) return;
-    final url = manifest.streamUrl;
-    final can = await _canAutoCacheTrack(trackId: manifest.trackId, url: url);
-    if (!can) return;
     unawaited(_autoCacheTrack(
       trackId: manifest.trackId,
-      url: url!,
+      url: manifest.streamUrl,
       title: manifest.title,
       artistName: manifest.artistName,
       durationMs: manifest.durationMs,
@@ -419,8 +445,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (next == null) return;
     final assetUrl = next.primaryAsset?.manifestUrl;
     if (assetUrl != null && assetUrl.isNotEmpty) {
-      final can = await _canAutoCacheTrack(trackId: next.trackId, url: assetUrl);
-      if (!can) return;
       unawaited(_autoCacheTrack(trackId: next.trackId, url: assetUrl, title: next.title, artistName: next.artistName, durationMs: next.durationMs, artworkUrl: next.artworkUrl, reason: 'up_next'));
       return;
     }
@@ -430,12 +454,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       final manifest = await client.fetchTrackManifest(trackId: next.trackId);
       final url2 = manifest.streamUrl;
       if (url2 != null && url2.isNotEmpty) {
-        final can2 = await _canAutoCacheTrack(trackId: manifest.trackId, url: url2);
-        if (!can2) return;
         unawaited(_autoCacheTrack(trackId: manifest.trackId, url: url2, title: manifest.title, artistName: manifest.artistName, durationMs: manifest.durationMs, artworkUrl: manifest.artworkUrl, reason: 'up_next_fetched'));
       }
     } catch (_) {
-      // ignore manifest fetch errors for non-blocking auto-cache
+      // manifest fetch failed — mark skip reason once
+      _lastSmartDownloadReason = 'up-next manifest unavailable';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
     } finally {
       client.close();
     }
