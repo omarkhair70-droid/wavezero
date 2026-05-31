@@ -85,6 +85,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   PlayerOperation _operation = PlayerOperation.idle;
   bool _refreshingMetrics = false;
   bool _showMetrics = false;
+  int _selectedIndex = 0;
   bool _autoAdvanceEnabled = true;
   bool _sessionRestored = false;
   int _autoAdvanceCount = 0;
@@ -738,130 +739,234 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final displayedPositionMs = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
     final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
 
+    // Build per-tab pages using existing widgets — keep behavior unchanged.
+    final pages = <Widget>[
+      // Home: identity + compact status and health
+      SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _TopBar(),
+            const SizedBox(height: 18),
+            _NowPlayingCard(
+              metrics: _metrics,
+              manifest: _manifest,
+              nextTrack: _upNextQueueTrack,
+              progressValue: progress,
+              displayedPositionMs: displayedPositionMs,
+              durationMs: durationMs,
+              controlsDisabled: _playerDisabled,
+              canPlayPrevious: _canPrevious,
+              canPlayNext: _canNext,
+              onPlayPause: _playPause,
+              onStop: _stop,
+              onRetry: _retry,
+              onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
+              onNext: () => _playNext(autoStart: _metrics.isPlaying),
+              onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
+              onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
+                  ? null
+                  : (value) async {
+                      final target = value * durationMs;
+                      setState(() => _dragPositionMs = null);
+                      await _seekTo(target);
+                    },
+            ),
+            const SizedBox(height: 12),
+            _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
+            const SizedBox(height: 8),
+            _SessionStrip(status: _sessionStatus),
+            const SizedBox(height: 12),
+            _HealthStrip(metrics: _metrics),
+          ],
+        ),
+      ),
+      // Now Playing: focused player controls
+      SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SizedBox(height: 6),
+          _NowPlayingCard(
+            metrics: _metrics,
+            manifest: _manifest,
+            nextTrack: _upNextQueueTrack,
+            progressValue: progress,
+            displayedPositionMs: displayedPositionMs,
+            durationMs: durationMs,
+            controlsDisabled: _playerDisabled,
+            canPlayPrevious: _canPrevious,
+            canPlayNext: _canNext,
+            onPlayPause: _playPause,
+            onStop: _stop,
+            onRetry: _retry,
+            onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
+            onNext: () => _playNext(autoStart: _metrics.isPlaying),
+            onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
+            onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
+                ? null
+                : (value) async {
+                    final target = value * durationMs;
+                    setState(() => _dragPositionMs = null);
+                    await _seekTo(target);
+                  },
+          ),
+          const SizedBox(height: 12),
+          _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
+          if (_showMetrics) ...[const SizedBox(height: 14), _MetricsPanel(metrics: _metrics)],
+        ]),
+      ),
+      // Queue: queue card and Smart Queue reason
+      SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SizedBox(height: 12),
+          _QueueCard(
+            queue: _queue,
+            currentTrackId: _queueCurrentTrackId,
+            currentIndex: _queueIndex,
+            status: _queueStatus,
+            controlsDisabled: _queueDisabled,
+            autoAdvanceEnabled: _autoAdvanceEnabled,
+            autoAdvanceCount: _autoAdvanceCount,
+            smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
+            smartQueueReason: _smartQueueReason,
+            onToggleAutoAdvance: (value) {
+              setState(() {
+                _autoAdvanceEnabled = value;
+                _queueStatus = value ? 'Auto-advance enabled.' : 'Auto-advance disabled.';
+                _sessionStatus = 'Session saved.';
+              });
+              unawaited(_saveSession());
+              unawaited(_updatePredictivePreloadCandidate());
+            },
+            onPlayTrack: (track) => _playQueueTrack(track, autoStart: _metrics.isPlaying),
+            onRemoveTrack: _removeFromQueue,
+            onClearQueue: _clearQueue,
+          ),
+          const SizedBox(height: 16),
+          _SmartPreloadCard(
+            metrics: _metrics,
+            enabled: _prefetchEnabled,
+            prefetchedTrackId: _prefetchedTrackId,
+            prefetchedTrackTitle: _prefetchedTrackTitle,
+            prefetchInFlight: _prefetchInFlight,
+            manifestPrefetched: _manifestPrefetched,
+            audioPreparedBeforeNext: _audioPreparedBeforeNext,
+            lastPrefetchHit: _lastPrefetchHit,
+            prefetchHitCount: _prefetchHitCount,
+            prefetchMissCount: _prefetchMissCount,
+            nextTapToAudioMs: _nextTapToAudioMs,
+            nextPreparedBeforePlay: _nextPreparedBeforePlay,
+            smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
+            smartQueueReason: _smartQueueReason,
+            controlsDisabled: _queueDisabled,
+            onToggle: _setPrefetchEnabled,
+          ),
+        ]),
+      ),
+      // Library: catalog/search/track list
+      SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SizedBox(height: 8),
+          _CatalogListCard(
+            tracks: _filteredCatalog,
+            totalTrackCount: _catalog.length,
+            selectedTrackId: _selectedTrackId,
+            status: _catalogStatus,
+            loading: _operation == PlayerOperation.loadingCatalog,
+            refreshDisabled: _catalogRefreshDisabled,
+            addToQueueDisabled: _operation.isTrackLoading || _operation.isQueueAdvancing,
+            searchController: _searchController,
+            onClearSearch: () => _searchController.clear(),
+            onRefresh: () => _loadCatalog(),
+            onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
+            onAddToQueue: _addToQueue,
+          ),
+          const SizedBox(height: 16),
+          _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
+        ]),
+      ),
+      // Engine: smart preload, baseline, raw metrics
+      SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SizedBox(height: 8),
+          _SmartPreloadCard(
+            metrics: _metrics,
+            enabled: _prefetchEnabled,
+            prefetchedTrackId: _prefetchedTrackId,
+            prefetchedTrackTitle: _prefetchedTrackTitle,
+            prefetchInFlight: _prefetchInFlight,
+            manifestPrefetched: _manifestPrefetched,
+            audioPreparedBeforeNext: _audioPreparedBeforeNext,
+            lastPrefetchHit: _lastPrefetchHit,
+            prefetchHitCount: _prefetchHitCount,
+            prefetchMissCount: _prefetchMissCount,
+            nextTapToAudioMs: _nextTapToAudioMs,
+            nextPreparedBeforePlay: _nextPreparedBeforePlay,
+            smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
+            smartQueueReason: _smartQueueReason,
+            controlsDisabled: _queueDisabled,
+            onToggle: _setPrefetchEnabled,
+          ),
+          const SizedBox(height: 12),
+          _PerformanceBaselinePanel(
+            metrics: _metrics,
+            nextTapToAudioMs: _nextTapToAudioMs,
+            prefetchHitCount: _prefetchHitCount,
+            prefetchMissCount: _prefetchMissCount,
+            stopToPlayRecoveryMs: _stopToPlayRecoveryMs,
+            sessionRecoveryMs: _sessionRecoveryMs,
+            audioPreparedBeforeNext: _audioPreparedBeforeNext,
+            nextPreparedBeforePlay: _nextPreparedBeforePlay,
+          ),
+          const SizedBox(height: 16),
+          _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
+          if (_showMetrics) ...[const SizedBox(height: 14), _MetricsPanel(metrics: _metrics)],
+        ]),
+      ),
+    ];
+
     return Scaffold(
       backgroundColor: _WzTokens.canvas,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _TopBar(),
-                  const SizedBox(height: 22),
-                  _NowPlayingCard(
-                    metrics: _metrics,
-                    manifest: _manifest,
-                    nextTrack: _upNextQueueTrack,
-                    progressValue: progress,
-                    displayedPositionMs: displayedPositionMs,
-                    durationMs: durationMs,
-                    controlsDisabled: _playerDisabled,
-                    canPlayPrevious: _canPrevious,
-                    canPlayNext: _canNext,
-                    onPlayPause: _playPause,
-                    onStop: _stop,
-                    onRetry: _retry,
-                    onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
-                    onNext: () => _playNext(autoStart: _metrics.isPlaying),
-                    onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
-                    onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
-                        ? null
-                        : (value) async {
-                            final target = value * durationMs;
-                            setState(() => _dragPositionMs = null);
-                            await _seekTo(target);
-                          },
-                  ),
-                  const SizedBox(height: 12),
-                  _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
-                  const SizedBox(height: 8),
-                  _SessionStrip(status: _sessionStatus),
-                  const SizedBox(height: 12),
-                  _SmartPreloadCard(
-                    metrics: _metrics,
-                    enabled: _prefetchEnabled,
-                    prefetchedTrackId: _prefetchedTrackId,
-                    prefetchedTrackTitle: _prefetchedTrackTitle,
-                    prefetchInFlight: _prefetchInFlight,
-                    manifestPrefetched: _manifestPrefetched,
-                    audioPreparedBeforeNext: _audioPreparedBeforeNext,
-                    lastPrefetchHit: _lastPrefetchHit,
-                    prefetchHitCount: _prefetchHitCount,
-                    prefetchMissCount: _prefetchMissCount,
-                    nextTapToAudioMs: _nextTapToAudioMs,
-                    nextPreparedBeforePlay: _nextPreparedBeforePlay,
-                    smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
-                    smartQueueReason: _smartQueueReason,
-                    controlsDisabled: _queueDisabled,
-                    onToggle: _setPrefetchEnabled,
-                  ),
-                  const SizedBox(height: 12),
-                  _PerformanceBaselinePanel(
-                    metrics: _metrics,
-                    nextTapToAudioMs: _nextTapToAudioMs,
-                    prefetchHitCount: _prefetchHitCount,
-                    prefetchMissCount: _prefetchMissCount,
-                    stopToPlayRecoveryMs: _stopToPlayRecoveryMs,
-                    sessionRecoveryMs: _sessionRecoveryMs,
-                    audioPreparedBeforeNext: _audioPreparedBeforeNext,
-                    nextPreparedBeforePlay: _nextPreparedBeforePlay,
-                  ),
-                  const SizedBox(height: 16),
-                  _QueueCard(
-                    queue: _queue,
-                    currentTrackId: _queueCurrentTrackId,
-                    currentIndex: _queueIndex,
-                    status: _queueStatus,
-                    controlsDisabled: _queueDisabled,
-                    autoAdvanceEnabled: _autoAdvanceEnabled,
-                    autoAdvanceCount: _autoAdvanceCount,
-                    smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
-                    smartQueueReason: _smartQueueReason,
-                    onToggleAutoAdvance: (value) {
-                      setState(() {
-                        _autoAdvanceEnabled = value;
-                        _queueStatus = value ? 'Auto-advance enabled.' : 'Auto-advance disabled.';
-                        _sessionStatus = 'Session saved.';
-                      });
-                      unawaited(_saveSession());
-                      unawaited(_updatePredictivePreloadCandidate());
-                    },
-                    onPlayTrack: (track) => _playQueueTrack(track, autoStart: _metrics.isPlaying),
-                    onRemoveTrack: _removeFromQueue,
-                    onClearQueue: _clearQueue,
-                  ),
-                  const SizedBox(height: 16),
-                  _CatalogListCard(
-                    tracks: _filteredCatalog,
-                    totalTrackCount: _catalog.length,
-                    selectedTrackId: _selectedTrackId,
-                    status: _catalogStatus,
-                    loading: _operation == PlayerOperation.loadingCatalog,
-                    refreshDisabled: _catalogRefreshDisabled,
-                    addToQueueDisabled: _operation.isTrackLoading || _operation.isQueueAdvancing,
-                    searchController: _searchController,
-                    onClearSearch: () => _searchController.clear(),
-                    onRefresh: () => _loadCatalog(),
-                    onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
-                    onAddToQueue: _addToQueue,
-                  ),
-                  const SizedBox(height: 16),
-                  _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
-                  const SizedBox(height: 16),
-                  _HealthStrip(metrics: _metrics),
-                  const SizedBox(height: 16),
-                  _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
-                  if (_showMetrics) ...[const SizedBox(height: 14), _MetricsPanel(metrics: _metrics)],
-                ],
-              ),
-            ),
+            child: pages[_selectedIndex],
           ),
         ),
       ),
-      bottomNavigationBar: _MiniPlayer(metrics: _metrics, manifest: _manifest),
+      bottomNavigationBar: Container(
+        color: _WzTokens.surfaceMuted,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            BottomNavigationBar(
+              currentIndex: _selectedIndex,
+              onTap: (i) => setState(() => _selectedIndex = i),
+              backgroundColor: _WzTokens.surfaceMuted,
+              selectedItemColor: _WzTokens.accent,
+              unselectedItemColor: _WzTokens.textMuted,
+              type: BottomNavigationBarType.fixed,
+              items: const [
+                BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
+                BottomNavigationBarItem(icon: Icon(Icons.play_circle_fill), label: 'Now'),
+                BottomNavigationBarItem(icon: Icon(Icons.queue_music), label: 'Queue'),
+                BottomNavigationBarItem(icon: Icon(Icons.library_music), label: 'Library'),
+                BottomNavigationBarItem(icon: Icon(Icons.engineering), label: 'Engine'),
+              ],
+            ),
+            const Divider(height: 1, color: _WzTokens.border),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              child: _MiniPlayer(metrics: _metrics, manifest: _manifest),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
