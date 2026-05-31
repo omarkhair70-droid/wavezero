@@ -556,3 +556,80 @@ WaveZero #70 is not:
 12. Delete cached track from Library Downloads view and confirm Downloads tab updates.
 13. Confirm Now Playing still works.
 14. Confirm Engine diagnostics still exist.
+
+## WaveZero #71 — Rich Media Notification + Lock Screen Controls
+
+WaveZero #71 upgrades the Android foreground media notification from the earlier basic Play/Pause + Stop foundation into a richer, source-aware media notification and lock-screen metadata foundation.
+
+### Implemented notification and lock-screen behavior
+
+- The native Android playback layer now tracks a notification media snapshot with track id, title, artist, album, URL, artwork URI, duration, source, quality label, and codec when Flutter has real metadata available.
+- Flutter sends notification metadata over the existing `wavezero/playback` MethodChannel when catalog/API tracks, Android Device Music tracks, and cached/downloaded tracks are loaded.
+- Flutter also sends a safe queue snapshot whenever Queue Engine v2 state changes through add, reorder, Play Next, remove, clear, and current-track changes. Queue-only edits update the native snapshot but do not force-start a foreground notification from a cold/no-track state.
+- The foreground notification now exposes Previous, Play/Pause, Next, and Stop actions. Compact media-style actions prioritize Previous / Play-Pause / Next.
+- Previous and Next are queue-aware on the native side. They use only the Flutter-provided snapshot and safely no-op when there is no previous/next playable item or the snapshot is missing/stale.
+- Native notification actions accept existing playable URLs, including Android MediaStore `content://` tracks, cached/downloaded `file://` tracks, and remote `http://`/`https://` tracks. Notification actions do not download or cache anything.
+- Media3 `MediaItem` metadata is updated with title, artist, album, and artwork URI where available so Android lock-screen/media surfaces can display the current metadata through the MediaSession foundation.
+
+### Artwork behavior
+
+Artwork is intentionally conservative in this foundation:
+
+- Flutter sends real artwork URLs/URIs only when they already exist in catalog, device, or cache metadata.
+- Native Android sets the Media3 metadata artwork URI when it can parse the URI.
+- The notification does not perform blocking network artwork downloads on the main thread.
+- Broken or missing artwork is reported through diagnostics as `none`, `uri_set`, or `failed` rather than crashing playback.
+
+### Diagnostics
+
+Engine metrics now include notification/media-session diagnostics:
+
+- Notification metadata title and source.
+- Native queue snapshot count.
+- Previous/Next availability.
+- Last notification action, result, and action track id.
+- Native current track id, URL, title, artist, album, and source for small Flutter-side reconciliation.
+- Artwork status.
+- Media session status.
+
+Flutter uses the native current track/action metrics during normal metrics refresh to align selected/current queue ids when the track exists in current library or queue state. This is deliberately small and does not rebuild manifests or rewrite Queue Engine v2 semantics.
+
+### What is supported now
+
+- Richer Android media notification metadata for API Catalog, Device Music, and cached/downloaded playback.
+- Previous / Play-Pause / Next / Stop actions in the notification.
+- Queue-aware native Previous/Next from the Flutter-provided queue snapshot.
+- Lock-screen/media-session metadata foundation for title, artist, album, artwork URI, controls, and playback state.
+- Device `content://`, cached `file://`, and remote URL playback through notification controls when those URLs are already known.
+
+### Foundation / future work
+
+This is not final certification or a full platform media integration suite:
+
+- Android Auto is not final or certified.
+- Bluetooth/media-button behavior is only the platform MediaSession foundation where Android supports it automatically; it is not claimed as final Bluetooth certification.
+- No lyrics.
+- No custom notification artwork generation.
+- No like/download buttons in the notification yet.
+- No cloud sync.
+
+### Behavior intentionally not changed
+
+WaveZero #71 does not change the Rust API, CacheService behavior, Android MediaStore scan/permission behavior, Downloads Manager semantics, Queue Engine v2 semantics beyond sending a safe notification queue snapshot, Smart Downloads behavior, Audio Quality selection logic, or the Audio Effects bridge. It also does not add playlists, login/cloud/upload/database/DRM/payments, AI recommendations, or theme customization.
+
+### Manual checklist
+
+1. Start app on Android.
+2. Play an API Catalog track.
+3. Pull down notification shade.
+4. Confirm title and artist/subtitle are correct.
+5. Confirm Play/Pause works from notification.
+6. Add multiple tracks to Queue.
+7. Confirm Next works from notification.
+8. Confirm Previous works from notification.
+9. Confirm app Now Playing/Queue state stays reasonable after notification Next/Previous.
+10. Play a Device Music `content://` track and confirm notification works.
+11. Play a cached/downloaded `file://` track and confirm notification works.
+12. Lock phone and confirm lock-screen media controls appear with current metadata.
+13. Press Stop/Dismiss and confirm playback stops and notification disappears.
+14. Reopen app and confirm it does not crash and Engine diagnostics still show notification state.
