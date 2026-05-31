@@ -47,3 +47,31 @@ Offline library manual checklist
 Notes for reviewers
 - The cache index is stored in `SharedPreferences` under key `wz_cache_index`.
 - Cached files are stored in the app documents directory with the prefix `wz_cache_<trackId>`.
+
+Predictive Smart Downloads (WaveZero #63)
+
+- Overview: Predictive Smart Downloads automatically caches the currently playing track and the up-next queued track in the background so users can play them offline without manually tapping download.
+
+- Behavior:
+   - When a track is loaded/played from the catalog or offline metadata, the app will attempt to auto-cache the current track if it is not already cached.
+   - After the current track is ready, the app checks the queue and will attempt to auto-cache the up-next track (if available and not already cached/caching).
+   - Auto-cache operations run in the background and do not block playback.
+   - A simple internal limit prevents auto-caching more than 10 cached tracks: if the offline cached library already has >= 10 tracks, auto-cache is skipped.
+   - Auto-cache will skip tracks that are already cached, currently caching, or already in-flight via the auto-cache engine.
+
+- Engine UI:
+   - The Engine tab contains a new "Smart Downloads" diagnostics card showing on/off, last smart download, counters (started/completed/failed/skipped), in-flight count, and last reason/result.
+   - A toggle allows enabling/disabling Smart Downloads during runtime.
+
+Manual test checklist
+1. Clear cache.
+2. Start audio/API/app.
+3. Play a track without pressing manual download.
+4. Confirm Engine shows smart download started/completed.
+5. Confirm cache count increases.
+6. Add multiple tracks to queue.
+7. Play first track.
+8. Confirm up-next track gets cached automatically.
+9. Stop audio server.
+10. Confirm auto-cached current/next tracks can still play from cache.
+11. Toggle Smart Downloads off and confirm no new auto-cache starts.
