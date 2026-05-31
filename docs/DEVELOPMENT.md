@@ -1245,3 +1245,195 @@ WaveZero #78 does not add auth, cloud sync, cross-device state, backend APIs, an
 18. Confirm add-to-Collection from history works.
 19. Confirm no raw debug UI appears in consumer mode.
 20. Confirm Library, Collections, Queue, Now, Downloads, Storage Manager, Settings, Legal/Licenses, and notifications still work.
+
+## WaveZero #79 — Search & Discovery v2
+
+WaveZero #79 upgrades search from a Library-only filter into a local-first Search & Discovery surface across existing app state. It adds an internal Search page without adding a bottom-navigation item, backend search, cloud sync, auth, analytics, database storage, or production catalog complexity.
+
+### Internal Search page
+
+- The app shell now has an internal `_AppTab.search` route.
+- Search is opened from in-app entry points rather than the bottom nav, so the consumer bottom navigation remains Home, Library, Now, Queue, and Downloads. Developer mode still adds Engine.
+- The Search page uses the WaveZero design system and has a header copy of “Find tracks, downloads, collections, and recent plays on this device.”
+
+### Entry points
+
+- Home quick actions include **Search music**.
+- Library v2 keeps its existing local source search and adds **Open full search** to jump into unified Search & Discovery.
+- Settings includes a small **Search & Discovery** row with **View search** and a recent-search clear action when recent searches exist.
+
+### Searchable sources
+
+Search combines current in-memory UI state only:
+
+- API catalog / Library tracks from the loaded catalog.
+- Device Music tracks imported from Android MediaStore summaries.
+- Downloads / cached tracks from the existing cache summaries.
+- Collections, including Liked Tracks and user-created collections, plus saved collection track snapshots.
+- Listening History / Recently Played entries.
+- Existing legal/source metadata such as license status, source name, source labels, quality labels, and codec labels.
+
+### Result model and result types
+
+Search results are normalized into a lightweight UI model with id, title, subtitle, type, source, optional artwork URL, track id, collection id, history track id, quality label, codec, license metadata, availability, and a friendly secondary label.
+
+Result types are:
+
+- `track`
+- `deviceTrack`
+- `downloadedTrack`
+- `collection`
+- `historyEntry`
+- `artistLike` reserved for future artist-like discovery
+- `unknown` reserved for fallback UI
+
+### Filters
+
+The Search page exposes source/type filter chips using a mobile-safe `Wrap`:
+
+- All
+- Songs
+- Device
+- Downloads
+- Collections
+- History
+- Legal / Demo
+
+The active query, selected filter, and result count are shown above results. Filters are local UI filters only and do not change Library, Queue, cache, or playback semantics.
+
+### Matching and ranking behavior
+
+Matching is local and deterministic. Search text is normalized by trimming, lowercasing, collapsing repeated spaces, removing simple Arabic diacritics, and normalizing common Arabic alef/ya/ta marbuta forms without adding packages or breaking Arabic titles.
+
+Search matches useful existing metadata where available:
+
+- Track title.
+- Artist/subtitle.
+- Album name.
+- Collection name and collection track snapshots.
+- History title/subtitle.
+- Source labels.
+- License badge/source metadata.
+- Quality and codec labels.
+
+Ranking prefers:
+
+1. Exact title match.
+2. Title starts with the query.
+3. Title contains the query.
+4. Artist/subtitle contains the query.
+5. Collection-name or collection-snapshot matches.
+6. History, downloaded, and device matches.
+7. License/source metadata matches.
+
+Ties are sorted deterministically by normalized title and original result order.
+
+### Results, empty states, and discovery
+
+Search result cards show title, subtitle, source/type badges, quality/codec badges when available, license badges when available, availability state, and relevant actions.
+
+When the query is empty, Search shows only real local discovery sections:
+
+- Continue Listening from the latest history entry.
+- Recently Played from the top local history entries.
+- Downloaded / Offline Ready from cached tracks.
+- Collections from Liked Tracks and user collections.
+- Legal Demo / API Catalog from loaded catalog tracks.
+
+When a query has no matches, Search shows “No results found on this device.” and suggests importing Device Music or loading the catalog.
+
+### Actions and resolution
+
+Search actions reuse existing app behavior:
+
+- Track-like results play through the existing catalog-track load path.
+- Queue actions call the existing add-to-queue behavior.
+- Collection actions call the existing add-to-collection sheet.
+- Collection results open existing collection detail.
+- History results reuse existing history play, queue, and collection helpers.
+- Unavailable results show the existing “Track is not available right now.” behavior.
+
+Search does not invent playback URLs and does not bypass device, cache, native playback, queue, or collection resolution.
+
+### Recent searches
+
+Recent searches are persisted locally in SharedPreferences with `wavezero.recent_searches.v1`.
+
+- Last 10 text queries are stored.
+- Duplicates are removed using normalized query text.
+- Tapping a recent query restores it into the Search input.
+- Recent searches can be cleared from Search or Settings.
+- Recent search persistence is local-only and is not synced or logged.
+
+### Library relationship
+
+Library v2 keeps its existing source-filtered search behavior. The Library search box still filters the selected Library source, and the new **Open full search** action opens Search & Discovery with the current Library query when present.
+
+### Legal and privacy behavior
+
+Search preserves existing source/legal distinctions:
+
+- Device Music is labeled as user/device music.
+- Downloaded tracks preserve their cached license metadata.
+- API/dev/demo catalog tracks preserve existing license badges and source labels.
+- History and Collections preserve saved license snapshots where available.
+
+Search is local-only:
+
+- No analytics SDK.
+- No server query logging.
+- No cloud sync.
+- No backend search API.
+- No database or persistent search index.
+
+### Intentionally not changed
+
+This work does not change:
+
+- Rust API behavior.
+- Android native playback.
+- Android MediaStore import behavior.
+- CacheService file format.
+- Queue Engine v2 semantics.
+- Smart Downloads logic.
+- Audio Quality logic.
+- Audio Effects bridge.
+- Legal catalog rules.
+- Bottom navigation structure.
+- Production catalog rights assumptions.
+
+### Future work
+
+- Backend search.
+- Indexed search.
+- Fuzzy search.
+- Typo tolerance.
+- Semantic search.
+- Recommendations.
+- Artist/album pages.
+- Genre/mood discovery.
+- Online catalog search.
+- Voice search.
+
+### Manual checklist
+
+1. Start app.
+2. Open Search from Home.
+3. Search for an API catalog track.
+4. Search for a Device Music track.
+5. Search for a downloaded/cached track.
+6. Search for a collection name.
+7. Search for a recently played track.
+8. Switch filters: All, Songs, Device, Downloads, Collections, History.
+9. Play a track from Search.
+10. Add a track to Queue from Search.
+11. Add a track to Collection from Search.
+12. Open a collection result.
+13. Confirm empty query shows real discovery sections.
+14. Confirm no-results state is friendly.
+15. Confirm Arabic/long titles do not overflow.
+16. Confirm Device Music remains labeled as user/device music.
+17. Confirm dev/legal catalog badges remain clear.
+18. Confirm no raw debug text appears in consumer mode.
+19. Confirm Library search still works and the full-search entry works.
+20. Confirm Home, Library, Collections, History, Queue, Now, Downloads, Storage Manager, Settings, Legal/Licenses, and notifications still work.
