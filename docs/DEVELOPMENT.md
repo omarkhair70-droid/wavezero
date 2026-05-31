@@ -802,3 +802,112 @@ Settings → About identifies WaveZero as a smart music experience engine and ke
 14. Confirm Engine appears in developer mode.
 15. Toggle Developer Mode off and confirm Engine disappears.
 16. Confirm playback, Library, Queue, Downloads, notification controls still work.
+
+## WaveZero #75 — Real Storage Manager v1
+
+WaveZero #75 adds a user-facing Storage Manager v1 for downloaded and cached-for-offline tracks while preserving the existing cache, download, Smart Downloads, offline playback, queue, and native playback semantics.
+
+### Entry points
+
+- Settings → Downloads & Storage keeps the existing summary metrics and now includes a **Manage storage** action.
+- Downloads remains the user’s offline music list and includes a **Manage Storage** action for deeper management.
+- Storage Manager is not a new bottom-navigation item; it is reached from Settings and Downloads.
+
+### Storage summary
+
+Storage Manager shows friendly summary cards for:
+
+- Total tracks cached for offline playback.
+- Total device storage used by downloaded/cached tracks.
+- Manual downloads.
+- Smart downloads.
+- Offline-ready tracks.
+
+The page also shows a friendly status:
+
+- **Ready for offline playback** when tracks are available.
+- **No downloads yet** / **Storage is clear** when the downloaded cache is empty.
+
+### Categories
+
+Storage Manager groups existing cached metadata into simple categories without adding a database or changing file storage:
+
+- All cached.
+- Manual downloads.
+- Smart downloads.
+- Current / recently cached, using the existing Smart Downloads current-track source when available.
+- Unknown source fallback.
+
+### Per-track actions and metadata
+
+Each downloaded/cached track row can show:
+
+- Title.
+- Artist/subtitle.
+- Source label: Manual, Smart Current, Smart Up Next, or Unknown.
+- Quality label when available.
+- Codec and bitrate when available.
+- Local file size when available.
+- Play action using the existing cached playback path.
+- Remove from device action using the existing single-track cache delete handler.
+
+### Smart Downloads toggle
+
+Storage Manager exposes the existing Smart Downloads toggle with this consumer explanation:
+
+> WaveZero can cache the current and up-next tracks for faster offline-ready playback.
+
+This is only an entry-point/settings exposure. WaveZero #75 does not change Smart Downloads behavior.
+
+### Clear all downloads
+
+Storage Manager and Settings both keep a clear-all action wired to the existing clear-cache handler. Consumer copy uses **Clear all downloads** / **Storage is clear** language instead of raw diagnostic wording.
+
+### Consumer and developer behavior
+
+Consumer-facing storage UI avoids raw implementation details such as cache service names, file paths, internal asset IDs, preference keys, and stack traces. Developer diagnostics remain in Engine and may continue to expose advanced cache/offline counters for development.
+
+### Intentionally not changed
+
+WaveZero #75 intentionally does not change:
+
+- Android native playback.
+- Rust API behavior.
+- Device Music native MediaStore behavior.
+- Queue Engine v2 semantics.
+- Smart Downloads logic beyond exposing the existing toggle.
+- Audio Quality logic.
+- Audio Effects bridge behavior.
+- CacheService file format or persistence model.
+- Cached playback semantics.
+- Login, cloud sync, uploads, databases, DRM, payments, playlists, legal demo catalog tracks, or account sync.
+
+Device Music tracks remain separate from downloaded/cached remote/API tracks and are not treated as Storage Manager downloads.
+
+### Future work
+
+- Auto-clean policy.
+- Storage quota.
+- Pin downloads.
+- Playlist downloads.
+- Cloud sync.
+- Account sync.
+
+### Manual checklist
+
+1. Start app.
+2. Open Settings.
+3. Open Manage Storage.
+4. Confirm storage summary matches Downloads/cache state.
+5. Cache/download multiple tracks.
+6. Confirm tracks appear in Storage Manager.
+7. Confirm Manual vs Smart labels appear when available.
+8. Play a cached track from Storage Manager.
+9. Delete one cached track.
+10. Confirm it disappears from Storage Manager and Downloads.
+11. Clear all cache.
+12. Confirm Downloads and Storage Manager become empty.
+13. Toggle Smart Downloads.
+14. Confirm no raw debug text appears in consumer mode.
+15. Confirm Device Music tracks are not treated as cached downloads.
+16. Confirm Library, Downloads, Queue, Now, Settings, and notification controls still work.
