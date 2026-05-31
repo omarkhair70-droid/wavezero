@@ -2001,3 +2001,83 @@ Cloud Vault is private source organization for music the user owns. WaveZero doe
 20. Confirm no bottom-nav item was added.
 
 See [Cloud Vault](cloud-vault.md) for the detailed safety model and roadmap.
+
+## WaveZero #87: FMA Green Small Local Demo Library
+
+WaveZero #87 adds local tooling and documentation for a large FMA Green Small Demo Library without committing audio or generated machine-specific catalog files to the repository. The workflow is intended for local development and demo stress testing only.
+
+Use `tools/fma/build_fma_green_small_local_library.py` when you have these external files outside Git:
+
+- `fma_small.zip`
+- FMA metadata CSVs in a local `fma_metadata` directory
+- `wavezero_fma_green_candidates_all_v2.csv` or an equivalent strict Green candidates CSV
+
+Example PowerShell command from the repository root:
+
+```powershell
+$WorkRoot = "C:\Users\dell\Desktop\wavezero-fma-work\fma\data"
+$MetadataDir = "$WorkRoot\fma_metadata"
+$AudioDir = "$WorkRoot\wavezero_fma_green_small_audio"
+$CatalogJson = "$MetadataDir\wavezero_fma_green_small_catalog.json"
+$ReportCsv = "$MetadataDir\wavezero_fma_green_small_import_report.csv"
+$AudioBaseUrl = "http://<LAN-IP>:8091"
+
+python tools\fma\build_fma_green_small_local_library.py `
+  --metadata-dir $MetadataDir `
+  --fma-small-zip "$WorkRoot\fma_small.zip" `
+  --input-csv "$MetadataDir\wavezero_fma_green_candidates_all_v2.csv" `
+  --output-audio-dir $AudioDir `
+  --output-catalog-json $CatalogJson `
+  --output-report-csv $ReportCsv `
+  --audio-base-url $AudioBaseUrl
+```
+
+Serve the extracted audio from a dedicated terminal:
+
+```powershell
+cd <output-audio-dir>
+python -m http.server 8091 --bind 0.0.0.0
+```
+
+Start the Rust API in demo content mode with the generated local catalog:
+
+```powershell
+$env:WAVEZERO_CONTENT_MODE = "demo"
+$env:WAVEZERO_CATALOG_PATH = "<generated catalog json>"
+$env:WAVEZERO_AUDIO_BASE_URL = "http://<LAN-IP>:8091"
+$env:WAVEZERO_CONTENT_MODE_LABEL = "FMA Green Demo Library"
+```
+
+Then run the Flutter app against the Rust API base URL:
+
+```powershell
+cd apps\flutter\wavezero_app
+flutter run --dart-define=WAVEZERO_API_BASE_URL=http://<API-IP>:<API-PORT>
+```
+
+Manual checklist:
+
+1. Confirm `fma_small.zip` exists outside the repo.
+2. Confirm the metadata CSV exists outside the repo.
+3. Run the importer with `--audio-base-url http://<LAN-IP>:8091`.
+4. Confirm `Imported audio` equals the expected Green small input.
+5. Confirm `Missing` is `0` or document missing rows from the report.
+6. Start the local audio server on `8091`.
+7. Start the Rust API with the generated catalog path.
+8. Open `/api/content/status`.
+9. Open `/catalog` and confirm more than 1000 tracks.
+10. Launch the Flutter app with the API base URL.
+11. Confirm Library/Search show the large demo catalog.
+12. Play multiple tracks from different genres.
+13. Queue multiple FMA tracks.
+14. Confirm no MP3/ZIP/generated local catalog files are staged for Git.
+15. Confirm docs explain attribution and production verification boundaries.
+
+Safety and legal boundaries:
+
+- `productionSafe` in this generated catalog means local demo candidate, not final legal approval.
+- Original FMA track pages, license URLs, attribution requirements, and production rights must be verified before production release.
+- Do not commit MP3s, `fma_small.zip`, generated local catalogs, generated import reports, or machine-specific LAN URLs.
+- Do not add ripping/downloading from YouTube, SoundCloud, Spotify, Anghami, or other commercial streaming services.
+
+See `docs/fma-local-demo-library.md` for the complete local workflow and the distinction between the small Curated Featured Demo and the Big Local Demo Library.
