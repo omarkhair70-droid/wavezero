@@ -1,4 +1,4 @@
-import '../catalog/catalog_client.dart';
+import '../catalog/catalog_track_manifest.dart';
 import '../playback/playback_metrics.dart';
 
 class SmartQueueReason {
