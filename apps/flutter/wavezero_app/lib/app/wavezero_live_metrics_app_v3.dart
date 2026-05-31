@@ -28,6 +28,48 @@ enum _AppMode { consumer, developer }
 
 enum _AppTab { home, library, now, queue, search, collections, collectionDetail, downloads, storage, history, settings, engine }
 
+enum WzRepeatMode { off, one, all }
+
+enum _SleepTimerPreset { off, minutes15, minutes30, minutes45, minutes60 }
+
+extension _WzRepeatModeLabel on WzRepeatMode {
+  String get label => switch (this) {
+        WzRepeatMode.off => 'Repeat off',
+        WzRepeatMode.one => 'Repeat one',
+        WzRepeatMode.all => 'Repeat all',
+      };
+
+  IconData get icon => switch (this) {
+        WzRepeatMode.off => Icons.repeat,
+        WzRepeatMode.one => Icons.repeat_one,
+        WzRepeatMode.all => Icons.repeat,
+      };
+
+  WzRepeatMode get next => switch (this) {
+        WzRepeatMode.off => WzRepeatMode.one,
+        WzRepeatMode.one => WzRepeatMode.all,
+        WzRepeatMode.all => WzRepeatMode.off,
+      };
+}
+
+extension _SleepTimerPresetLabel on _SleepTimerPreset {
+  String get label => switch (this) {
+        _SleepTimerPreset.off => 'Off',
+        _SleepTimerPreset.minutes15 => '15 minutes',
+        _SleepTimerPreset.minutes30 => '30 minutes',
+        _SleepTimerPreset.minutes45 => '45 minutes',
+        _SleepTimerPreset.minutes60 => '60 minutes',
+      };
+
+  Duration? get duration => switch (this) {
+        _SleepTimerPreset.off => null,
+        _SleepTimerPreset.minutes15 => const Duration(minutes: 15),
+        _SleepTimerPreset.minutes30 => const Duration(minutes: 30),
+        _SleepTimerPreset.minutes45 => const Duration(minutes: 45),
+        _SleepTimerPreset.minutes60 => const Duration(minutes: 60),
+      };
+}
+
 class _ShellDestination {
   const _ShellDestination({required this.tab, required this.label, required this.icon});
 
@@ -280,6 +322,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
   static const _appModePreferenceKey = 'wavezero.app_mode';
   static const _recentSearchesPreferenceKey = 'wavezero.recent_searches.v1';
+  static const _shufflePreferenceKey = 'wavezero.shuffle_enabled';
+  static const _repeatModePreferenceKey = 'wavezero.repeat_mode';
+  static const _sleepTimerPresetPreferenceKey = 'wavezero.sleep_timer_preset';
 
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
@@ -288,6 +333,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   late final TextEditingController _fullSearchController;
 
   Timer? _poller;
+  Timer? _sleepTimer;
   PlaybackMetrics _metrics = const PlaybackMetrics();
   CatalogTrackManifest? _manifest;
   List<CatalogTrackSummary> _catalog = const [];
@@ -308,6 +354,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   _AppMode _appMode = _AppMode.consumer;
   _AppTab _selectedTab = _AppTab.home;
   bool _autoAdvanceEnabled = true;
+  bool _shuffleEnabled = false;
+  WzRepeatMode _repeatMode = WzRepeatMode.off;
+  _SleepTimerPreset _sleepTimerPreset = _SleepTimerPreset.off;
+  DateTime? _sleepTimerDeadline;
   bool _sessionRestored = false;
   int _autoAdvanceCount = 0;
   int _prefetchGeneration = 0;
@@ -607,6 +657,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   bool get _canPrevious => _queueIndex > 0;
   bool get _canNext => _queueIndex >= 0 && _queueIndex < _queue.length - 1;
+  bool get _canShuffleNext => _shuffleEnabled && _queue.length > 1 && _queueIndex >= 0;
+  bool get _canPlayNextControl => _canNext || _canShuffleNext;
+
+  String get _sleepTimerStatusLabel {
+    final deadline = _sleepTimerDeadline;
+    if (deadline == null) return 'Sleep timer';
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining.inSeconds <= 0) return 'Sleep timer ending';
+    final minutes = remaining.inMinutes + (remaining.inSeconds % 60 == 0 ? 0 : 1);
+    return 'Sleep in ${minutes}m';
+  }
+
+  String get _sleepTimerSettingsLabel => _sleepTimerDeadline == null ? 'Sleep timer off' : _sleepTimerStatusLabel;
   bool get _playerDisabled => _operation.disablesPlayerControls;
   bool get _catalogRefreshDisabled => _operation.disablesCatalogRefresh;
   bool get _queueDisabled => _operation.disablesQueueControls;
@@ -655,12 +718,26 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_loadCollections());
     unawaited(_loadListeningHistory());
     unawaited(_loadRecentSearches());
+    unawaited(_loadPlaybackModePrefs());
   }
 
   Future<void> _loadListeningHistory() async {
     final entries = await _listeningHistoryService.load();
     if (!mounted) return;
     setState(() => _listeningHistory = entries);
+  }
+
+  Future<void> _loadPlaybackModePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final repeatName = prefs.getString(_repeatModePreferenceKey);
+    final presetName = prefs.getString(_sleepTimerPresetPreferenceKey);
+    setState(() {
+      _shuffleEnabled = prefs.getBool(_shufflePreferenceKey) ?? false;
+      _repeatMode = WzRepeatMode.values.firstWhere((mode) => mode.name == repeatName, orElse: () => WzRepeatMode.off);
+      _sleepTimerPreset = _SleepTimerPreset.values.firstWhere((preset) => preset.name == presetName, orElse: () => _SleepTimerPreset.off);
+      _sleepTimerDeadline = null;
+    });
   }
 
   Future<void> _loadRecentSearches() async {
@@ -1130,6 +1207,101 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return _setAppMode(_developerMode ? _AppMode.consumer : _AppMode.developer);
   }
 
+  Future<void> _setShuffleEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_shufflePreferenceKey, enabled);
+    if (!mounted) return;
+    setState(() {
+      _shuffleEnabled = enabled;
+      _queueStatus = enabled ? 'Shuffle on.' : 'Shuffle off.';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(enabled ? 'Shuffle on' : 'Shuffle off')));
+    unawaited(_updatePredictivePreloadCandidate());
+  }
+
+  Future<void> _cycleRepeatMode() => _setRepeatMode(_repeatMode.next);
+
+  Future<void> _setRepeatMode(WzRepeatMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_repeatModePreferenceKey, mode.name);
+    if (!mounted) return;
+    setState(() {
+      _repeatMode = mode;
+      _queueStatus = mode.label;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mode.label)));
+  }
+
+  Future<void> _showSleepTimerPicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: WzColors.surface,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(WzSpacing.md, 0, WzSpacing.md, WzSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Sleep timer', style: WzText.title),
+              const SizedBox(height: WzSpacing.xs),
+              Text(_sleepTimerDeadline == null ? 'Pause playback after a selected time.' : _sleepTimerStatusLabel, style: WzText.caption),
+              const SizedBox(height: WzSpacing.md),
+              ..._SleepTimerPreset.values.map((preset) => ListTile(
+                    leading: Icon(preset == _SleepTimerPreset.off ? Icons.timer_off : Icons.bedtime),
+                    title: Text(preset == _SleepTimerPreset.off ? 'Sleep timer off' : preset.label),
+                    trailing: _sleepTimerPreset == preset && (preset == _SleepTimerPreset.off || _sleepTimerDeadline != null) ? const Icon(Icons.check) : null,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      unawaited(_setSleepTimerPreset(preset));
+                    },
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setSleepTimerPreset(_SleepTimerPreset preset) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sleepTimerPresetPreferenceKey, preset.name);
+    _sleepTimer?.cancel();
+    final duration = preset.duration;
+    if (!mounted) return;
+    if (duration == null) {
+      setState(() {
+        _sleepTimerPreset = _SleepTimerPreset.off;
+        _sleepTimerDeadline = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer off')));
+      return;
+    }
+    final deadline = DateTime.now().add(duration);
+    setState(() {
+      _sleepTimerPreset = preset;
+      _sleepTimerDeadline = deadline;
+    });
+    _sleepTimer = Timer(duration, () => unawaited(_handleSleepTimerEnded()));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sleep in ${duration.inMinutes}m')));
+  }
+
+  Future<void> _handleSleepTimerEnded() async {
+    if (!mounted) return;
+    setState(() {
+      _sleepTimerPreset = _SleepTimerPreset.off;
+      _sleepTimerDeadline = null;
+      _queueStatus = 'Sleep timer ended.';
+    });
+    if (_metrics.isPlaying) {
+      await widget.playbackBridge.pause();
+      unawaited(_saveCurrentHistoryPosition());
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer ended')));
+  }
+
   void _navigateTo(_AppTab tab) {
     if (tab == _AppTab.engine && !_developerMode) return;
     setState(() => _selectedTab = tab);
@@ -1259,6 +1431,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   @override
   void dispose() {
     _poller?.cancel();
+    _sleepTimer?.cancel();
     _titleController.dispose();
     _urlController.dispose();
     _apiBaseUrlController.dispose();
@@ -1396,7 +1569,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {
-    if (!_autoAdvanceEnabled || _operation != PlayerOperation.idle || !_canNext) return;
+    if (!_autoAdvanceEnabled || _operation != PlayerOperation.idle) return;
     final durationMs = metrics.durationMs ?? _manifest?.durationMs;
     if (durationMs == null || durationMs <= 0) return;
     final remainingMs = durationMs - metrics.currentPositionMs;
@@ -1409,7 +1582,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final id = _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
     if (id == null || id == _lastAutoAdvanceTrackId) return;
     _lastAutoAdvanceTrackId = id;
-    await _playNext(autoStart: true, source: QueueAdvanceSource.auto);
+
+    if (_repeatMode == WzRepeatMode.one) {
+      setState(() => _queueStatus = 'Repeat one: replaying current track.');
+      await _seekTo(0);
+      await widget.playbackBridge.play();
+      return;
+    }
+    if (_shuffleEnabled && await _playRandomQueueTrack(autoStart: true, source: QueueAdvanceSource.auto)) return;
+    if (_canNext) {
+      await _playNext(autoStart: true, source: QueueAdvanceSource.auto, allowShuffle: false);
+      return;
+    }
+    if (_repeatMode == WzRepeatMode.all && _queue.isNotEmpty) {
+      await _playQueueTrack(_queue.first, autoStart: true, source: QueueAdvanceSource.auto);
+    }
   }
 
   // Predictive Smart Downloads helpers
@@ -2385,6 +2572,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       QueueAdvanceSource.auto => 'Auto-advanced to ${track.title}.',
       QueueAdvanceSource.next => prefetchHit ? 'Instant Next manifest hit: ${track.title}.' : 'Skipped to next: ${track.title}.',
       QueueAdvanceSource.previous => 'Returned to previous: ${track.title}.',
+      QueueAdvanceSource.shuffle => 'Shuffle picked: ${track.title}.',
       QueueAdvanceSource.manual => 'Queue selected: ${track.title}.',
     };
     if (source == QueueAdvanceSource.auto) setState(() => _autoAdvanceCount += 1);
@@ -2478,7 +2666,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
-  Future<void> _playNext({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.next}) async {
+  Future<bool> _playRandomQueueTrack({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.shuffle}) async {
+    if (_queue.length <= 1) return false;
+    final currentId = _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
+    final candidates = _queue.where((track) => track.trackId != currentId).toList(growable: false);
+    if (candidates.isEmpty) return false;
+    final track = candidates[math.Random().nextInt(candidates.length)];
+    await _playQueueTrack(track, autoStart: autoStart, source: source);
+    if (mounted && source == QueueAdvanceSource.shuffle) setState(() => _queueStatus = 'Shuffle picked: ${track.title}.');
+    return true;
+  }
+
+  Future<void> _playNext({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.next, bool allowShuffle = true}) async {
+    if (allowShuffle && _shuffleEnabled && await _playRandomQueueTrack(autoStart: autoStart, source: QueueAdvanceSource.shuffle)) return;
     final index = _queueIndex;
     if (index < 0 || index >= _queue.length - 1) return;
     await _playQueueTrack(_queue[index + 1], autoStart: autoStart, source: source);
@@ -2522,8 +2722,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           durationMs: durationMs,
           controlsDisabled: _playerDisabled,
           canPlayPrevious: _canPrevious,
-          canPlayNext: _canNext,
+          canPlayNext: _canPlayNextControl,
           offlineReady: _offlineLibraryAvailable,
+          shuffleEnabled: _shuffleEnabled,
+          repeatMode: _repeatMode,
+          sleepTimerLabel: _sleepTimerStatusLabel,
+          sleepTimerActive: _sleepTimerDeadline != null,
+          onShuffleChanged: _setShuffleEnabled,
+          onCycleRepeatMode: _cycleRepeatMode,
+          onOpenSleepTimer: _showSleepTimerPicker,
           onPlayPause: _playPause,
           onStop: _stop,
           onRetry: _retry,
@@ -2654,7 +2861,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             durationMs: durationMs,
             controlsDisabled: _playerDisabled,
             canPlayPrevious: _canPrevious,
-            canPlayNext: _canNext,
+            canPlayNext: _canPlayNextControl,
             onPlayPause: _playPause,
             onStop: _stop,
             onRetry: _retry,
@@ -2675,6 +2882,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onAddToQueue: _currentKnownTrack == null ? null : () => _addToQueue(_currentKnownTrack!),
             onOpenQueue: () => _navigateTo(_AppTab.queue),
             offlineReady: _offlineLibraryAvailable,
+            shuffleEnabled: _shuffleEnabled,
+            repeatMode: _repeatMode,
+            sleepTimerLabel: _sleepTimerStatusLabel,
+            sleepTimerActive: _sleepTimerDeadline != null,
+            onShuffleChanged: _setShuffleEnabled,
+            onCycleRepeatMode: _cycleRepeatMode,
+            onOpenSleepTimer: _showSleepTimerPicker,
           ),
           const SizedBox(height: WzSpacing.md),
           _NowContextPanel(
@@ -3050,6 +3264,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       nativeAudioEffectStatus: _nativeAudioEffectStatus,
       lastAudioEffectApplyResult: _lastAudioEffectApplyResult,
       onAudioEffectChanged: _setAudioEffectProfile,
+      shuffleEnabled: _shuffleEnabled,
+      repeatMode: _repeatMode,
+      sleepTimerLabel: _sleepTimerSettingsLabel,
+      sleepTimerActive: _sleepTimerDeadline != null,
+      onShuffleChanged: _setShuffleEnabled,
+      onRepeatModeChanged: _setRepeatMode,
+      onOpenSleepTimer: _showSleepTimerPicker,
       smartDownloadsEnabled: _smartDownloadsEnabled,
       onSmartDownloadsChanged: (value) => setState(() => _smartDownloadsEnabled = value),
       cachedTrackCount: _cachedTrackCount,
@@ -3144,6 +3365,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   progressValue: progress,
                   sourceLabel: isDevicePlayback ? 'Device music' : _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
                   offlineReady: _offlineLibraryAvailable,
+                  shuffleEnabled: _shuffleEnabled,
+                  repeatMode: _repeatMode,
+                  sleepTimerBadge: _sleepTimerDeadline == null ? null : _sleepTimerStatusLabel,
                   controlsDisabled: _playerDisabled,
                   onTap: _showPremiumPlayerSheet,
                   onPlayPause: _playPause,
@@ -3172,7 +3396,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 }
 
-enum QueueAdvanceSource { manual, next, previous, auto }
+enum QueueAdvanceSource { manual, next, previous, auto, shuffle }
 
 enum _LibrarySourceFilter { all, api, device, downloads }
 
@@ -3929,6 +4153,13 @@ class _SettingsPage extends StatelessWidget {
     required this.nativeAudioEffectStatus,
     required this.lastAudioEffectApplyResult,
     required this.onAudioEffectChanged,
+    required this.shuffleEnabled,
+    required this.repeatMode,
+    required this.sleepTimerLabel,
+    required this.sleepTimerActive,
+    required this.onShuffleChanged,
+    required this.onRepeatModeChanged,
+    required this.onOpenSleepTimer,
     required this.smartDownloadsEnabled,
     required this.onSmartDownloadsChanged,
     required this.cachedTrackCount,
@@ -3966,6 +4197,13 @@ class _SettingsPage extends StatelessWidget {
   final NativeAudioEffectStatus nativeAudioEffectStatus;
   final String lastAudioEffectApplyResult;
   final ValueChanged<AudioEffectProfile> onAudioEffectChanged;
+  final bool shuffleEnabled;
+  final WzRepeatMode repeatMode;
+  final String sleepTimerLabel;
+  final bool sleepTimerActive;
+  final ValueChanged<bool> onShuffleChanged;
+  final ValueChanged<WzRepeatMode> onRepeatModeChanged;
+  final VoidCallback onOpenSleepTimer;
   final bool smartDownloadsEnabled;
   final ValueChanged<bool> onSmartDownloadsChanged;
   final int cachedTrackCount;
@@ -4058,11 +4296,44 @@ class _SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: WzSpacing.md),
-          const WzSectionHeader(title: 'Playback', subtitle: 'User-friendly quality and effect preferences.', icon: Icons.graphic_eq),
+          const WzSectionHeader(title: 'Playback', subtitle: 'User-friendly playback, quality, and effect preferences.', icon: Icons.graphic_eq),
           WzPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Shuffle'),
+                  subtitle: Text(shuffleEnabled ? 'Shuffle on' : 'Shuffle off'),
+                  value: shuffleEnabled,
+                  onChanged: controlsDisabled ? null : onShuffleChanged,
+                ),
+                const SizedBox(height: WzSpacing.xs),
+                Text('Repeat mode', style: WzText.sectionTitle),
+                const SizedBox(height: WzSpacing.xs),
+                Wrap(
+                  spacing: WzSpacing.xs,
+                  runSpacing: WzSpacing.xs,
+                  children: WzRepeatMode.values
+                      .map((mode) => ChoiceChip(
+                            avatar: Icon(mode.icon, size: 18),
+                            label: Text(mode.label),
+                            selected: repeatMode == mode,
+                            onSelected: controlsDisabled ? null : (_) => onRepeatModeChanged(mode),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: WzSpacing.md),
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    WzStatusPill(label: sleepTimerLabel, active: sleepTimerActive, icon: sleepTimerActive ? Icons.bedtime : Icons.timer_outlined),
+                    OutlinedButton.icon(onPressed: controlsDisabled ? null : onOpenSleepTimer, icon: const Icon(Icons.timer_outlined), label: const Text('Sleep timer')),
+                  ],
+                ),
+                const SizedBox(height: WzSpacing.md),
                 Text('Preferred audio quality', style: WzText.sectionTitle),
                 const SizedBox(height: WzSpacing.xs),
                 Wrap(
@@ -5109,6 +5380,13 @@ class _PremiumPlayerSurface extends StatelessWidget {
     required this.onAddToQueue,
     required this.onOpenQueue,
     required this.offlineReady,
+    required this.shuffleEnabled,
+    required this.repeatMode,
+    required this.sleepTimerLabel,
+    required this.sleepTimerActive,
+    required this.onShuffleChanged,
+    required this.onCycleRepeatMode,
+    required this.onOpenSleepTimer,
   });
 
   final PlaybackMetrics metrics;
@@ -5137,6 +5415,13 @@ class _PremiumPlayerSurface extends StatelessWidget {
   final VoidCallback? onAddToQueue;
   final VoidCallback onOpenQueue;
   final bool offlineReady;
+  final bool shuffleEnabled;
+  final WzRepeatMode repeatMode;
+  final String sleepTimerLabel;
+  final bool sleepTimerActive;
+  final ValueChanged<bool> onShuffleChanged;
+  final VoidCallback onCycleRepeatMode;
+  final VoidCallback onOpenSleepTimer;
 
   @override
   Widget build(BuildContext context) {
@@ -5167,6 +5452,17 @@ class _PremiumPlayerSurface extends StatelessWidget {
           _PlayerProgressBlock(progressValue: progressValue, displayedPositionMs: displayedPositionMs, durationMs: durationMs, onSeekChanged: onSeekChanged, onSeekEnd: onSeekEnd),
           const SizedBox(height: WzSpacing.xl),
           _PlayerPrimaryControls(isPlaying: metrics.isPlaying, controlsDisabled: controlsDisabled, canPlayPrevious: canPlayPrevious, canPlayNext: canPlayNext, onPlayPause: onPlayPause, onStop: onStop, onRetry: onRetry, onPrevious: onPrevious, onNext: onNext),
+          const SizedBox(height: WzSpacing.md),
+          _PlaybackModesCard(
+            shuffleEnabled: shuffleEnabled,
+            repeatMode: repeatMode,
+            sleepTimerLabel: sleepTimerLabel,
+            sleepTimerActive: sleepTimerActive,
+            controlsDisabled: controlsDisabled,
+            onShuffleChanged: onShuffleChanged,
+            onCycleRepeatMode: onCycleRepeatMode,
+            onOpenSleepTimer: onOpenSleepTimer,
+          ),
           const SizedBox(height: WzSpacing.sm),
           Wrap(
             alignment: WrapAlignment.center,
@@ -5185,6 +5481,69 @@ class _PremiumPlayerSurface extends StatelessWidget {
       ),
     );
   }
+}
+
+
+class _PlaybackModesCard extends StatelessWidget {
+  const _PlaybackModesCard({
+    required this.shuffleEnabled,
+    required this.repeatMode,
+    required this.sleepTimerLabel,
+    required this.sleepTimerActive,
+    required this.controlsDisabled,
+    required this.onShuffleChanged,
+    required this.onCycleRepeatMode,
+    required this.onOpenSleepTimer,
+  });
+
+  final bool shuffleEnabled;
+  final WzRepeatMode repeatMode;
+  final String sleepTimerLabel;
+  final bool sleepTimerActive;
+  final bool controlsDisabled;
+  final ValueChanged<bool> onShuffleChanged;
+  final VoidCallback onCycleRepeatMode;
+  final VoidCallback onOpenSleepTimer;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(WzSpacing.sm),
+        decoration: BoxDecoration(
+          color: WzColors.surfaceMuted.withOpacity(0.56),
+          borderRadius: BorderRadius.circular(WzRadius.lg),
+          border: Border.all(color: WzColors.borderSoft),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Playback modes', style: WzText.eyebrow),
+            const SizedBox(height: WzSpacing.sm),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: [
+                FilterChip(
+                  avatar: const Icon(Icons.shuffle, size: 18),
+                  label: Text(shuffleEnabled ? 'Shuffle on' : 'Shuffle off'),
+                  selected: shuffleEnabled,
+                  onSelected: controlsDisabled ? null : onShuffleChanged,
+                ),
+                OutlinedButton.icon(
+                  onPressed: controlsDisabled ? null : onCycleRepeatMode,
+                  icon: Icon(repeatMode.icon),
+                  label: Text(repeatMode.label),
+                ),
+                OutlinedButton.icon(
+                  onPressed: controlsDisabled ? null : onOpenSleepTimer,
+                  icon: Icon(sleepTimerActive ? Icons.bedtime : Icons.timer_outlined),
+                  label: Text(sleepTimerActive ? sleepTimerLabel : 'Sleep timer'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
 }
 
 class _PlayerArtworkHero extends StatelessWidget {
@@ -7299,6 +7658,9 @@ class _PremiumMiniPlayer extends StatelessWidget {
     required this.progressValue,
     required this.sourceLabel,
     required this.offlineReady,
+    required this.shuffleEnabled,
+    required this.repeatMode,
+    required this.sleepTimerBadge,
     required this.controlsDisabled,
     required this.onTap,
     required this.onPlayPause,
@@ -7309,6 +7671,9 @@ class _PremiumMiniPlayer extends StatelessWidget {
   final double progressValue;
   final String sourceLabel;
   final bool offlineReady;
+  final bool shuffleEnabled;
+  final WzRepeatMode repeatMode;
+  final String? sleepTimerBadge;
   final bool controlsDisabled;
   final VoidCallback onTap;
   final VoidCallback onPlayPause;
@@ -7354,6 +7719,9 @@ class _PremiumMiniPlayer extends StatelessWidget {
                           ),
                           _MiniBadge(label: sourceLabel),
                           if (offlineReady) const _MiniBadge(label: 'Offline Ready'),
+                          if (shuffleEnabled) const _MiniBadge(label: 'Shuffle'),
+                          if (repeatMode != WzRepeatMode.off) _MiniBadge(label: repeatMode == WzRepeatMode.one ? 'Repeat 1' : 'Repeat all'),
+                          if (sleepTimerBadge != null) _MiniBadge(label: sleepTimerBadge!),
                         ],
                       ),
                       const SizedBox(height: WzSpacing.xxs),

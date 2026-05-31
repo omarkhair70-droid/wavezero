@@ -1647,3 +1647,129 @@ This work also intentionally does not add auth, cloud sync, a database, backend 
 18. Confirm no raw metrics/debug IDs/internal URLs in consumer mode.
 19. Confirm playback, queue, downloads, smart downloads, audio quality/effects, device music, notification controls still work.
 20. Confirm no major feature behavior changed.
+
+## WaveZero #82 — Player Experience v2: Shuffle / Repeat / Sleep Timer
+
+WaveZero #82 adds app-level playback mode controls for the Flutter player surface without changing Android native playback internals, the Rust API, cache file formats, Smart Downloads candidate logic, Device Music MediaStore behavior, audio quality selection, audio effects, backend services, auth, cloud sync, or legal catalog rules.
+
+### Shuffle behavior
+
+- Shuffle is stored as a lightweight Flutter app preference and affects Next behavior only.
+- The visible Queue Engine v2 order is not reshuffled, reordered, duplicated, or permanently mutated by shuffle.
+- When shuffle is on and the queue has more than one playable item, manual Next chooses a random queued track that is not the current track when possible.
+- When shuffle is off, manual Next keeps the existing sequential queue behavior.
+- Auto-advance can also use shuffle before falling back to normal sequential advance.
+- Smart Downloads and smart preload continue to use the existing current/up-next signals and are not rewritten for shuffle memory in this PR.
+
+### Repeat modes
+
+- Repeat off preserves the existing end-of-track and auto-advance behavior.
+- Repeat one replays the current track on the auto-advance/end path by seeking to the beginning and playing again through the existing playback bridge. Manual Next still respects user intent and advances away from the current track.
+- Repeat all loops to the first queued track when the queue reaches the end and no normal next track remains.
+- Repeat modes do not duplicate queue entries and do not create a second queue engine.
+
+### Sleep timer behavior
+
+- Sleep Timer v1 is memory-only while the app is running.
+- Options are Off, 15 minutes, 30 minutes, 45 minutes, and 60 minutes.
+- The active countdown deadline is not restored after app restart; the app starts with the sleep timer off.
+- When the timer ends, WaveZero pauses playback safely through the existing playback bridge and keeps the queue/session context intact.
+- Sleep timer status is computed from the in-memory deadline and is not written to preferences every second.
+
+### Persistence keys
+
+- `wavezero.shuffle_enabled` persists shuffle on/off.
+- `wavezero.repeat_mode` persists repeat off/one/all.
+- `wavezero.sleep_timer_preset` persists the selected sleep timer preset only; active countdown deadlines are intentionally not persisted.
+
+### Player surface controls
+
+- Premium Player Surface v2 now includes a compact Playback modes card with Shuffle, Repeat, and Sleep timer controls.
+- The Now tab and the mini player sheet share the same premium controls because they both render the same player surface.
+- Consumer labels use music-app wording such as “Shuffle on”, “Shuffle off”, “Repeat off”, “Repeat one”, “Repeat all”, “Sleep timer”, and “Sleep in 15m”. Raw enum names are not shown.
+- Controls use wrapping layouts so long localized titles and compact screens do not overflow the player surface.
+
+### Settings integration
+
+- Settings → Playback mirrors the basic playback mode controls without duplicating the full player.
+- Settings includes a Shuffle switch, Repeat mode chips, and a Sleep timer status/shortcut.
+- The section remains focused on calm playback preferences alongside audio quality and audio effects.
+
+### Mini player boundary
+
+- The mini player remains compact.
+- It may show small badges for active Shuffle, Repeat, and Sleep timer state when they fit.
+- Primary playback mode controls remain in the Now tab and player sheet.
+
+### Notification/native boundary
+
+- Native Android notification controls remain system-rendered and unchanged in this PR.
+- No custom Android RemoteViews, MediaSession redesign, or native notification shuffle/repeat buttons were added.
+- Existing notification Next/Previous behavior is only affected where it already routes through Flutter app-level queue actions.
+- Repeat and shuffle controls in notification UI are future native work if needed.
+
+### Auto-advance decision order
+
+The Flutter auto-advance path now evaluates playback modes in this order:
+
+1. Repeat one replays the current track.
+2. Shuffle chooses another queued track when possible.
+3. Normal sequential next uses the existing queue advance path.
+4. Repeat all loops to the first queued track when the end is reached.
+5. Existing end behavior remains when none of the above applies.
+
+### Queue relationship
+
+- Shuffle v1 does not permanently reorder the queue.
+- Repeat all loops queue playback without adding duplicate entries.
+- Repeat one does not duplicate the current track.
+- Sleep timer pauses playback and does not clear the queue.
+- Queue Engine v2 remains the source of current/up-next context.
+
+### What intentionally did not change
+
+- Android native playback internals.
+- Rust API and Rust queue/core crates.
+- Device Music MediaStore import behavior.
+- CacheService file format and offline cache semantics.
+- Smart Downloads candidate selection beyond preserving existing current/up-next update calls.
+- Audio Quality selection logic.
+- Audio Effects bridge behavior.
+- Legal Catalog rules.
+- Backend, auth, cloud sync, database, uploads, payments, DRM, analytics SDKs, or real music files.
+- Bottom navigation structure and the Now tab.
+- Native notification design.
+
+### Future work
+
+- Collection playback sessions.
+- Shuffle history memory to reduce repeats across longer sessions.
+- Shuffle/repeat controls in native notification and lock-screen surfaces.
+- Sleep timer fade-out.
+- Crossfade.
+- Gapless playback.
+- Visualizer.
+- Advanced playback preferences.
+
+### Manual checklist
+
+1. Start app.
+2. Play a track.
+3. Open player sheet.
+4. Toggle Shuffle on/off.
+5. Confirm Next with shuffle on chooses another queued track when possible.
+6. Cycle Repeat off / one / all.
+7. Confirm Repeat one replays current track on end if possible.
+8. Confirm Repeat all loops queue when end is reached.
+9. Set Sleep Timer 15 min.
+10. Confirm timer status appears in player surface.
+11. Cancel Sleep Timer.
+12. Confirm sleep timer off state.
+13. Confirm mini player remains compact.
+14. Confirm Now tab shows same controls.
+15. Confirm Settings Playback section reflects shuffle/repeat/sleep status if implemented.
+16. Confirm queue order is not destroyed by shuffle.
+17. Confirm downloads/cache/device music playback still works.
+18. Confirm notification controls still work as before.
+19. Confirm no raw debug UI appears in consumer mode.
+20. Confirm Search, Library, Collections, History, Downloads, Storage, Settings still work.
