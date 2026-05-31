@@ -454,7 +454,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   ContentStatus? _contentStatus;
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
-  ContentStatus? _contentStatus;
   _SearchFilter _searchFilter = _SearchFilter.all;
   List<String> _recentSearches = const <String>[];
   String _queueStatus = 'Queue is ready.';
@@ -3327,15 +3326,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           const SizedBox(height: WzSpacing.md),
           _DeveloperModePanel(enabled: _developerMode, onChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer)),
           const SizedBox(height: WzSpacing.md),
-          const WzSectionHeader(title: 'Content Server', subtitle: 'Developer-only catalog and content status.', icon: Icons.cloud_queue),
-          _ContentServerDiagnosticsPanel(
-            contentStatus: _contentStatus,
-            catalogStatus: _catalogStatus,
-            apiBaseUrl: _apiBaseUrlController.text,
-            configuredContentModeLabel: widget.appConfig.contentModeLabel,
-            catalogTrackCount: _catalog.length,
-            cachedTrackCount: _cachedLibrary.length,
-          const WzSectionHeader(title: 'Content server', subtitle: 'Catalog mode, API endpoint, and content safety status.', icon: Icons.cloud_queue),
+          const WzSectionHeader(
+            title: 'Content Server',
+            subtitle: 'Developer-only catalog and content status.',
+            icon: Icons.cloud_queue,
+          ),
           _ContentServerDiagnosticsPanel(
             apiBaseUrl: _apiBaseUrlController.text,
             status: _contentStatus,
@@ -5611,54 +5606,6 @@ class _AudioQualityPanel extends StatelessWidget {
       );
 }
 
-
-class _ContentServerDiagnosticsPanel extends StatelessWidget {
-  const _ContentServerDiagnosticsPanel({
-    required this.contentStatus,
-    required this.catalogStatus,
-    required this.apiBaseUrl,
-    required this.configuredContentModeLabel,
-    required this.catalogTrackCount,
-    required this.cachedTrackCount,
-  });
-
-  final ContentStatus? contentStatus;
-  final String catalogStatus;
-  final String apiBaseUrl;
-  final String configuredContentModeLabel;
-  final int catalogTrackCount;
-  final int cachedTrackCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = contentStatus;
-    return _Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _MetricCard(label: 'Content', value: status?.friendlyLabel ?? 'Catalog unavailable', active: status?.ok ?? catalogTrackCount > 0),
-              _MetricCard(label: 'Mode', value: status?.contentMode ?? configuredContentModeLabel, active: status?.contentMode == 'production' || status?.contentMode == 'demo'),
-              _MetricCard(label: 'Tracks', value: '${status?.trackCount ?? catalogTrackCount}', active: (status?.trackCount ?? catalogTrackCount) > 0),
-              _MetricCard(label: 'Assets', value: '${status?.assetCount ?? 0}', active: (status?.assetCount ?? 0) > 0),
-              _MetricCard(label: 'Production-safe', value: '${status?.productionSafeTrackCount ?? 0}', active: (status?.productionSafeTrackCount ?? 0) > 0),
-              _MetricCard(label: 'Local folder', value: status?.localFolderCatalogEnabled == true ? 'enabled' : 'disabled', active: status?.localFolderCatalogEnabled == true),
-              _MetricCard(label: 'Cached', value: '$cachedTrackCount', active: cachedTrackCount > 0),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text('Catalog status: $catalogStatus', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-          Text('API base URL: $apiBaseUrl', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-          Text(status?.developerSummary ?? catalogStatus, maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-          const Text('Content Server diagnostics are developer-only. Consumer surfaces use friendly catalog labels and hide raw URLs.', style: _WzTokens.caption),
-        ],
-      ),
-    );
-  }
-}
 
 class _DeviceMusicDiagnosticsPanel extends StatelessWidget {
   const _DeviceMusicDiagnosticsPanel({
@@ -8097,7 +8044,12 @@ class _CatalogRow extends StatelessWidget {
 
 
 class _ContentServerDiagnosticsPanel extends StatelessWidget {
-  const _ContentServerDiagnosticsPanel({required this.apiBaseUrl, required this.status, required this.catalogStatus, required this.catalogTrackCount});
+  const _ContentServerDiagnosticsPanel({
+    required this.apiBaseUrl,
+    required this.status,
+    required this.catalogStatus,
+    required this.catalogTrackCount,
+  });
 
   final String apiBaseUrl;
   final ContentStatus? status;
