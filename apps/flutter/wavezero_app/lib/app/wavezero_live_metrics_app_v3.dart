@@ -14,6 +14,8 @@ import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
 import '../cache/cache_service.dart';
 import '../design/wavezero_design_system.dart';
+import '../device_music/device_music_service.dart';
+import '../device_music/device_music_track.dart';
 import 'player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
@@ -88,6 +90,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   CatalogTrackManifest? _manifest;
   List<CatalogTrackSummary> _catalog = const [];
   List<CatalogTrackSummary> _queue = const [];
+  final DeviceMusicService _deviceMusicService = DeviceMusicService();
+  DeviceMusicPermissionStatus _deviceMusicPermissionStatus = const DeviceMusicPermissionStatus(status: 'unknown');
+  String _deviceMusicScanStatus = 'not_scanned';
+  List<DeviceMusicTrack> _deviceMusicTracks = const [];
+  int _deviceMusicLastScanCount = 0;
+  String? _deviceMusicLastError;
+  int? _deviceMusicImportedAtMs;
+  _LibrarySourceFilter _librarySourceFilter = _LibrarySourceFilter.api;
 
   PlayerOperation _operation = PlayerOperation.idle;
   bool _refreshingMetrics = false;
@@ -163,7 +173,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   String _queueStatus = 'Queue is ready.';
   String _sessionStatus = 'Session recovery pending.';
 
-  List<CatalogTrackSummary> get _filteredCatalog => _catalog.where((track) => track.matchesQuery(_catalogQuery)).toList(growable: false);
+  List<CatalogTrackSummary> get _deviceCatalogTracks =>
+      _deviceMusicTracks.map(_catalogSummaryFromDeviceTrack).toList(growable: false);
+
+  List<CatalogTrackSummary> get _libraryTracks {
+    return switch (_librarySourceFilter) {
+      _LibrarySourceFilter.api => _catalog,
+      _LibrarySourceFilter.device => _deviceCatalogTracks,
+      _LibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks],
+    };
+  }
+
+  int get _libraryTotalTrackCount => _libraryTracks.length;
+
+  List<CatalogTrackSummary> get _filteredCatalog =>
+      _libraryTracks.where((track) => track.matchesQuery(_catalogQuery)).toList(growable: false);
 
   int get _queueIndex {
     final id = _queueCurrentTrackId ?? _selectedTrackId;
@@ -232,6 +256,61 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _loadCatalog(fallbackToDemo: true);
     unawaited(_initCache());
     unawaited(_initAudioEffects());
+    unawaited(_refreshDeviceMusicPermissionStatus());
+  }
+
+  Future<void> _refreshDeviceMusicPermissionStatus() async {
+    final status = await _deviceMusicService.getPermissionStatus();
+    if (!mounted) return;
+    setState(() {
+      _deviceMusicPermissionStatus = status;
+      if (status.message != null) _deviceMusicLastError = status.message;
+    });
+  }
+
+  Future<void> _importDeviceMusic() async {
+    if (_operation != PlayerOperation.idle) return;
+    setState(() {
+      _operation = PlayerOperation.loadingCatalog;
+      _deviceMusicScanStatus = 'checking_permission';
+      _deviceMusicLastError = null;
+    });
+    try {
+      var permission = await _deviceMusicService.getPermissionStatus();
+      if (!permission.isGranted) permission = await _deviceMusicService.requestPermission();
+      if (!mounted) return;
+      _deviceMusicPermissionStatus = permission;
+      if (!permission.isGranted) {
+        setState(() {
+          _deviceMusicScanStatus = 'permission_denied';
+          _deviceMusicLastError = permission.message ?? 'Audio permission is ${permission.status}.';
+        });
+        return;
+      }
+
+      setState(() => _deviceMusicScanStatus = 'scanning');
+      final scan = await _deviceMusicService.scanDeviceAudioLibrary();
+      if (!mounted) return;
+      setState(() {
+        _deviceMusicScanStatus = scan.status;
+        _deviceMusicTracks = scan.tracks;
+        _deviceMusicLastScanCount = scan.count;
+        _deviceMusicLastError = scan.error;
+        _deviceMusicImportedAtMs = scan.scannedAtMs ?? DateTime.now().millisecondsSinceEpoch;
+        if (scan.tracks.isNotEmpty) _librarySourceFilter = _LibrarySourceFilter.device;
+        _catalogStatus = scan.status == 'success'
+            ? 'Imported ${scan.tracks.length} device music tracks from Android MediaStore.'
+            : 'Device music scan ${scan.status}${scan.error == null ? '' : ': ${scan.error}'}';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _deviceMusicScanStatus = 'error';
+        _deviceMusicLastError = error.toString();
+      });
+    } finally {
+      if (mounted) setState(() => _operation = PlayerOperation.idle);
+    }
   }
 
   Future<void> _initCache() async {
@@ -414,6 +493,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _lastSmartDownloadReason = 'no remote url';
       return false;
     }
+    if (_isDeviceTrackId(trackId) || _isDeviceUrl(url)) {
+      _lastSmartDownloadReason = 'device local track already local';
+      return false;
+    }
     await _cacheService.ensureInitialized();
     final status = _cacheService.statusForTrack(trackId);
     if (status == TrackCacheStatus.cached) {
@@ -445,6 +528,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
     if (url.isEmpty) {
       _lastSmartDownloadReason = 'no remote url';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
+    if (_isDeviceTrackId(trackId) || _isDeviceUrl(url)) {
+      _lastSmartDownloadReason = 'device local track already local';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
       return;
     }
@@ -514,6 +602,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _maybeAutoCacheCurrentTrack(CatalogTrackManifest manifest) async {
     if (manifest.trackId.isEmpty) return;
+    if (_isDeviceTrackId(manifest.trackId) || _isDeviceUrl(manifest.streamUrl)) {
+      _lastSmartDownloadReason = 'device local track already local';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
     unawaited(_autoCacheTrack(
       trackId: manifest.trackId,
       url: manifest.streamUrl,
@@ -532,6 +625,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _maybeAutoCacheNextQueuedTrack() async {
     final next = _upNextQueueTrack;
     if (next == null) return;
+    if (_isDeviceCatalogTrack(next)) {
+      _lastSmartDownloadReason = 'device local track already local';
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
     final selection = choosePreferredAsset(next, _preferredAudioQuality);
     final selectedAsset = selection?.asset;
     final assetUrl = selectedAsset?.manifestUrl;
@@ -711,9 +809,64 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     );
   }
 
+  DeviceMusicTrack? _findDeviceTrack(String? trackId) {
+    if (trackId == null) return null;
+    for (final track in _deviceMusicTracks) {
+      if (track.trackId == trackId) return track;
+    }
+    return null;
+  }
+
+  CatalogTrackManifest _deviceManifest(DeviceMusicTrack track) {
+    return CatalogTrackManifest(
+      trackId: track.trackId,
+      title: track.title,
+      streamUrl: track.contentUri,
+      artistId: null,
+      artistName: track.artistName,
+      durationMs: track.durationMs,
+      artworkUrl: track.artworkUri,
+      assetId: 'device-${track.trackId}',
+      qualityLabel: track.qualityLabel ?? 'unknown',
+      codec: track.codec,
+      bitrateKbps: track.bitrateKbps,
+      fileSizeBytes: track.sizeBytes,
+    );
+  }
+
+  Future<void> _loadDeviceMusicTrack(DeviceMusicTrack track, {bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status}) {
+    return _runOperation(operation, () async {
+      await _clearNativeNextPrebuffer();
+      if (!mounted) return;
+      final manifest = _deviceManifest(track);
+      _titleController.text = manifest.title;
+      _urlController.text = manifest.streamUrl;
+      setState(() {
+        _manifest = manifest;
+        _selectedTrackId = manifest.trackId;
+        _queueCurrentTrackId = manifest.trackId;
+        _lastAutoAdvanceTrackId = manifest.trackId;
+        _currentAssetUrl = manifest.streamUrl;
+        _currentCachedQuality = null;
+        _catalogStatus = status ?? 'Loaded device music track: ${manifest.title}';
+        _lastQualityFallbackReason = 'device music: using MediaStore ${manifest.qualityLabel ?? 'unknown'} metadata';
+        _lastSmartDownloadReason = 'device local track already local';
+      });
+      await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
+      if (autoPlay) await widget.playbackBridge.play();
+      unawaited(_saveSession());
+      unawaited(_updatePredictivePreloadCandidate());
+      unawaited(_maybeAutoCacheNextQueuedTrack());
+    });
+  }
+
   Future<void> _loadCatalogTrack({String? trackId, bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status, CatalogTrackManifest? prefetchedManifest}) {
     final id = trackId ?? _selectedTrackId ?? (_catalog.isNotEmpty ? _catalog.first.trackId : null);
     if (id == null) return Future<void>.value();
+    final deviceTrack = _findDeviceTrack(id);
+    if (deviceTrack != null) {
+      return _loadDeviceMusicTrack(deviceTrack, autoPlay: autoPlay, operation: operation, status: status);
+    }
     return _runOperation(operation, () async {
       final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
       try {
@@ -1324,11 +1477,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
     final qualityLabel = _manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label;
     final nowQualityLabel = hasPlayerTrack ? qualityLabel : 'unknown';
-    final isPlayingFromCache = _currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false);
+    final isDevicePlayback = _isDeviceTrackId(_manifest?.trackId) || _isDeviceUrl(_currentAssetUrl);
+    final isPlayingFromCache = !isDevicePlayback && (_currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false));
     final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : _effectStatusLabel(_nativeAudioEffectStatus);
     final engineSummary = '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
         '${_prefetchEnabled ? 'Instant Next on' : 'Instant Next off'} • '
-        '${_offlineLibraryAvailable ? 'Offline Ready' : 'Offline empty'}';
+        '${_offlineLibraryAvailable ? 'Offline Ready' : 'Offline empty'} • '
+        'Device ${_deviceMusicTracks.length}';
 
     // Build per-tab pages using existing widgets — keep behavior unchanged.
     final pages = <Widget>[
@@ -1341,7 +1496,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             manifest: _manifest,
             qualityLabel: qualityLabel,
             playingFromCache: isPlayingFromCache,
+            devicePlayback: isDevicePlayback,
             offlineReady: _offlineLibraryAvailable,
+            deviceTrackCount: _deviceMusicTracks.length,
+            devicePermissionStatus: _deviceMusicPermissionStatus.status,
             status: _statusText,
           ),
           const SizedBox(height: WzSpacing.md),
@@ -1376,7 +1534,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             nextTrack: _upNextQueueTrack,
             qualityLabel: nowQualityLabel,
             effectsSummary: effectsSummary,
-            sourceLabel: _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
+            sourceLabel: isDevicePlayback ? 'Device' : _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
             progressValue: progress,
             displayedPositionMs: displayedPositionMs,
             durationMs: durationMs,
@@ -1402,6 +1560,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             qualityLabel: nowQualityLabel,
             effectsSummary: effectsSummary,
             playingFromCache: isPlayingFromCache,
+            devicePlayback: isDevicePlayback,
             offlineReady: _offlineLibraryAvailable,
             nextTrack: _upNextQueueTrack,
             manifest: _manifest,
@@ -1494,15 +1653,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           const SizedBox(height: WzSpacing.md),
           _CatalogListCard(
             tracks: _filteredCatalog,
-            totalTrackCount: _catalog.length,
+            totalTrackCount: _libraryTotalTrackCount,
             selectedTrackId: _selectedTrackId,
             status: _catalogStatus,
             loading: _operation == PlayerOperation.loadingCatalog,
             refreshDisabled: _catalogRefreshDisabled,
             addToQueueDisabled: _operation.isTrackLoading || _operation.isQueueAdvancing,
             searchController: _searchController,
+            librarySourceFilter: _librarySourceFilter,
+            devicePermissionStatus: _deviceMusicPermissionStatus.status,
+            deviceScanStatus: _deviceMusicScanStatus,
+            deviceTrackCount: _deviceMusicTracks.length,
+            deviceLastError: _deviceMusicLastError,
+            onSourceFilterChanged: (filter) => setState(() => _librarySourceFilter = filter),
             onClearSearch: () => _searchController.clear(),
             onRefresh: () => _loadCatalog(),
+            onImportDeviceMusic: _importDeviceMusic,
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
             onAddToQueue: _addToQueue,
             onCache: (track) => _toggleCache(track),
@@ -1615,6 +1781,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onClearCache: _clearCache,
           ),
           const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Device Music', subtitle: 'Android MediaStore import diagnostics.', icon: Icons.perm_media),
+          _DeviceMusicDiagnosticsPanel(
+            permissionStatus: _deviceMusicPermissionStatus.status,
+            platformSupported: _deviceMusicPermissionStatus.platformSupported,
+            importedCount: _deviceMusicTracks.length,
+            lastScanStatus: _deviceMusicScanStatus,
+            lastError: _deviceMusicLastError,
+            importedAtMs: _deviceMusicImportedAtMs,
+          ),
+          const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Raw Metrics', subtitle: 'Complete developer telemetry keeps original metric names.', icon: Icons.data_object),
           _PerformanceBaselinePanel(
             metrics: _metrics,
@@ -1687,6 +1863,44 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 }
 
 enum QueueAdvanceSource { manual, next, previous, auto }
+
+enum _LibrarySourceFilter { api, device, all }
+
+extension _LibrarySourceFilterLabel on _LibrarySourceFilter {
+  String get label => switch (this) {
+        _LibrarySourceFilter.api => 'API Catalog',
+        _LibrarySourceFilter.device => 'Device Music',
+        _LibrarySourceFilter.all => 'All',
+      };
+}
+
+CatalogTrackSummary _catalogSummaryFromDeviceTrack(DeviceMusicTrack track) {
+  return CatalogTrackSummary(
+    trackId: track.trackId,
+    title: track.title,
+    artistId: null,
+    artistName: track.artistName,
+    albumName: track.albumName,
+    displayName: track.displayName,
+    durationMs: track.durationMs,
+    artworkUrl: track.artworkUri,
+    source: 'device',
+    primaryAsset: CatalogTrackAssetSummary(
+      assetId: 'device-${track.trackId}',
+      manifestUrl: track.contentUri,
+      qualityLabel: track.qualityLabel,
+      codec: track.codec,
+      bitrateKbps: track.bitrateKbps,
+      fileSizeBytes: track.sizeBytes,
+    ),
+  );
+}
+
+bool _isDeviceTrackId(String? trackId) => trackId != null && trackId.startsWith('device-audio-');
+
+bool _isDeviceUrl(String? url) => url != null && url.startsWith('content://');
+
+bool _isDeviceCatalogTrack(CatalogTrackSummary track) => track.source == 'device' || _isDeviceTrackId(track.trackId) || _isDeviceUrl(track.primaryAsset?.manifestUrl);
 
 class _WzTokens {
   const _WzTokens._();
@@ -1852,7 +2066,10 @@ class _CurrentListeningCard extends StatelessWidget {
     required this.manifest,
     required this.qualityLabel,
     required this.playingFromCache,
+    required this.devicePlayback,
     required this.offlineReady,
+    required this.deviceTrackCount,
+    required this.devicePermissionStatus,
     required this.status,
   });
 
@@ -1860,7 +2077,10 @@ class _CurrentListeningCard extends StatelessWidget {
   final CatalogTrackManifest? manifest;
   final String qualityLabel;
   final bool playingFromCache;
+  final bool devicePlayback;
   final bool offlineReady;
+  final int deviceTrackCount;
+  final String devicePermissionStatus;
   final String status;
 
   @override
@@ -1894,8 +2114,11 @@ class _CurrentListeningCard extends StatelessWidget {
             children: [
               WzStatusPill(label: status, active: metrics.isPlaying, warning: status == 'Error', icon: metrics.isPlaying ? Icons.play_arrow : Icons.pause),
               WzStatusPill(label: 'Quality: ${_productQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
+              if (devicePlayback) const WzStatusPill(label: 'Source: Device', active: true, icon: Icons.phone_android),
               if (playingFromCache) const WzStatusPill(label: 'Playing from cache', active: true, icon: Icons.offline_pin),
               if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
+              WzStatusPill(label: 'Device Library: $deviceTrackCount', active: deviceTrackCount > 0, icon: Icons.perm_media),
+              WzStatusPill(label: 'Permission: $devicePermissionStatus', active: devicePermissionStatus == 'granted', warning: devicePermissionStatus.contains('denied'), icon: Icons.privacy_tip),
             ],
           ),
         ],
@@ -1975,6 +2198,7 @@ class _NowContextPanel extends StatelessWidget {
     required this.qualityLabel,
     required this.effectsSummary,
     required this.playingFromCache,
+    required this.devicePlayback,
     required this.offlineReady,
     required this.nextTrack,
     required this.manifest,
@@ -1987,6 +2211,7 @@ class _NowContextPanel extends StatelessWidget {
   final String qualityLabel;
   final String effectsSummary;
   final bool playingFromCache;
+  final bool devicePlayback;
   final bool offlineReady;
   final CatalogTrackSummary? nextTrack;
   final CatalogTrackManifest? manifest;
@@ -2011,9 +2236,9 @@ class _NowContextPanel extends StatelessWidget {
         _PlayerSourceCard(
           icon: Icons.offline_pin,
           title: 'Cache / Offline',
-          primary: playingFromCache ? 'Playing from cache' : offlineReady ? 'Offline Ready' : 'Not cached',
-          detail: playingFromCache ? 'The active asset is a local cached file.' : offlineReady ? 'Cached library exists; current playback is not marked as cache.' : 'No cached library state is active for this player context.',
-          active: playingFromCache || offlineReady,
+          primary: devicePlayback ? 'Already local' : playingFromCache ? 'Playing from cache' : offlineReady ? 'Offline Ready' : 'Not cached',
+          detail: devicePlayback ? 'Source: Device. The active asset is streamed directly from its MediaStore content URI.' : playingFromCache ? 'The active asset is a local cached file.' : offlineReady ? 'Cached library exists; current playback is not marked as cache.' : 'No cached library state is active for this player context.',
+          active: devicePlayback || playingFromCache || offlineReady,
         ),
         const SizedBox(height: WzSpacing.sm),
         _PlayerSourceCard(icon: Icons.queue_music, title: 'Queue', primary: currentPosition, detail: nextTrack == null ? 'No up-next track from Queue Engine v2.' : 'Up next: ${nextTrack!.title}', active: nextTrack != null),
@@ -2063,6 +2288,40 @@ class _AudioQualityPanel extends StatelessWidget {
           Text('Current asset URL: ${currentAssetUrl ?? manifest?.streamUrl ?? 'none'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
           Text('Quality fallback reason: $lastQualityFallbackReason', style: _WzTokens.caption),
           Text('Cached quality: ${currentCachedQuality ?? 'not playing from cache'}', style: _WzTokens.caption),
+        ]),
+      );
+}
+
+class _DeviceMusicDiagnosticsPanel extends StatelessWidget {
+  const _DeviceMusicDiagnosticsPanel({
+    required this.permissionStatus,
+    required this.platformSupported,
+    required this.importedCount,
+    required this.lastScanStatus,
+    required this.lastError,
+    required this.importedAtMs,
+  });
+
+  final String permissionStatus;
+  final bool platformSupported;
+  final int importedCount;
+  final String lastScanStatus;
+  final String? lastError;
+  final int? importedAtMs;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _MetricCard(label: 'Permission', value: permissionStatus, active: permissionStatus == 'granted'),
+            _MetricCard(label: 'Imported', value: '$importedCount tracks', active: importedCount > 0),
+            _MetricCard(label: 'Scan', value: lastScanStatus, active: lastScanStatus == 'success'),
+            _MetricCard(label: 'Platform', value: platformSupported ? 'Android bridge' : 'unsupported', active: platformSupported),
+          ]),
+          const SizedBox(height: 10),
+          Text('Last import: ${importedAtMs == null ? 'never' : DateTime.fromMillisecondsSinceEpoch(importedAtMs!).toLocal()}', style: _WzTokens.caption),
+          Text('Last error: ${lastError ?? 'none'}', style: _WzTokens.caption),
+          const Text('MediaStore scan is audio-only, capped at 500 tracks, and ignores clips under 30 seconds.', style: _WzTokens.caption),
         ]),
       );
 }
@@ -3199,8 +3458,15 @@ class _CatalogListCard extends StatelessWidget {
     required this.refreshDisabled,
     required this.addToQueueDisabled,
     required this.searchController,
+    required this.librarySourceFilter,
+    required this.devicePermissionStatus,
+    required this.deviceScanStatus,
+    required this.deviceTrackCount,
+    required this.deviceLastError,
+    required this.onSourceFilterChanged,
     required this.onClearSearch,
     required this.onRefresh,
+    required this.onImportDeviceMusic,
     required this.onSelectTrack,
     required this.onAddToQueue,
     required this.onCache,
@@ -3215,8 +3481,15 @@ class _CatalogListCard extends StatelessWidget {
   final bool refreshDisabled;
   final bool addToQueueDisabled;
   final TextEditingController searchController;
+  final _LibrarySourceFilter librarySourceFilter;
+  final String devicePermissionStatus;
+  final String deviceScanStatus;
+  final int deviceTrackCount;
+  final String? deviceLastError;
+  final ValueChanged<_LibrarySourceFilter> onSourceFilterChanged;
   final VoidCallback onClearSearch;
   final VoidCallback onRefresh;
+  final VoidCallback onImportDeviceMusic;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
   final ValueChanged<CatalogTrackSummary> onAddToQueue;
   final ValueChanged<CatalogTrackSummary> onCache;
@@ -3235,9 +3508,9 @@ class _CatalogListCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Catalog', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    Text('Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                     SizedBox(height: 4),
-                    Text('Search stays usable while playback is running.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                    Text('Browse API Catalog, Device Music, or both.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
                   ],
                 ),
               ),
@@ -3248,10 +3521,39 @@ class _CatalogListCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          SegmentedButton<_LibrarySourceFilter>(
+            segments: const [
+              ButtonSegment(value: _LibrarySourceFilter.api, label: Text('API Catalog'), icon: Icon(Icons.cloud_queue)),
+              ButtonSegment(value: _LibrarySourceFilter.device, label: Text('Device Music'), icon: Icon(Icons.phone_android)),
+              ButtonSegment(value: _LibrarySourceFilter.all, label: Text('All'), icon: Icon(Icons.library_music)),
+            ],
+            selected: {librarySourceFilter},
+            onSelectionChanged: (selection) => onSourceFilterChanged(selection.first),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: refreshDisabled ? null : onImportDeviceMusic,
+                icon: const Icon(Icons.perm_media),
+                label: Text(deviceTrackCount == 0 ? 'Import Device Music' : 'Rescan Device Music'),
+              ),
+              Text('Permission: $devicePermissionStatus', style: _WzTokens.caption),
+              Text('Device scan: $deviceScanStatus • $deviceTrackCount tracks', style: _WzTokens.caption),
+            ],
+          ),
+          if (deviceLastError != null) ...[
+            const SizedBox(height: 6),
+            Text(deviceLastError!, style: const TextStyle(color: Color(0xFFFFC46B), fontSize: 12)),
+          ],
+          const SizedBox(height: 12),
           TextField(
             controller: searchController,
             decoration: InputDecoration(
-              labelText: 'Search catalog',
+              labelText: 'Search ${librarySourceFilter.label}',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: hasQuery ? IconButton(onPressed: onClearSearch, icon: const Icon(Icons.close)) : null,
             ),
@@ -3274,7 +3576,7 @@ class _CatalogListCard extends StatelessWidget {
                 addDisabled: addToQueueDisabled,
                 onTap: () => onSelectTrack(track),
                 onAdd: () => onAddToQueue(track),
-                onCache: () => onCache(track),
+                onCache: _isDeviceCatalogTrack(track) ? null : () => onCache(track),
               )),
         ],
       ),
@@ -3296,7 +3598,7 @@ class _CatalogRow extends StatelessWidget {
   final bool addDisabled;
   final VoidCallback onTap;
   final VoidCallback onAdd;
-  final VoidCallback onCache;
+  final VoidCallback? onCache;
 
   @override
   Widget build(BuildContext context) {
@@ -3346,7 +3648,8 @@ class _CatalogRow extends StatelessWidget {
           ),
           Text(_formatTime(track.durationMs), style: _timeStyle),
           IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
-          IconButton(onPressed: onCache, icon: cacheIcon),
+          if (onCache != null) IconButton(onPressed: onCache, icon: cacheIcon),
+          if (onCache == null) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.phone_android, color: Color(0xFF38D996))),
           Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
         ]),
       ),
@@ -3520,7 +3823,7 @@ class _EmptyCatalogMessage extends StatelessWidget {
 }
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
-String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); return parts.join(' • '); }
+String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(_isDeviceCatalogTrack(track) ? 'source: Device' : 'source: API'); return parts.join(' • '); }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
