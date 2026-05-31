@@ -23,7 +23,7 @@ import 'smart_queue_policy.dart';
 
 enum _AppMode { consumer, developer }
 
-enum _AppTab { home, library, now, queue, downloads, engine }
+enum _AppTab { home, library, now, queue, downloads, settings, engine }
 
 class _ShellDestination {
   const _ShellDestination({required this.tab, required this.label, required this.icon});
@@ -45,6 +45,134 @@ const _developerShellDestinations = <_ShellDestination>[
   ..._consumerShellDestinations,
   _ShellDestination(tab: _AppTab.engine, label: 'Engine', icon: Icons.engineering),
 ];
+
+enum WzThemePreset { midnight, oledDark, wavePurple }
+
+enum WzAccentPreset { wavePurple, cyan, green, sunset }
+
+class WzThemeConfig {
+  const WzThemeConfig({
+    this.themePreset = WzThemePreset.midnight,
+    this.accentPreset = WzAccentPreset.wavePurple,
+  });
+
+  static const themePreferenceKey = 'wavezero.theme_preset';
+  static const accentPreferenceKey = 'wavezero.accent_preset';
+
+  final WzThemePreset themePreset;
+  final WzAccentPreset accentPreset;
+
+  WzThemeConfig copyWith({WzThemePreset? themePreset, WzAccentPreset? accentPreset}) => WzThemeConfig(
+        themePreset: themePreset ?? this.themePreset,
+        accentPreset: accentPreset ?? this.accentPreset,
+      );
+
+  Color get accent => switch (accentPreset) {
+        WzAccentPreset.wavePurple => const Color(0xFF9A8CFF),
+        WzAccentPreset.cyan => const Color(0xFF36D7FF),
+        WzAccentPreset.green => const Color(0xFF38D996),
+        WzAccentPreset.sunset => const Color(0xFFFFA85C),
+      };
+
+  Color get accentAlt => switch (accentPreset) {
+        WzAccentPreset.wavePurple => const Color(0xFF36D7FF),
+        WzAccentPreset.cyan => const Color(0xFF9A8CFF),
+        WzAccentPreset.green => const Color(0xFF8DFFCB),
+        WzAccentPreset.sunset => const Color(0xFFFF6B8A),
+      };
+
+  Color get canvas => switch (themePreset) {
+        WzThemePreset.midnight => WzColors.canvas,
+        WzThemePreset.oledDark => Colors.black,
+        WzThemePreset.wavePurple => const Color(0xFF090615),
+      };
+
+  Color get surfaceMuted => switch (themePreset) {
+        WzThemePreset.midnight => WzColors.surfaceMuted,
+        WzThemePreset.oledDark => const Color(0xFF050505),
+        WzThemePreset.wavePurple => const Color(0xFF110D22),
+      };
+
+  LinearGradient get shellGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: switch (themePreset) {
+          WzThemePreset.midnight => [const Color(0xFF1A2140), WzColors.surfaceMuted, accent.withOpacity(0.18)],
+          WzThemePreset.oledDark => [Colors.black, const Color(0xFF050505), accent.withOpacity(0.16)],
+          WzThemePreset.wavePurple => [const Color(0xFF261846), const Color(0xFF110D22), accent.withOpacity(0.24)],
+        },
+      );
+
+  LinearGradient get accentGradient => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [accent, accentAlt],
+      );
+
+  ThemeData toThemeData() {
+    final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.dark).copyWith(
+      primary: accent,
+      secondary: accentAlt,
+      surface: WzColors.surface,
+      surfaceContainerHighest: surfaceMuted,
+    );
+    return ThemeData(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: canvas,
+      colorScheme: scheme,
+      fontFamily: 'Roboto',
+      switchTheme: SwitchThemeData(
+        thumbColor: MaterialStateProperty.resolveWith((states) => states.contains(MaterialState.selected) ? accent : null),
+        trackColor: MaterialStateProperty.resolveWith((states) => states.contains(MaterialState.selected) ? accent.withOpacity(0.42) : null),
+      ),
+      chipTheme: ChipThemeData(
+        selectedColor: accent.withOpacity(0.26),
+        labelStyle: const TextStyle(color: WzColors.textPrimary),
+        side: BorderSide(color: accent.withOpacity(0.34)),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: surfaceMuted,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(_WzTokens.radiusMd),
+          borderSide: const BorderSide(color: _WzTokens.border),
+        ),
+      ),
+      useMaterial3: true,
+    );
+  }
+
+  static WzThemeConfig fromPrefs(SharedPreferences prefs) => WzThemeConfig(
+        themePreset: WzThemePreset.values.firstWhere(
+          (preset) => preset.name == prefs.getString(themePreferenceKey),
+          orElse: () => WzThemePreset.midnight,
+        ),
+        accentPreset: WzAccentPreset.values.firstWhere(
+          (preset) => preset.name == prefs.getString(accentPreferenceKey),
+          orElse: () => WzAccentPreset.wavePurple,
+        ),
+      );
+}
+
+extension WzThemePresetLabel on WzThemePreset {
+  String get label => switch (this) {
+        WzThemePreset.midnight => 'Midnight',
+        WzThemePreset.oledDark => 'OLED Dark',
+        WzThemePreset.wavePurple => 'Wave Purple',
+      };
+}
+
+extension WzAccentPresetLabel on WzAccentPreset {
+  String get label => switch (this) {
+        WzAccentPreset.wavePurple => 'Wave Purple',
+        WzAccentPreset.cyan => 'Cyan',
+        WzAccentPreset.green => 'Green',
+        WzAccentPreset.sunset => 'Amber / Sunset',
+      };
+}
 
 String _friendlyLoadError(String error) {
   final normalized = error.toLowerCase();
@@ -71,7 +199,7 @@ String? _consumerDeviceError(String? error) {
   return _friendlyLoadError(error);
 }
 
-class WaveZeroLiveMetricsApp extends StatelessWidget {
+class WaveZeroLiveMetricsApp extends StatefulWidget {
   const WaveZeroLiveMetricsApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
       : _playbackBridge = playbackBridge,
         _sessionStore = sessionStore;
@@ -80,31 +208,42 @@ class WaveZeroLiveMetricsApp extends StatelessWidget {
   final QueueSessionStore? _sessionStore;
 
   @override
+  State<WaveZeroLiveMetricsApp> createState() => _WaveZeroLiveMetricsAppState();
+}
+
+class _WaveZeroLiveMetricsAppState extends State<WaveZeroLiveMetricsApp> {
+  WzThemeConfig _themeConfig = const WzThemeConfig();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadThemeConfig());
+  }
+
+  Future<void> _loadThemeConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() => _themeConfig = WzThemeConfig.fromPrefs(prefs));
+  }
+
+  Future<void> _setThemeConfig(WzThemeConfig config) async {
+    setState(() => _themeConfig = config);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(WzThemeConfig.themePreferenceKey, config.themePreset.name);
+    await prefs.setString(WzThemeConfig.accentPreferenceKey, config.accentPreset.name);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'WaveZero',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: _WzTokens.canvas,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: _WzTokens.accent,
-          brightness: Brightness.dark,
-        ),
-        fontFamily: 'Roboto',
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: _WzTokens.surfaceMuted,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(_WzTokens.radiusMd),
-            borderSide: const BorderSide(color: _WzTokens.border),
-          ),
-        ),
-        useMaterial3: true,
-      ),
+      theme: _themeConfig.toThemeData(),
       home: _PlayerScreen(
-        playbackBridge: _playbackBridge ?? _defaultBridge(),
-        sessionStore: _sessionStore ?? QueueSessionStore(),
+        playbackBridge: widget._playbackBridge ?? _defaultBridge(),
+        sessionStore: widget._sessionStore ?? QueueSessionStore(),
+        themeConfig: _themeConfig,
+        onThemeConfigChanged: _setThemeConfig,
       ),
     );
   }
@@ -116,10 +255,17 @@ class WaveZeroLiveMetricsApp extends StatelessWidget {
 }
 
 class _PlayerScreen extends StatefulWidget {
-  const _PlayerScreen({required this.playbackBridge, required this.sessionStore});
+  const _PlayerScreen({
+    required this.playbackBridge,
+    required this.sessionStore,
+    required this.themeConfig,
+    required this.onThemeConfigChanged,
+  });
 
   final PlaybackBridge playbackBridge;
   final QueueSessionStore sessionStore;
+  final WzThemeConfig themeConfig;
+  final ValueChanged<WzThemeConfig> onThemeConfigChanged;
 
   @override
   State<_PlayerScreen> createState() => _PlayerScreenState();
@@ -1702,7 +1848,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final pages = <Widget>[
       WzPageScaffold(
         children: [
-          _HomeHero(engineSummary: engineSummary),
+          _HomeHero(engineSummary: engineSummary, themeConfig: widget.themeConfig),
           const SizedBox(height: WzSpacing.md),
           _CurrentListeningCard(
             metrics: _metrics,
@@ -2054,21 +2200,56 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
     ];
 
+    final settingsPage = _SettingsPage(
+      themeConfig: widget.themeConfig,
+      onThemePresetChanged: (preset) => widget.onThemeConfigChanged(widget.themeConfig.copyWith(themePreset: preset)),
+      onAccentPresetChanged: (preset) => widget.onThemeConfigChanged(widget.themeConfig.copyWith(accentPreset: preset)),
+      preferredAudioQuality: _preferredAudioQuality,
+      onQualityChanged: (quality) => setState(() {
+        _preferredAudioQuality = quality;
+        _lastQualityFallbackReason = 'preferred quality set to ${quality.label}';
+      }),
+      selectedAudioEffectProfile: _selectedAudioEffectProfile,
+      nativeAudioEffectStatus: _nativeAudioEffectStatus,
+      lastAudioEffectApplyResult: _lastAudioEffectApplyResult,
+      onAudioEffectChanged: _setAudioEffectProfile,
+      smartDownloadsEnabled: _smartDownloadsEnabled,
+      onSmartDownloadsChanged: (value) => setState(() => _smartDownloadsEnabled = value),
+      cachedTrackCount: _cachedTrackCount,
+      cacheBytes: _cacheBytes,
+      manualDownloadedCount: _manualDownloadedCount,
+      smartDownloadedCount: _smartDownloadedCount,
+      controlsDisabled: _queueDisabled,
+      onClearCache: _clearCache,
+      devicePermissionStatus: _deviceMusicPermissionStatus.status,
+      devicePlatformSupported: _deviceMusicPermissionStatus.platformSupported,
+      importedDeviceTrackCount: _deviceMusicTracks.length,
+      deviceScanStatus: _deviceMusicScanStatus,
+      deviceLastError: _consumerDeviceError(_deviceMusicLastError),
+      onImportDeviceMusic: _importDeviceMusic,
+      notificationActive: _metrics.isPlaying || (_metrics.trackTitle?.isNotEmpty ?? false),
+      appMode: _appMode,
+      onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer),
+      onOpenEngine: _developerMode ? () => _navigateTo(_AppTab.engine) : null,
+    );
+
     final destinations = _developerMode ? _developerShellDestinations : _consumerShellDestinations;
     final currentTab = _selectedTab == _AppTab.engine && !_developerMode ? _AppTab.home : _selectedTab;
     final currentIndex = destinations.indexWhere((destination) => destination.tab == currentTab);
     final selectedDestination = destinations[currentIndex < 0 ? 0 : currentIndex];
-    final currentPage = switch (selectedDestination.tab) {
+    final selectedTabLabel = _selectedTab == _AppTab.settings ? 'Settings' : selectedDestination.label;
+    final currentPage = switch (currentTab) {
       _AppTab.home => pages[0],
       _AppTab.now => pages[1],
       _AppTab.queue => pages[2],
       _AppTab.library => pages[3],
       _AppTab.downloads => pages[4],
+      _AppTab.settings => settingsPage,
       _AppTab.engine => pages[5],
     };
 
     return Scaffold(
-      backgroundColor: _WzTokens.canvas,
+      backgroundColor: widget.themeConfig.canvas,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -2076,12 +2257,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             child: Column(
               children: [
                 _ProductShellHeader(
-                  selectedTabLabel: selectedDestination.label,
+                  selectedTabLabel: selectedTabLabel,
                   status: _statusText,
                   engineSummary: engineSummary,
                   offlineReady: _offlineLibraryAvailable,
                   appMode: _appMode,
+                  themeConfig: widget.themeConfig,
                   onLogoLongPress: _toggleAppMode,
+                  onOpenSettings: () => _navigateTo(_AppTab.settings),
                 ),
                 Expanded(child: currentPage),
               ],
@@ -2090,15 +2273,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        color: _WzTokens.surfaceMuted,
+        color: widget.themeConfig.surfaceMuted,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             BottomNavigationBar(
               currentIndex: currentIndex < 0 ? 0 : currentIndex,
               onTap: (i) => _navigateTo(destinations[i].tab),
-              backgroundColor: _WzTokens.surfaceMuted,
-              selectedItemColor: _WzTokens.accent,
+              backgroundColor: widget.themeConfig.surfaceMuted,
+              selectedItemColor: widget.themeConfig.accent,
               unselectedItemColor: _WzTokens.textMuted,
               type: BottomNavigationBarType.fixed,
               items: destinations
@@ -2196,6 +2379,279 @@ bool _isDeviceCatalogTrack(CatalogTrackSummary track) => track.source == 'device
 
 bool _isCachedCatalogTrack(CatalogTrackSummary track) => track.source == 'cached' || track.primaryAsset?.assetId.startsWith('cached-') == true;
 
+
+class _SettingsPage extends StatelessWidget {
+  const _SettingsPage({
+    required this.themeConfig,
+    required this.onThemePresetChanged,
+    required this.onAccentPresetChanged,
+    required this.preferredAudioQuality,
+    required this.onQualityChanged,
+    required this.selectedAudioEffectProfile,
+    required this.nativeAudioEffectStatus,
+    required this.lastAudioEffectApplyResult,
+    required this.onAudioEffectChanged,
+    required this.smartDownloadsEnabled,
+    required this.onSmartDownloadsChanged,
+    required this.cachedTrackCount,
+    required this.cacheBytes,
+    required this.manualDownloadedCount,
+    required this.smartDownloadedCount,
+    required this.controlsDisabled,
+    required this.onClearCache,
+    required this.devicePermissionStatus,
+    required this.devicePlatformSupported,
+    required this.importedDeviceTrackCount,
+    required this.deviceScanStatus,
+    required this.deviceLastError,
+    required this.onImportDeviceMusic,
+    required this.notificationActive,
+    required this.appMode,
+    required this.onDeveloperModeChanged,
+    required this.onOpenEngine,
+  });
+
+  final WzThemeConfig themeConfig;
+  final ValueChanged<WzThemePreset> onThemePresetChanged;
+  final ValueChanged<WzAccentPreset> onAccentPresetChanged;
+  final AudioQualityTier preferredAudioQuality;
+  final ValueChanged<AudioQualityTier> onQualityChanged;
+  final AudioEffectProfile selectedAudioEffectProfile;
+  final NativeAudioEffectStatus nativeAudioEffectStatus;
+  final String lastAudioEffectApplyResult;
+  final ValueChanged<AudioEffectProfile> onAudioEffectChanged;
+  final bool smartDownloadsEnabled;
+  final ValueChanged<bool> onSmartDownloadsChanged;
+  final int cachedTrackCount;
+  final int cacheBytes;
+  final int manualDownloadedCount;
+  final int smartDownloadedCount;
+  final bool controlsDisabled;
+  final Future<void> Function() onClearCache;
+  final String devicePermissionStatus;
+  final bool devicePlatformSupported;
+  final int importedDeviceTrackCount;
+  final String deviceScanStatus;
+  final String? deviceLastError;
+  final Future<void> Function() onImportDeviceMusic;
+  final bool notificationActive;
+  final _AppMode appMode;
+  final ValueChanged<bool> onDeveloperModeChanged;
+  final VoidCallback? onOpenEngine;
+
+  @override
+  Widget build(BuildContext context) => WzPageScaffold(
+        children: [
+          const WzPageHeader(
+            icon: Icons.settings,
+            title: 'Settings',
+            subtitle: 'Customize WaveZero and manage user-facing playback, storage, device music, and app mode preferences.',
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Appearance', subtitle: 'Theme choices are persisted on this device.', icon: Icons.palette),
+          WzPanel(
+            gradient: themeConfig.shellGradient,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: WzSpacing.xs,
+                  runSpacing: WzSpacing.xs,
+                  children: WzThemePreset.values
+                      .map((preset) => ChoiceChip(
+                            label: Text(preset.label),
+                            selected: themeConfig.themePreset == preset,
+                            onSelected: (_) => onThemePresetChanged(preset),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: WzSpacing.md),
+                Wrap(
+                  spacing: WzSpacing.xs,
+                  runSpacing: WzSpacing.xs,
+                  children: WzAccentPreset.values
+                      .map((preset) => ChoiceChip(
+                            avatar: CircleAvatar(backgroundColor: WzThemeConfig(accentPreset: preset).accent, radius: 7),
+                            label: Text(preset.label),
+                            selected: themeConfig.accentPreset == preset,
+                            onSelected: (_) => onAccentPresetChanged(preset),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: WzSpacing.md),
+                Container(
+                  padding: const EdgeInsets.all(WzSpacing.md),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(WzRadius.lg),
+                    border: Border.all(color: themeConfig.accent.withOpacity(0.55)),
+                    gradient: themeConfig.accentGradient,
+                  ),
+                  child: const Text('Preview: selected theme and accent are applied to app controls, navigation, and the shell.', style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Playback', subtitle: 'User-friendly quality and effect preferences.', icon: Icons.graphic_eq),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Preferred audio quality', style: WzText.sectionTitle),
+                const SizedBox(height: WzSpacing.xs),
+                Wrap(
+                  spacing: WzSpacing.xs,
+                  runSpacing: WzSpacing.xs,
+                  children: [AudioQualityTier.standard, AudioQualityTier.high, AudioQualityTier.original]
+                      .map((tier) => ChoiceChip(
+                            label: Text(_productQualityLabel(tier.label)),
+                            selected: preferredAudioQuality == tier,
+                            onSelected: controlsDisabled ? null : (_) => onQualityChanged(tier),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: WzSpacing.xs),
+                Text('Current selected quality: ${_productQualityLabel(preferredAudioQuality.label)}. If a track does not include that asset, WaveZero chooses the closest available quality.', style: WzText.caption),
+                const SizedBox(height: WzSpacing.md),
+                Text('Audio effects profile', style: WzText.sectionTitle),
+                const SizedBox(height: WzSpacing.xs),
+                Wrap(
+                  spacing: WzSpacing.xs,
+                  runSpacing: WzSpacing.xs,
+                  children: AudioEffectProfile.values
+                      .map((profile) => ChoiceChip(
+                            label: Text(profile.shortLabel),
+                            selected: selectedAudioEffectProfile == profile,
+                            onSelected: controlsDisabled ? null : (_) => onAudioEffectChanged(profile),
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: WzSpacing.xs),
+                Text('Off / Original is the safest default. ${nativeAudioEffectStatus == NativeAudioEffectStatus.unsupported ? 'Effect profile saved. Native DSP support is still foundation-level.' : lastAudioEffectApplyResult}', maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.caption),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Downloads & Storage', subtitle: 'Cache summary without changing download semantics.', icon: Icons.offline_pin),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Smart Downloads'),
+                  subtitle: const Text('Predictively cache likely next tracks when available.'),
+                  value: smartDownloadsEnabled,
+                  onChanged: onSmartDownloadsChanged,
+                ),
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzMiniMetric(label: 'Cached tracks', value: '$cachedTrackCount', active: cachedTrackCount > 0, icon: Icons.library_music),
+                    WzMiniMetric(label: 'Cache size', value: _formatCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
+                    WzMiniMetric(label: 'Manual', value: '$manualDownloadedCount', active: manualDownloadedCount > 0, icon: Icons.download_done),
+                    WzMiniMetric(label: 'Smart', value: '$smartDownloadedCount', active: smartDownloadedCount > 0, icon: Icons.auto_awesome),
+                  ],
+                ),
+                const SizedBox(height: WzSpacing.md),
+                WzPrimaryAction(label: 'Clear all cache', icon: Icons.clear_all, onPressed: controlsDisabled || cachedTrackCount == 0 ? null : () => unawaited(onClearCache())),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Device Music', subtitle: 'Local Android MediaStore import status.', icon: Icons.perm_media),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzStatusPill(label: 'Permission: $devicePermissionStatus', active: devicePermissionStatus == 'granted', warning: devicePermissionStatus.contains('denied'), icon: Icons.privacy_tip),
+                    WzStatusPill(label: devicePlatformSupported ? 'Platform supported' : 'Platform unavailable', active: devicePlatformSupported, warning: !devicePlatformSupported, icon: Icons.phone_android),
+                    WzStatusPill(label: 'Scan: $deviceScanStatus', active: deviceScanStatus == 'success', warning: deviceScanStatus == 'error', icon: Icons.search),
+                  ],
+                ),
+                const SizedBox(height: WzSpacing.sm),
+                Text('Imported device tracks: $importedDeviceTrackCount', style: WzText.body),
+                if (deviceLastError != null) Text('Last message: $deviceLastError', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                const SizedBox(height: WzSpacing.md),
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzPrimaryAction(label: 'Import Device Music', icon: Icons.library_add, onPressed: controlsDisabled ? null : () => unawaited(onImportDeviceMusic())),
+                    OutlinedButton.icon(onPressed: controlsDisabled ? null : () => unawaited(onImportDeviceMusic()), icon: const Icon(Icons.refresh), label: const Text('Rescan Device Music')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Notifications & Lock Screen', subtitle: 'Playback session presentation.', icon: Icons.notifications_active),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
+                  WzStatusPill(label: notificationActive ? 'Media notification active' : 'Media notification inactive', active: notificationActive, icon: Icons.notifications),
+                  WzStatusPill(label: notificationActive ? 'Lock-screen controls ready' : 'Start playback to enable controls', active: notificationActive, icon: Icons.lock),
+                ]),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('Lock-screen controls use the current playback session and current track metadata when playback is active.', style: WzText.caption),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Developer', subtitle: 'Keep diagnostics separate from the consumer experience.', icon: Icons.developer_mode),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Developer Mode'),
+                  subtitle: Text(appMode == _AppMode.developer ? 'On — Engine diagnostics are available in the bottom navigation.' : 'Off — consumer navigation stays clean.'),
+                  value: appMode == _AppMode.developer,
+                  onChanged: onDeveloperModeChanged,
+                ),
+                if (appMode == _AppMode.developer) ...[
+                  const SizedBox(height: WzSpacing.xs),
+                  const Text('Engine diagnostics remain in the Engine tab and are not shown as raw metrics on consumer Settings.', style: WzText.caption),
+                  const SizedBox(height: WzSpacing.sm),
+                  WzPrimaryAction(label: 'Open Engine diagnostics', icon: Icons.engineering, onPressed: onOpenEngine),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'About', subtitle: 'WaveZero app information.', icon: Icons.info_outline),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text('WaveZero', style: WzText.title),
+                SizedBox(height: WzSpacing.xs),
+                Text('A smart music experience engine for native playback, offline listening, queue intelligence, and premium now-playing UX.', style: WzText.body),
+                SizedBox(height: WzSpacing.xs),
+                Text('Version/build: 0.1.0+1', style: WzText.caption),
+                SizedBox(height: WzSpacing.xs),
+                Text('Legal / Licenses coming later with the future legal catalog credits work.', style: WzText.caption),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+String _formatCacheBytes(int bytes) {
+  if (bytes >= 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+  return '$bytes B';
+}
+
 class _WzTokens {
   const _WzTokens._();
 
@@ -2281,7 +2737,9 @@ class _ProductShellHeader extends StatelessWidget {
     required this.engineSummary,
     required this.offlineReady,
     required this.appMode,
+    required this.themeConfig,
     required this.onLogoLongPress,
+    required this.onOpenSettings,
   });
 
   final String selectedTabLabel;
@@ -2289,14 +2747,16 @@ class _ProductShellHeader extends StatelessWidget {
   final String engineSummary;
   final bool offlineReady;
   final _AppMode appMode;
+  final WzThemeConfig themeConfig;
   final VoidCallback onLogoLongPress;
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
         child: WzPanel(
           padding: const EdgeInsets.symmetric(horizontal: WzSpacing.sm, vertical: WzSpacing.xs),
-          gradient: WzColors.heroGradient,
+          gradient: themeConfig.shellGradient,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
@@ -2309,7 +2769,7 @@ class _ProductShellHeader extends StatelessWidget {
                       width: 36,
                       height: 36,
                       decoration: BoxDecoration(
-                        gradient: WzColors.accentGradient,
+                        gradient: themeConfig.accentGradient,
                         borderRadius: BorderRadius.circular(WzRadius.md),
                       ),
                       child: const Icon(Icons.graphic_eq, color: Colors.white, size: 20),
@@ -2339,6 +2799,11 @@ class _ProductShellHeader extends StatelessWidget {
                       ],
                     ),
                   ),
+                  IconButton(
+                    tooltip: 'Settings',
+                    onPressed: onOpenSettings,
+                    icon: Icon(Icons.settings, color: themeConfig.accent),
+                  ),
                 ],
               ),
               const SizedBox(height: WzSpacing.xs),
@@ -2357,14 +2822,15 @@ class _ProductShellHeader extends StatelessWidget {
 }
 
 class _HomeHero extends StatelessWidget {
-  const _HomeHero({required this.engineSummary});
+  const _HomeHero({required this.engineSummary, required this.themeConfig});
 
   final String engineSummary;
+  final WzThemeConfig themeConfig;
 
   @override
   Widget build(BuildContext context) => WzPanel(
         padding: const EdgeInsets.all(WzSpacing.md),
-        gradient: WzColors.heroGradient,
+        gradient: themeConfig.shellGradient,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2527,6 +2993,7 @@ class _HomeQuickActions extends StatelessWidget {
                 WzPrimaryAction(label: 'Go to Now', icon: Icons.play_circle_fill, onPressed: () => onNavigate(_AppTab.now)),
                 WzPrimaryAction(label: 'Go to Queue', icon: Icons.queue_music, onPressed: () => onNavigate(_AppTab.queue)),
                 WzPrimaryAction(label: 'Go to Downloads', icon: Icons.download_done, onPressed: () => onNavigate(_AppTab.downloads)),
+                WzPrimaryAction(label: 'Settings', icon: Icons.settings, onPressed: () => onNavigate(_AppTab.settings)),
                 if (showDeveloperTools) WzPrimaryAction(label: 'Go to Engine', icon: Icons.engineering, onPressed: () => onNavigate(_AppTab.engine)),
               ],
             ),
@@ -3767,8 +4234,8 @@ class _DownloadsCard extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               alignment: WrapAlignment.spaceBetween,
               children: [
-                const ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 480),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -4414,3 +4881,4 @@ String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': c
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
 const _timeStyle = TextStyle(color: Color(0xFF9BA3B4), fontSize: 12);
+

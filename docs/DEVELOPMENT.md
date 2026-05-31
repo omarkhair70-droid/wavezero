@@ -683,3 +683,122 @@ WaveZero #71 does not change the Rust API, CacheService behavior, Android MediaS
 12. Lock phone and confirm lock-screen media controls appear with current metadata.
 13. Press Stop/Dismiss and confirm playback stops and notification disappears.
 14. Reopen app and confirm it does not crash and Engine diagnostics still show notification state.
+
+## WaveZero #74 — Settings v1 + Theme Customization
+
+WaveZero now includes a user-facing Settings screen that is available from the product shell header gear and from the Home quick actions panel. Settings is intentionally **not** a sixth consumer bottom-navigation item, so the consumer shell remains Home, Library, Now, Queue, and Downloads. Developer mode continues to add Engine diagnostics to the bottom navigation.
+
+### Consumer and developer behavior
+
+- Settings is available in both consumer and developer modes.
+- Consumer mode keeps Engine diagnostics and raw metrics out of the Settings page.
+- The Developer section in Settings shows the current app mode and provides the official Developer Mode switch.
+- When Developer Mode is on, Settings explains that Engine diagnostics are available in the Engine tab and provides a shortcut to that tab.
+- The existing long-press logo developer toggle remains available for now.
+
+### Appearance and theme customization
+
+Settings → Appearance provides persisted theme customization foundation:
+
+- Theme presets:
+  - Midnight — default/current dark look.
+  - OLED Dark — deeper black surfaces for OLED-style contrast.
+  - Wave Purple — a purple-tinted dark shell.
+- Accent presets:
+  - Wave Purple — default WaveZero purple.
+  - Cyan.
+  - Green.
+  - Amber / Sunset.
+
+Theme and accent choices are real app preferences. They update the Material theme color scheme, standard controls such as Switch, ChoiceChip, and FilledButton, the selected bottom-navigation color, the product shell gradient, and the Settings preview card.
+
+Persistence keys:
+
+- `wavezero.theme_preset`
+- `wavezero.accent_preset`
+
+### Playback settings
+
+Settings → Playback mirrors the existing audio quality and audio effects controls without changing their underlying behavior.
+
+- Preferred audio quality uses the existing quality selection state and user-friendly labels: Standard, High, and Original.
+- If a selected track does not include the preferred asset, WaveZero keeps using the existing fallback behavior and explains it in friendly language.
+- Audio effect profiles use the existing Audio Effects bridge and persistence behavior.
+- Off / Original is described as the safest default.
+- If native effect support is unsupported, Settings uses friendly copy: “Effect profile saved. Native DSP support is still foundation-level.”
+
+### Downloads & Storage settings
+
+Settings → Downloads & Storage summarizes the existing cache state without changing `CacheService` behavior:
+
+- Smart Downloads enabled state.
+- Cached tracks count.
+- Total cache size.
+- Manual downloads count.
+- Smart downloads count.
+- Clear all cache action, wired to the existing clear-cache handler.
+
+This does not add storage manager v2, auto-clean policy, or any new download semantics.
+
+### Device Music settings
+
+Settings → Device Music uses the existing Android MediaStore import/permission flow and does not change native permissions or scanning behavior.
+
+It shows:
+
+- Permission status.
+- Platform support status.
+- Imported device tracks count.
+- Last scan status.
+- Friendly last message/error text.
+
+Actions:
+
+- Import Device Music.
+- Rescan Device Music.
+
+This does not add all-files access and does not use `MANAGE_EXTERNAL_STORAGE`.
+
+### Notifications & Lock Screen settings
+
+Settings → Notifications & Lock Screen gives consumer-friendly state only:
+
+- Whether the media notification is active/inactive.
+- Whether lock-screen controls are ready based on the active playback session.
+- A short explanation that lock-screen controls use the current playback session and current track metadata.
+
+This does not change native notification behavior and does not expose raw notification metrics in consumer mode.
+
+### About
+
+Settings → About identifies WaveZero as a smart music experience engine and keeps a small version/build placeholder. Legal/licenses and catalog credits remain future work.
+
+### Future work intentionally left out
+
+- Full storage manager v2.
+- Legal catalog credits.
+- Account/profile.
+- Cloud sync.
+- Subscriptions.
+- Advanced EQ/native DSP.
+- Production config management.
+- Login, uploads, databases, DRM, payments, playlists, or legal catalog tracks.
+
+### Manual checklist
+
+1. Start app fresh.
+2. Open Settings from Home/header.
+3. Confirm Settings page has no overflow.
+4. Change accent color and confirm visible UI changes.
+5. Change theme preset and confirm visible UI changes.
+6. Restart app and confirm theme/accent persist.
+7. Change preferred audio quality from Settings.
+8. Change audio effect profile from Settings.
+9. Toggle Smart Downloads from Settings.
+10. Clear cache from Settings and confirm Downloads updates.
+11. Import/rescan Device Music from Settings.
+12. Confirm consumer mode does not show raw metrics.
+13. Toggle Developer Mode from Settings.
+14. Confirm Engine appears in developer mode.
+15. Toggle Developer Mode off and confirm Engine disappears.
+16. Confirm playback, Library, Queue, Downloads, notification controls still work.
