@@ -1542,3 +1542,108 @@ WaveZero #80 upgrades the Flutter playback presentation into a premium music-app
 16. Confirm notification controls still work.
 17. Confirm Search, Library, Collections, History, Queue, Downloads, Storage, Settings still work.
 18. Confirm no raw debug UI appears in consumer mode.
+
+## WaveZero #81 — Product Hardening + UX Consolidation
+
+WaveZero #81 consolidates the recent feature wave into a calmer consumer product without adding major systems or changing playback, queue, cache, smart downloads, audio quality, audio effects, device music, Android native playback, Rust APIs, or legal catalog rules.
+
+### Navigation consolidation
+
+- Bottom navigation remains Home, Library, Now, Queue, and Downloads in consumer mode.
+- Engine remains developer-only and appears only when Developer Mode is enabled.
+- Internal pages such as Search, Collections, Collection Detail, Listening History, Storage Manager, Settings, and Legal / Licenses are treated as intentional product pages with clearer headers and return affordances where safe.
+- Internal pages do not add new bottom-navigation items, and the shell avoids making consumer users think debug routes are selected destinations.
+
+### Home consolidation
+
+- Home is the consumer dashboard rather than a developer dashboard.
+- The live player is left to the mini player, Now tab, and player sheet, reducing repeated current-playing copy on Home.
+- Home keeps useful real-state sections for Search music, Continue Listening / Recently Played, Collections, Downloads / Offline Ready, and smart listening summaries.
+- Empty Home sections explain what is missing and how to start without fake data.
+
+### Consumer wording rules
+
+Consumer surfaces prefer product language such as Catalog, Device music, Downloaded, Offline Ready, Smart Downloads, Collection, Listening History, Legal / Licenses, Search on this device, and Track is not available right now.
+
+Harsh or internal wording such as API Base URL, raw manifest, raw metric, internal IDs, SharedPreferences keys, stack traces, and debug/session copy should stay out of consumer mode. Developer-only terms may remain inside Engine diagnostics and Developer Mode surfaces.
+
+### Empty and unavailable states
+
+Empty states across Library, Search, Collections, Collection Detail, Listening History, Downloads, Storage Manager, Legal / Licenses, Queue, Now, and Mini Player should include:
+
+1. What is empty.
+2. Why it matters.
+3. One useful action when safe.
+
+Unavailable track states use friendly copy such as “Track is not available right now.” and should avoid exposing raw errors in consumer mode.
+
+### Mini player and player sheet polish
+
+- The mini player remains visually separated from bottom navigation.
+- Mini player title, subtitle, source badges, and Offline Ready badges are constrained for narrow screens and long or Arabic titles.
+- Play/pause remains a direct control and should not be treated as a sheet-open affordance.
+- The player sheet keeps a clear drag handle and close affordance.
+- Now and the sheet continue to use the same premium player surface.
+- Sheet state remains intentionally stable; this PR does not introduce a risky new controller just to live-update an already-open sheet.
+
+### Search, Library, Collections, and History relationship
+
+- Search is the global local finder across current in-memory app state.
+- Library keeps source filters and handoff to full Search.
+- Collections remain local metadata for Liked Tracks and user collections; deleting a collection does not delete audio files, downloads, cache files, or device music.
+- Listening History remains local and can be cleared without deleting downloads, collections, or device music.
+- Search discovery avoids duplicating Home too heavily and keeps recent searches clearable.
+
+### Settings consolidation
+
+Settings remains a calm control center for Search & Discovery, Appearance, Playback, Downloads & Storage, Listening History, Device music, Notifications / Lock Screen, Developer, and About / Legal.
+
+Developer Mode is explicit, Engine access remains developer-only, and Legal / Licenses, Manage Storage, View History, Clear History, View Search, and Clear Recent Searches remain accessible.
+
+### Stale UI cleanup
+
+Obvious stale UI should be removed only when no longer referenced. The legacy mini player widget was removed after the premium mini player became the active shell surface. Engine and Developer Mode diagnostics are intentionally preserved.
+
+### Mobile safety
+
+Changed surfaces should use flexible layout primitives such as Expanded, Flexible, Wrap, maxLines, and ellipsis to avoid narrow Android overflows. Source, legal, quality, and offline badges must not stretch screens, and modal sheets should remain SafeArea-aware.
+
+### What intentionally did not change
+
+This work intentionally does not change Android native playback, Rust APIs, Device Music MediaStore behavior, CacheService file format, Queue Engine v2 semantics, Smart Downloads logic, Audio Quality selection logic, Audio Effects bridge behavior, or Legal Catalog rules.
+
+This work also intentionally does not add auth, cloud sync, a database, backend APIs, analytics SDKs, uploads, payments, subscriptions, DRM, real music files, shuffle, repeat, sleep timer, or a new bottom-navigation item. The Now tab remains.
+
+### Future work
+
+- Player Experience v2: shuffle, repeat, and sleep timer.
+- Production Content Server.
+- Account/Auth.
+- Cloud Sync.
+- Artist Upload Pipeline.
+- Artist Dashboard.
+- Subscriptions/plans.
+- Recommendations.
+
+### Manual checklist
+
+1. Start app in consumer mode.
+2. Confirm bottom nav remains Home / Library / Now / Queue / Downloads.
+3. Confirm Engine appears only in developer mode.
+4. Open Home and confirm it feels less crowded.
+5. Play a track and confirm mini player remains usable.
+6. Open player sheet and confirm controls still work.
+7. Open Now and confirm it matches the premium player surface.
+8. Open Search and confirm no debug wording.
+9. Open Library and confirm search/full-search/filters still work.
+10. Open Collections and Collection Detail.
+11. Open Listening History.
+12. Open Downloads and Storage Manager.
+13. Open Settings and confirm sections are readable.
+14. Open Legal / Licenses.
+15. Confirm empty states are friendly.
+16. Confirm unavailable track states are friendly.
+17. Confirm Arabic/long titles do not overflow.
+18. Confirm no raw metrics/debug IDs/internal URLs in consumer mode.
+19. Confirm playback, queue, downloads, smart downloads, audio quality/effects, device music, notification controls still work.
+20. Confirm no major feature behavior changed.
