@@ -16,7 +16,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
-private const val DEVICE_MUSIC_PERMISSION_PREFS = "wavezero.device_music"
+private const val DEVICE_MUSIC_PERMISSION_PREFS = "wavezero_device_music_permissions"
 private const val DEVICE_MUSIC_PERMISSION_REQUESTED_KEY = "wavezero.device_music_permission_requested"
 
 class MainActivity : FlutterActivity() {
