@@ -304,3 +304,64 @@ For the current safe foundation, Android accepts the method channel call and ret
 7. Confirm Off returns to original/no-effect mode.
 8. Restart app and confirm selected profile persists.
 9. Play an original/high-quality track and confirm effects are only applied by explicit user selection.
+
+## WaveZero #67 — Real Design System v1 + Product Shell Upgrade
+
+WaveZero #67 starts moving the Flutter player from a developer-dashboard feel toward a real premium music app shell while preserving the playback engine. This is a UI/product-architecture pass only: Android native playback, Rust API behavior, cache/download behavior, queue behavior, audio quality selection logic, audio effects bridge behavior, local catalog behavior, and session persistence remain unchanged.
+
+### Design System v1 purpose
+
+The shared Flutter design system lives at `apps/flutter/wavezero_app/lib/design/wavezero_design_system.dart`. It provides the first reusable product tokens and lightweight components for upcoming Home, Now Playing, Library, Settings, and future theme work:
+
+- `WzColors` for premium dark surfaces, product accents, gradients, semantic status colors, and text colors.
+- `WzSpacing` and `WzRadius` for reusable spacing and shape scale.
+- `WzText` for product display, page, section, body, caption, and eyebrow typography.
+- `WzSurface` for shared panel decoration and shadows.
+- `WzPageScaffold`, `WzPageHeader`, `WzSectionHeader`, `WzPanel` / `WzGlassCard`, `WzStatusPill`, `WzPrimaryAction`, and `WzMiniMetric` for simple premium shell building blocks.
+
+The existing private `_WzTokens` remain in place for compatibility and now mirror the shared design-system colors. Future UI work can migrate gradually instead of performing a risky split/refactor.
+
+### Product shell direction
+
+The app shell now has a branded WaveZero top area with concise product-level engine status, keeps the mini player, and keeps the bottom navigation across Home / Now / Queue / Library / Downloads / Engine. Main pages use product headers and cards so the default app experience feels like a music product while Engine continues to hold advanced diagnostics.
+
+### Home v1 sections
+
+Home v1 is no longer an empty or purely technical landing page. It uses only real existing state and includes:
+
+1. **Hero** — “WaveZero” and “A smart music experience engine.” with a concise native playback / engine summary.
+2. **Current listening** — current track title when present, play state, quality label when available, and cache/offline hints only when real state indicates them.
+3. **Smart engine cards** — Smart Downloads, Instant Next / Preload, Offline Ready, and Audio Quality summaries.
+4. **Quick actions** — Go to Library, Go to Queue, Go to Downloads, and Go to Engine.
+5. **Status/session context** — concise operation and session state without turning Home into raw debug telemetry.
+
+### Engine remains advanced diagnostics
+
+Engine is still the advanced/developer diagnostics area. It is visually organized into:
+
+- Playback Engine
+- Smart Preload
+- Smart Downloads
+- Audio Quality
+- Audio Effects
+- Cache / Offline
+- Raw Metrics
+
+Raw metric names and important diagnostics remain available for developer validation. Product pages avoid raw-only language where possible, but Engine keeps the detailed counters and labels needed for troubleshooting.
+
+### Not final full UI/UX yet
+
+This is the first real design-system and product-shell foundation, not the final WaveZero interface. Full Home content, expanded Now Playing, complete Library UX, Settings, and Theme Customization are intentionally later work. Theme Customization specifically comes after this design-system foundation is stable.
+
+### Manual checklist
+
+1. Start app.
+2. Confirm bottom navigation still works.
+3. Confirm Home shows real current state and quick actions.
+4. Confirm Now playback controls still work.
+5. Confirm Library load/select/cache actions still work.
+6. Confirm Queue move/play-next/remove still work.
+7. Confirm Downloads play/delete/clear still work.
+8. Confirm Engine diagnostics are still visible.
+9. Confirm Audio Quality and Audio Effects panels still work.
+10. Confirm no playback behavior changed.
