@@ -15,12 +15,19 @@ function Is-VirtualAdapter {
 
 $addresses = Get-ActiveIpv4Addresses | ForEach-Object {
     $adapter = Get-NetAdapter -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue
+    $description = ''
+    $status = 'Up'
+    if ($adapter) {
+        $description = $adapter.InterfaceDescription
+        $status = $adapter.Status
+    }
+
     [pscustomobject]@{
         IPAddress = $_.IPAddress
         InterfaceAlias = $_.InterfaceAlias
-        InterfaceDescription = if ($adapter) { $adapter.InterfaceDescription } else { '' }
-        Status = if ($adapter) { $adapter.Status } else { 'Up' }
-        IsVirtual = Is-VirtualAdapter $_.InterfaceAlias (if ($adapter) { $adapter.InterfaceDescription } else { '' })
+        InterfaceDescription = $description
+        Status = $status
+        IsVirtual = Is-VirtualAdapter $_.InterfaceAlias $description
     }
 }
 

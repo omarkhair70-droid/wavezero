@@ -20,10 +20,9 @@ Write-Output "WAVEZERO_API_BASE_URL = $env:WAVEZERO_API_BASE_URL"
 $userHelper = Join-Path $env:USERPROFILE 'Desktop\wavezero-dev.ps1'
 if (Test-Path $userHelper) {
     Write-Output "Found personal Flutter helper: $userHelper"
-    & $userHelper
-    exit $LASTEXITCODE
+    Write-Output 'Ignoring helper launch because flutter run must receive --dart-define directly.'
 }
 
 Set-Location "$repoRoot\apps\flutter\wavezero_app"
 flutter pub get
-flutter run
+flutter run --dart-define="WAVEZERO_API_BASE_URL=$env:WAVEZERO_API_BASE_URL"

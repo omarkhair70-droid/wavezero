@@ -114,6 +114,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int _cachedTrackCount = 0;
   int _cacheBytes = 0;
   String? _lastCacheResult;
+  int _offlineCachedTrackCount = 0;
+  bool _offlineLibraryAvailable = false;
+  bool _offlineLibraryMode = false;
+  String _lastOfflineLibraryStatus = 'Offline library not initialized.';
 
   String? _selectedTrackId;
   String? _queueCurrentTrackId;
@@ -251,14 +255,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _refreshCacheStats() async {
     try {
       final bytes = await _cacheService.cacheBytes();
+      final cachedLibrary = await _cacheService.cachedLibrary();
       if (!mounted) return;
       setState(() {
         _cachedTrackCount = _cacheService.cachedTrackCount();
         _cacheBytes = bytes;
+        _offlineCachedTrackCount = cachedLibrary.length;
+        _offlineLibraryAvailable = cachedLibrary.isNotEmpty;
         _lastCacheResult = _cacheService.lastCacheResult;
+        _lastOfflineLibraryStatus = cachedLibrary.isNotEmpty
+            ? 'Offline cached library ready with ${cachedLibrary.length} tracks.'
+            : 'Offline library is empty.';
       });
     } catch (_) {}
   }
+
+  bool get _isOfflineLibraryMode => _offlineLibraryMode;
 
   void _capturePlaybackBaselineMetrics(PlaybackMetrics metrics) {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -320,18 +332,52 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _catalogStatus = catalog.tracks.isEmpty ? 'Catalog API returned no tracks.' : 'Loaded ${catalog.tracks.length} catalog tracks.';
           _queueStatus = restored == null ? 'Queue synced with catalog.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
+          _offlineLibraryMode = false;
         });
         if (preferred == null) throw const FormatException('Catalog API returned no playable tracks');
         await _loadManifestAndNativeTrack(preferred.trackId, client: client);
         unawaited(_saveSession());
       } catch (error) {
         if (!mounted) return;
-        setState(() {
-          _lastError = error.toString();
-          _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track. $error' : 'Catalog load failed. $error';
-        });
-        if (fallbackToDemo) {
-          await widget.playbackBridge.loadTrack(title: waveZeroTestTrack.title, url: waveZeroTestTrack.url);
+        final offlineLibrary = await _cacheService.cachedLibrary();
+        if (offlineLibrary.isNotEmpty) {
+          final offlineTracks = offlineLibrary
+              .map((entry) => CatalogTrackSummary(
+                    trackId: entry.trackId,
+                    title: entry.title,
+                    artistId: null,
+                    artistName: entry.artistName,
+                    durationMs: entry.durationMs,
+                    artworkUrl: entry.artworkUrl,
+                    primaryAsset: null,
+                  ))
+              .toList(growable: false);
+          setState(() {
+            _lastError = error.toString();
+            _catalog = offlineTracks;
+            _queue = offlineTracks;
+            _selectedTrackId = offlineTracks.first.trackId;
+            _queueCurrentTrackId = offlineTracks.first.trackId;
+            _catalogStatus = 'Catalog unavailable. Showing offline cached library. $error';
+            _queueStatus = 'Offline cache available. Choose a cached track to play.';
+            _sessionStatus = '${offlineTracks.length} cached tracks available offline.';
+            _offlineCachedTrackCount = offlineLibrary.length;
+            _offlineLibraryAvailable = true;
+            _offlineLibraryMode = true;
+            _lastOfflineLibraryStatus = 'Offline cached library loaded.';
+          });
+        } else {
+          setState(() {
+            _lastError = error.toString();
+            _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track. $error' : 'Catalog load failed. $error';
+            _offlineCachedTrackCount = 0;
+            _offlineLibraryAvailable = false;
+            _offlineLibraryMode = false;
+            _lastOfflineLibraryStatus = 'Offline library empty.';
+          });
+          if (fallbackToDemo) {
+            await widget.playbackBridge.loadTrack(title: waveZeroTestTrack.title, url: waveZeroTestTrack.url);
+          }
         }
       } finally {
         client.close();
@@ -401,7 +447,51 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _queueCurrentTrackId = trackId;
       _lastAutoAdvanceTrackId = trackId;
     });
-    final manifest = prefetchedManifest?.trackId == trackId ? prefetchedManifest! : await client.fetchTrackManifest(trackId: trackId);
+    CatalogTrackManifest manifest;
+    if (prefetchedManifest?.trackId == trackId) {
+      manifest = prefetchedManifest!;
+    } else {
+      final cachedMetadata = await _cacheService.cachedTrackById(trackId);
+      if (_isOfflineLibraryMode && cachedMetadata != null) {
+        manifest = CatalogTrackManifest(
+          trackId: cachedMetadata.trackId,
+          title: cachedMetadata.title,
+          streamUrl: cachedMetadata.originalRemoteUrl,
+          artistId: null,
+          artistName: cachedMetadata.artistName,
+          durationMs: cachedMetadata.durationMs,
+          artworkUrl: cachedMetadata.artworkUrl,
+        );
+        if (mounted) {
+          setState(() {
+            _catalogStatus = 'Loaded offline cached track: ${manifest.title}';
+          });
+        }
+      } else {
+        try {
+          manifest = await client.fetchTrackManifest(trackId: trackId);
+        } catch (error) {
+          if (cachedMetadata != null) {
+            manifest = CatalogTrackManifest(
+              trackId: cachedMetadata.trackId,
+              title: cachedMetadata.title,
+              streamUrl: cachedMetadata.originalRemoteUrl,
+              artistId: null,
+              artistName: cachedMetadata.artistName,
+              durationMs: cachedMetadata.durationMs,
+              artworkUrl: cachedMetadata.artworkUrl,
+            );
+            if (mounted) {
+              setState(() {
+                _catalogStatus = 'Loaded offline cached track: ${manifest.title}';
+              });
+            }
+          } else {
+            rethrow;
+          }
+        }
+      }
+    }
     if (!mounted) return;
     _titleController.text = manifest.title;
     _urlController.text = manifest.streamUrl;
@@ -409,7 +499,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _manifest = manifest;
       _selectedTrackId = manifest.trackId;
       _queueCurrentTrackId = manifest.trackId;
-      _catalogStatus = status ?? 'Loaded from catalog API: ${manifest.title}';
+      _catalogStatus = status ?? (_catalogStatus.startsWith('Loaded offline') ? _catalogStatus : 'Loaded from catalog API: ${manifest.title}');
     });
     final resolvedUrl = await _cacheService.cachedOrRemoteUrl(manifest.trackId, manifest.streamUrl);
     await widget.playbackBridge.loadTrack(title: manifest.title, url: resolvedUrl);
@@ -619,7 +709,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
     setState(() => _operation = PlayerOperation.loadingTrack);
     try {
-      final ok = await _cacheService.downloadAndCache(track.trackId, assetUrl);
+      final ok = await _cacheService.downloadAndCache(
+        track.trackId,
+        assetUrl,
+        metadata: CachedTrackMetadata(
+          trackId: track.trackId,
+          title: track.title,
+          artistName: track.artistName,
+          durationMs: track.durationMs,
+          artworkUrl: track.artworkUrl,
+          localFilePath: '',
+          originalRemoteUrl: assetUrl,
+          cachedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
       await _refreshCacheStats();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Cached ${track.title}' : 'Cache failed for ${track.title}')));
@@ -945,6 +1048,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
             onAddToQueue: _addToQueue,
             onCache: (track) => _toggleCache(track),
+            offlineMode: _catalogStatus.toLowerCase().contains('offline'),
           ),
           const SizedBox(height: 16),
           _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
@@ -993,6 +1097,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     const Text('Cache', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
                     Text('Cached tracks: $_cachedTrackCount • ${(_cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
+                    Text('Offline cached library: ${_offlineLibraryAvailable ? 'available' : 'unavailable'}', style: _WzTokens.caption),
+                    Text('Offline cache items: $_offlineCachedTrackCount', style: _WzTokens.caption),
+                    Text('Offline status: $_lastOfflineLibraryStatus', style: _WzTokens.caption),
                     if (_lastCacheResult != null) Text('Last: $_lastCacheResult', style: _WzTokens.caption),
                   ]),
                 ),
@@ -1622,6 +1729,7 @@ class _CatalogListCard extends StatelessWidget {
     required this.onSelectTrack,
     required this.onAddToQueue,
     required this.onCache,
+    this.offlineMode = false,
   });
 
   final List<CatalogTrackSummary> tracks;
@@ -1637,6 +1745,7 @@ class _CatalogListCard extends StatelessWidget {
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
   final ValueChanged<CatalogTrackSummary> onAddToQueue;
   final ValueChanged<CatalogTrackSummary> onCache;
+  final bool offlineMode;
 
   @override
   Widget build(BuildContext context) {
@@ -1678,8 +1787,12 @@ class _CatalogListCard extends StatelessWidget {
             style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
           ),
           const SizedBox(height: 12),
-          if (totalTrackCount == 0) const _EmptyCatalogMessage(message: 'No catalog tracks loaded yet.')
-          else if (tracks.isEmpty) const _EmptyCatalogMessage(message: 'No tracks match this search.')
+          if (totalTrackCount == 0)
+            _EmptyCatalogMessage(
+              message: offlineMode ? 'No cached tracks available offline.' : 'No catalog tracks loaded yet.',
+            )
+          else if (tracks.isEmpty)
+            const _EmptyCatalogMessage(message: 'No tracks match this search.')
           else ...tracks.map((track) => _CatalogRow(
                 track: track,
                 selected: track.trackId == selectedTrackId,
@@ -1741,7 +1854,20 @@ class _CatalogRow extends StatelessWidget {
           _Artwork(artworkUrl: track.artworkUrl, size: 54),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(_trackSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))]),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
+                if (status == TrackCacheStatus.cached)
+                  Container(
+                    margin: const EdgeInsets.only(left: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: const Color(0xFF173626), borderRadius: BorderRadius.circular(10)),
+                    child: const Text('Cached', style: TextStyle(color: Color(0xFF38D996), fontSize: 10, fontWeight: FontWeight.w800)),
+                  ),
+              ]),
+              const SizedBox(height: 4),
+              Text(_trackSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+            ]),
           ),
           Text(_formatTime(track.durationMs), style: _timeStyle),
           IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
