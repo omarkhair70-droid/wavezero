@@ -25,7 +25,8 @@
           "quality_label": "standard",
           "sample_rate_hz": 44100,
           "bit_depth": null,
-          "file_size_bytes": null
+          "file_size_bytes": null,
+          "asset_url": "http://192.168.1.7:8090/song.mp3"
         }
       ],
       "licenseStatus": "dev_only",
@@ -39,7 +40,10 @@
       "commercialUseAllowed": false,
       "redistributionAllowed": false,
       "derivativesAllowed": false,
-      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified.",
+      "album_name": "Local Dev Audio",
+      "sourceType": "dev_fixture",
+      "productionSafe": false
     },
     {
       "id": "track-local-song-3",
@@ -59,7 +63,8 @@
           "quality_label": "standard",
           "sample_rate_hz": 44100,
           "bit_depth": null,
-          "file_size_bytes": null
+          "file_size_bytes": null,
+          "asset_url": "http://192.168.1.7:8090/song3.mp3"
         }
       ],
       "licenseStatus": "dev_only",
@@ -73,7 +78,10 @@
       "commercialUseAllowed": false,
       "redistributionAllowed": false,
       "derivativesAllowed": false,
-      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified.",
+      "album_name": "Local Dev Audio",
+      "sourceType": "dev_fixture",
+      "productionSafe": false
     },
     {
       "id": "track-local-song-4",
@@ -93,7 +101,8 @@
           "quality_label": "standard",
           "sample_rate_hz": 44100,
           "bit_depth": null,
-          "file_size_bytes": null
+          "file_size_bytes": null,
+          "asset_url": "http://192.168.1.7:8090/song4.mp3"
         }
       ],
       "licenseStatus": "dev_only",
@@ -107,7 +116,10 @@
       "commercialUseAllowed": false,
       "redistributionAllowed": false,
       "derivativesAllowed": false,
-      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified.",
+      "album_name": "Local Dev Audio",
+      "sourceType": "dev_fixture",
+      "productionSafe": false
     },
     {
       "id": "track-local-song-5",
@@ -127,7 +139,8 @@
           "quality_label": "standard",
           "sample_rate_hz": 44100,
           "bit_depth": null,
-          "file_size_bytes": null
+          "file_size_bytes": null,
+          "asset_url": "http://192.168.1.7:8090/song5.mp3"
         }
       ],
       "licenseStatus": "dev_only",
@@ -141,7 +154,10 @@
       "commercialUseAllowed": false,
       "redistributionAllowed": false,
       "derivativesAllowed": false,
-      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified.",
+      "album_name": "Local Dev Audio",
+      "sourceType": "dev_fixture",
+      "productionSafe": false
     }
   ]
 }

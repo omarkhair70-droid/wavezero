@@ -1861,6 +1861,11 @@ WaveZero now has explicit Rust API content modes so the local dev catalog can re
 - `WAVEZERO_AUDIO_BASE_URL=`
 - `WAVEZERO_ARTWORK_BASE_URL=`
 - `WAVEZERO_LOCAL_AUDIO_DIR=`
+- `WAVEZERO_CATALOG_PATH=<catalog.json>`
+- `WAVEZERO_CONTENT_BASE_URL=<base-url-for-relative-content>`
+- `WAVEZERO_AUDIO_BASE_URL=<base-url-for-relative-audio>`
+- `WAVEZERO_ARTWORK_BASE_URL=<base-url-for-relative-artwork>`
+- `WAVEZERO_LOCAL_AUDIO_DIR=<dev-only-local-audio-dir>`
 - `WAVEZERO_ENABLE_LOCAL_FOLDER_CATALOG=true|false`
 
 Local dev does not require every variable. Demo and production should use an explicit catalog file and production-appropriate base URLs.
