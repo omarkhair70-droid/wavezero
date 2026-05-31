@@ -9,6 +9,7 @@ import '../catalog/catalog_track_manifest.dart';
 import '../playback/playback_bridge.dart';
 import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
+import '../cache/cache_service.dart';
 import 'player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
@@ -108,6 +109,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _audioPreparedBeforeNext = false;
   bool _nextPreparedBeforePlay = false;
 
+  // Cache service and diagnostics
+  final CacheService _cacheService = CacheService();
+  int _cachedTrackCount = 0;
+  int _cacheBytes = 0;
+  String? _lastCacheResult;
+
   String? _selectedTrackId;
   String? _queueCurrentTrackId;
   String? _lastAutoAdvanceTrackId;
@@ -189,6 +196,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
     _poller = Timer.periodic(_refreshInterval, (_) => _refreshMetrics());
     _loadCatalog(fallbackToDemo: true);
+    unawaited(_initCache());
+  }
+
+  Future<void> _initCache() async {
+    try {
+      await _cacheService.init();
+      await _refreshCacheStats();
+    } catch (_) {}
   }
 
   @override
@@ -231,6 +246,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     } finally {
       _refreshingMetrics = false;
     }
+  }
+
+  Future<void> _refreshCacheStats() async {
+    try {
+      final bytes = await _cacheService.cacheBytes();
+      if (!mounted) return;
+      setState(() {
+        _cachedTrackCount = _cacheService.cachedTrackCount();
+        _cacheBytes = bytes;
+        _lastCacheResult = _cacheService.lastCacheResult;
+      });
+    } catch (_) {}
   }
 
   void _capturePlaybackBaselineMetrics(PlaybackMetrics metrics) {
@@ -384,7 +411,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _queueCurrentTrackId = manifest.trackId;
       _catalogStatus = status ?? 'Loaded from catalog API: ${manifest.title}';
     });
-    await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
+    final resolvedUrl = await _cacheService.cachedOrRemoteUrl(manifest.trackId, manifest.streamUrl);
+    await widget.playbackBridge.loadTrack(title: manifest.title, url: resolvedUrl);
+    unawaited(_refreshCacheStats());
     if (autoPlay) await widget.playbackBridge.play();
     if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
       setState(() {
@@ -578,6 +607,38 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Metrics copied')));
     }, refreshAfter: false);
+  }
+
+  Future<void> _toggleCache(CatalogTrackSummary track) async {
+    if (_operation != PlayerOperation.idle) return;
+    final assetUrl = track.primaryAsset?.manifestUrl;
+    if (assetUrl == null || assetUrl.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No downloadable asset URL available for this track')));
+      return;
+    }
+    setState(() => _operation = PlayerOperation.loadingTrack);
+    try {
+      final ok = await _cacheService.downloadAndCache(track.trackId, assetUrl);
+      await _refreshCacheStats();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Cached ${track.title}' : 'Cache failed for ${track.title}')));
+    } finally {
+      if (mounted) setState(() => _operation = PlayerOperation.idle);
+    }
+  }
+
+  Future<void> _clearCache() async {
+    if (_operation != PlayerOperation.idle) return;
+    setState(() => _operation = PlayerOperation.loadingCatalog);
+    try {
+      await _cacheService.clearCache();
+      await _refreshCacheStats();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cache cleared')));
+    } finally {
+      if (mounted) setState(() => _operation = PlayerOperation.idle);
+    }
   }
 
   Future<void> _resetMetrics() => _runOperation(PlayerOperation.resettingMetrics, widget.playbackBridge.resetMetrics);
@@ -883,6 +944,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onRefresh: () => _loadCatalog(),
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
             onAddToQueue: _addToQueue,
+            onCache: (track) => _toggleCache(track),
           ),
           const SizedBox(height: 16),
           _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
@@ -921,6 +983,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             sessionRecoveryMs: _sessionRecoveryMs,
             audioPreparedBeforeNext: _audioPreparedBeforeNext,
             nextPreparedBeforePlay: _nextPreparedBeforePlay,
+          ),
+          const SizedBox(height: 12),
+          _Panel(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Cache', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text('Cached tracks: $_cachedTrackCount • ${(_cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
+                    if (_lastCacheResult != null) Text('Last: $_lastCacheResult', style: _WzTokens.caption),
+                  ]),
+                ),
+                FilledButton.tonalIcon(onPressed: _queueDisabled ? null : () async { await _clearCache(); }, icon: const Icon(Icons.clear_all), label: const Text('Clear cache'))
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
@@ -1529,9 +1607,151 @@ class _QueueCard extends StatelessWidget { const _QueueCard({required this.queue
 
 class _QueueRow extends StatelessWidget { const _QueueRow({required this.track, required this.index, required this.current, required this.upNext, required this.disabled, required this.onPlay, required this.onRemove}); final CatalogTrackSummary track; final int index; final bool current; final bool upNext; final bool disabled; final VoidCallback onPlay; final VoidCallback onRemove; @override Widget build(BuildContext context) { final label = current ? 'Now' : upNext ? 'Up next' : '#${index + 1}'; return Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: current ? const Color(0x227C5CFF) : const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: current ? const Color(0xFF8D7CFF) : const Color(0xFF20273A))), child: Row(children: [Icon(current ? Icons.equalizer : Icons.queue_music, color: const Color(0xFF8D7CFF)), const SizedBox(width: 12), Expanded(child: Text('${track.title}  $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))), IconButton(onPressed: disabled ? null : onPlay, icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF))), IconButton(onPressed: disabled ? null : onRemove, icon: const Icon(Icons.close, color: Color(0xFF98A1B8)))])); }}
 
-class _CatalogListCard extends StatelessWidget { const _CatalogListCard({required this.tracks, required this.totalTrackCount, required this.selectedTrackId, required this.status, required this.loading, required this.refreshDisabled, required this.addToQueueDisabled, required this.searchController, required this.onClearSearch, required this.onRefresh, required this.onSelectTrack, required this.onAddToQueue}); final List<CatalogTrackSummary> tracks; final int totalTrackCount; final String? selectedTrackId; final String status; final bool loading; final bool refreshDisabled; final bool addToQueueDisabled; final TextEditingController searchController; final VoidCallback onClearSearch; final VoidCallback onRefresh; final ValueChanged<CatalogTrackSummary> onSelectTrack; final ValueChanged<CatalogTrackSummary> onAddToQueue; @override Widget build(BuildContext context) { final hasQuery = searchController.text.trim().isNotEmpty; return _Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Catalog', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), SizedBox(height: 4), Text('Search stays usable while playback is running.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13))])), IconButton.outlined(onPressed: refreshDisabled ? null : onRefresh, icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh))]), const SizedBox(height: 12), TextField(controller: searchController, decoration: InputDecoration(labelText: 'Search catalog', prefixIcon: const Icon(Icons.search), suffixIcon: hasQuery ? IconButton(onPressed: onClearSearch, icon: const Icon(Icons.close)) : null)), const SizedBox(height: 10), Text(hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 12), if (totalTrackCount == 0) const _EmptyCatalogMessage(message: 'No catalog tracks loaded yet.') else if (tracks.isEmpty) const _EmptyCatalogMessage(message: 'No tracks match this search.') else ...tracks.map((track) => _CatalogRow(track: track, selected: track.trackId == selectedTrackId, addDisabled: addToQueueDisabled, onTap: () => onSelectTrack(track), onAdd: () => onAddToQueue(track)))])); }}
+class _CatalogListCard extends StatelessWidget {
+  const _CatalogListCard({
+    required this.tracks,
+    required this.totalTrackCount,
+    required this.selectedTrackId,
+    required this.status,
+    required this.loading,
+    required this.refreshDisabled,
+    required this.addToQueueDisabled,
+    required this.searchController,
+    required this.onClearSearch,
+    required this.onRefresh,
+    required this.onSelectTrack,
+    required this.onAddToQueue,
+    required this.onCache,
+  });
 
-class _CatalogRow extends StatelessWidget { const _CatalogRow({required this.track, required this.selected, required this.addDisabled, required this.onTap, required this.onAdd}); final CatalogTrackSummary track; final bool selected; final bool addDisabled; final VoidCallback onTap; final VoidCallback onAdd; @override Widget build(BuildContext context) => InkWell(onTap: onTap, borderRadius: BorderRadius.circular(18), child: Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: selected ? const Color(0x227C5CFF) : const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: selected ? const Color(0xFF8D7CFF) : const Color(0xFF20273A))), child: Row(children: [_Artwork(artworkUrl: track.artworkUrl, size: 54), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(_trackSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))])), Text(_formatTime(track.durationMs), style: _timeStyle), IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))), Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF))]))); }
+  final List<CatalogTrackSummary> tracks;
+  final int totalTrackCount;
+  final String? selectedTrackId;
+  final String status;
+  final bool loading;
+  final bool refreshDisabled;
+  final bool addToQueueDisabled;
+  final TextEditingController searchController;
+  final VoidCallback onClearSearch;
+  final VoidCallback onRefresh;
+  final ValueChanged<CatalogTrackSummary> onSelectTrack;
+  final ValueChanged<CatalogTrackSummary> onAddToQueue;
+  final ValueChanged<CatalogTrackSummary> onCache;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasQuery = searchController.text.trim().isNotEmpty;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Catalog', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    SizedBox(height: 4),
+                    Text('Search stays usable while playback is running.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                  ],
+                ),
+              ),
+              IconButton.outlined(
+                onPressed: refreshDisabled ? null : onRefresh,
+                icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              labelText: 'Search catalog',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: hasQuery ? IconButton(onPressed: onClearSearch, icon: const Icon(Icons.close)) : null,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status,
+            style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          if (totalTrackCount == 0) const _EmptyCatalogMessage(message: 'No catalog tracks loaded yet.')
+          else if (tracks.isEmpty) const _EmptyCatalogMessage(message: 'No tracks match this search.')
+          else ...tracks.map((track) => _CatalogRow(
+                track: track,
+                selected: track.trackId == selectedTrackId,
+                addDisabled: addToQueueDisabled,
+                onTap: () => onSelectTrack(track),
+                onAdd: () => onAddToQueue(track),
+                onCache: () => onCache(track),
+              )),
+        ],
+      ),
+    );
+  }
+}
+class _CatalogRow extends StatelessWidget {
+  const _CatalogRow({
+    required this.track,
+    required this.selected,
+    required this.addDisabled,
+    required this.onTap,
+    required this.onAdd,
+    required this.onCache,
+  });
+
+  final CatalogTrackSummary track;
+  final bool selected;
+  final bool addDisabled;
+  final VoidCallback onTap;
+  final VoidCallback onAdd;
+  final VoidCallback onCache;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = CacheService().statusForTrack(track.trackId);
+    Icon cacheIcon;
+    switch (status) {
+      case TrackCacheStatus.caching:
+        cacheIcon = const Icon(Icons.downloading, color: Color(0xFF98A1B8));
+        break;
+      case TrackCacheStatus.cached:
+        cacheIcon = const Icon(Icons.check_circle, color: Color(0xFF38D996));
+        break;
+      case TrackCacheStatus.failed:
+        cacheIcon = const Icon(Icons.error, color: Color(0xFFFFC46B));
+        break;
+      case TrackCacheStatus.notCached:
+      default:
+        cacheIcon = const Icon(Icons.download, color: Color(0xFF8D7CFF));
+        break;
+    }
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: selected ? const Color(0x227C5CFF) : const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: selected ? const Color(0xFF8D7CFF) : const Color(0xFF20273A))),
+        child: Row(children: [
+          _Artwork(artworkUrl: track.artworkUrl, size: 54),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(_trackSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))]),
+          ),
+          Text(_formatTime(track.durationMs), style: _timeStyle),
+          IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
+          IconButton(onPressed: onCache, icon: cacheIcon),
+          Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
+        ]),
+      ),
+    );
+  }
+}
 
 class _TrackSetupCard extends StatelessWidget { const _TrackSetupCard({required this.titleController, required this.urlController, required this.apiBaseUrlController, required this.catalogStatus, required this.loading, required this.onLoadCatalog, required this.onLoadTrack}); final TextEditingController titleController; final TextEditingController urlController; final TextEditingController apiBaseUrlController; final String catalogStatus; final bool loading; final VoidCallback onLoadCatalog; final VoidCallback onLoadTrack; @override Widget build(BuildContext context) => _Panel(child: ExpansionTile(tilePadding: EdgeInsets.zero, title: const Text('Manual / API setup'), subtitle: Text(catalogStatus, maxLines: 2, overflow: TextOverflow.ellipsis), children: [TextField(controller: apiBaseUrlController, decoration: const InputDecoration(labelText: 'API base URL')), const SizedBox(height: 12), TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Manual title')), const SizedBox(height: 12), TextField(controller: urlController, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Manual audio URL')), const SizedBox(height: 16), Wrap(spacing: 10, runSpacing: 10, children: [FilledButton.tonalIcon(onPressed: loading ? null : onLoadCatalog, icon: loading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_download), label: const Text('Reload selected/API')), OutlinedButton.icon(onPressed: loading ? null : onLoadTrack, icon: const Icon(Icons.bolt), label: const Text('Load manual track'))]) ])); }
 
