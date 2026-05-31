@@ -32,3 +32,13 @@ gradle-wrapper.jar
 google-services.json
 service-account.json
 firebase.json
+
+# FMA/local demo library artifacts must stay outside Git.
+fma_small.zip
+**/fma_small.zip
+**/wavezero_fma_green_small_audio/
+**/wavezero_demo_audio_*/
+**/*_local_library.json
+**/wavezero_fma_green_small_catalog.json
+**/wavezero_fma_green_small_import_report.csv
+**/*.mp3
