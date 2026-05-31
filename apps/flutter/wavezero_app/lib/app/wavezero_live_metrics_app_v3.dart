@@ -219,6 +219,16 @@ extension WzAccentPresetLabel on WzAccentPreset {
       };
 }
 
+
+String _catalogModeLabel(String? contentMode, int trackCount) {
+  return switch (contentMode) {
+    'demo' => 'Demo catalog',
+    'production' => 'Catalog ready',
+    'dev' => 'Catalog ready',
+    _ => trackCount > 0 ? 'Catalog ready' : 'Catalog unavailable',
+  };
+}
+
 String _friendlyLoadError(String error) {
   final normalized = error.toLowerCase();
   if (normalized.contains('permission')) return 'Device music permission is needed to import local songs.';
@@ -230,6 +240,9 @@ String _friendlyLoadError(String error) {
 
 String _consumerCatalogStatus(String status) {
   final normalized = status.toLowerCase();
+  if (normalized.contains('demo catalog')) return 'Demo catalog';
+  if (normalized.contains('catalog ready')) return 'Catalog ready';
+  if (normalized.contains('catalog unavailable')) return 'Catalog unavailable';
   if (normalized.contains('error') || normalized.contains('exception') || normalized.contains('failed')) {
     return 'Couldn’t load music right now. Check your connection and try again.';
   }
@@ -425,6 +438,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   CatalogTrackManifest? _prefetchedManifest;
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
+  ContentStatus? _contentStatus;
   _SearchFilter _searchFilter = _SearchFilter.all;
   List<String> _recentSearches = const <String>[];
   String _queueStatus = 'Queue is ready.';
@@ -1812,6 +1826,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       try {
         setState(() => _catalogStatus = 'Loading catalog...');
         final catalog = await client.fetchCatalog();
+        ContentStatus? contentStatus;
+        try {
+          contentStatus = await client.fetchContentStatus();
+        } catch (_) {
+          contentStatus = null;
+        }
         final restored = await _restoreSession(catalog.tracks);
         final preferred = _findTrack(catalog.tracks, restored?.currentTrackId) ??
             _findTrack(catalog.tracks, restored?.selectedTrackId) ??
@@ -1825,7 +1845,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _selectedTrackId = preferred?.trackId;
           _queueCurrentTrackId = restored?.currentTrackId ?? preferred?.trackId;
           _autoAdvanceEnabled = restored?.autoAdvanceEnabled ?? _autoAdvanceEnabled;
-          _catalogStatus = catalog.tracks.isEmpty ? 'Catalog API returned no tracks.' : 'Loaded ${catalog.tracks.length} catalog tracks.';
+          _contentStatus = contentStatus;
+          _catalogStatus = catalog.tracks.isEmpty
+              ? 'Catalog unavailable'
+              : contentStatus?.friendlyLabel ?? _catalogModeLabel(catalog.contentMode, catalog.tracks.length);
           _queueStatus = restored == null ? 'Queue synced with catalog.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
           _offlineLibraryMode = false;
@@ -1856,6 +1879,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               .toList(growable: false);
           setState(() {
             _lastError = error.toString();
+            _contentStatus = null;
             _catalog = offlineTracks;
             _queue = offlineTracks;
             _selectedTrackId = offlineTracks.first.trackId;
@@ -1871,6 +1895,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         } else {
           setState(() {
             _lastError = error.toString();
+            _contentStatus = null;
             _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track. $error' : 'Catalog load failed. $error';
             _offlineCachedTrackCount = 0;
             _offlineLibraryAvailable = false;
@@ -3136,6 +3161,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
           const SizedBox(height: WzSpacing.md),
           _DeveloperModePanel(enabled: _developerMode, onChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer)),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Content server', subtitle: 'Catalog mode, API endpoint, and content safety status.', icon: Icons.cloud_queue),
+          _ContentServerDiagnosticsPanel(
+            apiBaseUrl: _apiBaseUrlController.text,
+            status: _contentStatus,
+            catalogStatus: _catalogStatus,
+            catalogTrackCount: _catalog.length,
+          ),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Playback Engine', subtitle: 'Current player state and operation summary.', icon: Icons.graphic_eq),
           _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
@@ -7531,6 +7564,43 @@ class _CatalogRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+
+class _ContentServerDiagnosticsPanel extends StatelessWidget {
+  const _ContentServerDiagnosticsPanel({required this.apiBaseUrl, required this.status, required this.catalogStatus, required this.catalogTrackCount});
+
+  final String apiBaseUrl;
+  final ContentStatus? status;
+  final String catalogStatus;
+  final int catalogTrackCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = this.status;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _MetricCard(label: 'Catalog', value: status?.friendlyLabel ?? catalogStatus, active: status?.ok ?? catalogTrackCount > 0),
+              _MetricCard(label: 'Mode', value: status?.contentMode ?? 'unknown', active: status?.contentMode == 'production' || status?.contentMode == 'demo'),
+              _MetricCard(label: 'Tracks', value: '${status?.trackCount ?? catalogTrackCount}', active: (status?.trackCount ?? catalogTrackCount) > 0),
+              _MetricCard(label: 'Assets', value: '${status?.assetCount ?? 0}', active: (status?.assetCount ?? 0) > 0),
+              _MetricCard(label: 'Production-safe', value: '${status?.productionSafeTrackCount ?? 0}', active: (status?.productionSafeTrackCount ?? 0) > 0),
+              _MetricCard(label: 'Local folder', value: status?.localFolderCatalogEnabled == true ? 'enabled' : 'disabled', active: status?.localFolderCatalogEnabled == true),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('API base URL: $apiBaseUrl', style: _WzTokens.caption),
+          Text(status?.developerSummary ?? catalogStatus, style: _WzTokens.caption),
+        ],
       ),
     );
   }
