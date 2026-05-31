@@ -231,13 +231,28 @@ String _friendlyLoadError(String error) {
 
 String _consumerCatalogStatus(String status) {
   final normalized = status.toLowerCase();
-  if (normalized.contains('unavailable') || normalized.contains('error') || normalized.contains('exception') || normalized.contains('failed')) {
+
+  if (normalized.contains('demo catalog')) return 'Demo catalog';
+  if (normalized.contains('catalog ready')) return 'Catalog ready';
+  if (normalized.contains('catalog unavailable') ||
+      normalized.contains('unavailable') ||
+      normalized.contains('error') ||
+      normalized.contains('exception') ||
+      normalized.contains('failed')) {
     return '${WaveZeroReleaseCopy.catalogUnavailable} ${WaveZeroReleaseCopy.catalogTryAgain} ${WaveZeroReleaseCopy.catalogLocalFallback}';
   }
   if (normalized.contains('permission')) return WaveZeroReleaseCopy.deviceMusicPermission;
   if (normalized.contains('loaded') || normalized.contains('imported')) return status;
   if (normalized.contains('offline')) return status;
   return 'Choose music from your library.';
+}
+
+String _catalogModeLabel(String? contentMode, int trackCount) {
+  final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
+  if (normalized == 'demo' || normalized == 'demo_catalog' || normalized == 'legal_demo') return 'Demo catalog';
+  if (normalized == 'production' || normalized == 'prod' || normalized == 'catalog_ready') return 'Catalog ready';
+  if (trackCount > 0) return 'Catalog ready';
+  return 'Catalog unavailable';
 }
 
 String? _consumerDeviceError(String? error) {
@@ -427,6 +442,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   String? _smartQueueCandidateTrackId;
   String _smartQueueReason = SmartQueueReason.queueEmpty;
   CatalogTrackManifest? _prefetchedManifest;
+  ContentStatus? _contentStatus;
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
   _SearchFilter _searchFilter = _SearchFilter.all;
@@ -1817,6 +1833,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
       try {
         setState(() => _catalogStatus = 'Loading catalog...');
+        ContentStatus? contentStatus;
+        try {
+          contentStatus = await client.fetchContentStatus();
+        } catch (_) {
+          contentStatus = null;
+        }
         final catalog = await client.fetchCatalog();
         final restored = await _restoreSession(catalog.tracks);
         final preferred = _findTrack(catalog.tracks, restored?.currentTrackId) ??
@@ -1831,7 +1853,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _selectedTrackId = preferred?.trackId;
           _queueCurrentTrackId = restored?.currentTrackId ?? preferred?.trackId;
           _autoAdvanceEnabled = restored?.autoAdvanceEnabled ?? _autoAdvanceEnabled;
-          _catalogStatus = catalog.tracks.isEmpty ? 'Catalog is empty.' : 'Loaded ${catalog.tracks.length} catalog tracks.';
+          _contentStatus = contentStatus;
+          _catalogStatus = catalog.tracks.isEmpty
+              ? 'Catalog is empty.'
+              : contentStatus?.friendlyLabel ?? _catalogModeLabel(catalog.contentMode, catalog.tracks.length);
           _queueStatus = restored == null ? 'Queue synced with catalog.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
           _offlineLibraryMode = false;
@@ -1873,6 +1898,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _offlineLibraryAvailable = true;
             _offlineLibraryMode = true;
             _lastOfflineLibraryStatus = 'Offline cached library loaded.';
+            _contentStatus = null;
           });
         } else {
           setState(() {
@@ -1882,6 +1908,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _offlineLibraryAvailable = false;
             _offlineLibraryMode = false;
             _lastOfflineLibraryStatus = 'Offline library empty.';
+            _contentStatus = null;
           });
           if (fallbackToDemo) {
             await widget.playbackBridge.loadTrack(title: waveZeroTestTrack.title, url: waveZeroTestTrack.url);
@@ -3143,6 +3170,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           const SizedBox(height: WzSpacing.md),
           _DeveloperModePanel(enabled: _developerMode, onChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer)),
           const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Content Server', subtitle: 'Developer-only catalog and content status.', icon: Icons.cloud_queue),
+          _ContentServerDiagnosticsPanel(
+            contentStatus: _contentStatus,
+            catalogStatus: _catalogStatus,
+            apiBaseUrl: _apiBaseUrlController.text,
+            configuredContentModeLabel: widget.appConfig.contentModeLabel,
+            catalogTrackCount: _catalog.length,
+            cachedTrackCount: _cachedLibrary.length,
+          ),
+          const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Playback Engine', subtitle: 'Current player state and operation summary.', icon: Icons.graphic_eq),
           _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
           const SizedBox(height: WzSpacing.md),
@@ -3293,7 +3330,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       onImportDeviceMusic: _importDeviceMusic,
       notificationActive: _metrics.isPlaying || (_metrics.trackTitle?.isNotEmpty ?? false),
       appConfig: widget.appConfig,
-      contentModeLabel: widget.appConfig.contentModeLabel,
+      contentModeLabel: _contentStatus?.friendlyLabel ?? widget.appConfig.contentModeLabel,
       catalogStatusLabel: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
       showDeveloperEntry: _showDeveloperControls,
       appMode: _appMode,
@@ -5145,6 +5182,52 @@ class _AudioQualityPanel extends StatelessWidget {
           Text('Cached quality: ${currentCachedQuality ?? 'not playing from cache'}', style: _WzTokens.caption),
         ]),
       );
+}
+
+
+class _ContentServerDiagnosticsPanel extends StatelessWidget {
+  const _ContentServerDiagnosticsPanel({
+    required this.contentStatus,
+    required this.catalogStatus,
+    required this.apiBaseUrl,
+    required this.configuredContentModeLabel,
+    required this.catalogTrackCount,
+    required this.cachedTrackCount,
+  });
+
+  final ContentStatus? contentStatus;
+  final String catalogStatus;
+  final String apiBaseUrl;
+  final String configuredContentModeLabel;
+  final int catalogTrackCount;
+  final int cachedTrackCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = contentStatus;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _MetricCard(label: 'Content', value: status?.friendlyLabel ?? 'Catalog unavailable', active: status?.available ?? false),
+              _MetricCard(label: 'Mode', value: status?.contentMode ?? configuredContentModeLabel, active: true),
+              _MetricCard(label: 'Tracks', value: '${status?.trackCount ?? catalogTrackCount}', active: (status?.trackCount ?? catalogTrackCount) > 0),
+              _MetricCard(label: 'Cached', value: '$cachedTrackCount', active: cachedTrackCount > 0),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text('Catalog status: $catalogStatus', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+          Text('API base URL: $apiBaseUrl', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+          if (status?.message != null) Text('Content message: ${status!.message}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+          const Text('Content Server diagnostics are developer-only. Consumer surfaces use friendly catalog labels and hide raw URLs.', style: _WzTokens.caption),
+        ],
+      ),
+    );
+  }
 }
 
 class _DeviceMusicDiagnosticsPanel extends StatelessWidget {

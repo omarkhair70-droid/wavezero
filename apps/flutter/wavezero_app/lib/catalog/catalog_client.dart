@@ -31,6 +31,11 @@ class CatalogClient {
     return CatalogTrackManifest.fromJson(json);
   }
 
+  Future<ContentStatus> fetchContentStatus() async {
+    final json = await _getJsonObject('$baseUrl/content/status');
+    return ContentStatus.fromJson(json);
+  }
+
   Future<Map<String, Object?>> _getJsonObject(String url) async {
     final uri = Uri.parse(url);
     final request = await _httpClient.getUrl(uri).timeout(const Duration(seconds: 5));

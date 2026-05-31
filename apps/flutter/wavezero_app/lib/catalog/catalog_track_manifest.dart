@@ -1,7 +1,8 @@
 class CatalogIndex {
-  const CatalogIndex({required this.tracks});
+  const CatalogIndex({required this.tracks, this.contentMode});
 
   final List<CatalogTrackSummary> tracks;
+  final String? contentMode;
 
   factory CatalogIndex.fromJson(Map<String, Object?> json) {
     final rawTracks = json['tracks'];
@@ -13,7 +14,43 @@ class CatalogIndex {
       tracks: rawTracks
           .map((track) => CatalogTrackSummary.fromJson(_readMap(track) ?? const <String, Object?>{}))
           .toList(growable: false),
+      contentMode: _readString(json['contentMode'] ?? json['content_mode']),
     );
+  }
+}
+
+
+class ContentStatus {
+  const ContentStatus({
+    required this.available,
+    this.contentMode,
+    this.trackCount,
+    this.message,
+  });
+
+  final bool available;
+  final String? contentMode;
+  final int? trackCount;
+  final String? message;
+
+  factory ContentStatus.fromJson(Map<String, Object?> json) {
+    final contentMode = _readString(json['contentMode'] ?? json['content_mode'] ?? json['mode']);
+    return ContentStatus(
+      available: _readBool(json['available'] ?? json['ready']) ?? true,
+      contentMode: contentMode,
+      trackCount: _readInt(json['trackCount'] ?? json['track_count'] ?? json['tracks']),
+      message: _readString(json['message'] ?? json['status']),
+    );
+  }
+
+  String get friendlyLabel {
+    if (!available) return 'Catalog unavailable';
+    final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
+    if (normalized == 'demo' || normalized == 'demo_catalog' || normalized == 'legal_demo') return 'Demo catalog';
+    if (normalized == 'production' || normalized == 'prod' || normalized == 'catalog_ready') return 'Catalog ready';
+    final count = trackCount;
+    if (count != null && count > 0) return 'Catalog ready';
+    return message?.trim().isNotEmpty == true ? message!.trim() : 'Catalog ready';
   }
 }
 

@@ -1841,3 +1841,15 @@ WaveZero #84 does not add auth, login, cloud sync, Supabase, a database, hosted 
 - Cloud sync.
 - Content moderation.
 - Artist upload beta.
+
+## WaveZero #83 — Production Content Server Foundation
+
+WaveZero #83 established the production content server foundation that #84 now builds on. Keep this behavior intact when resolving release-config conflicts:
+
+- The Flutter catalog client can fetch catalog indexes, track manifests, and content server status.
+- Catalog responses may include a content mode so the Flutter app can label demo, production-ready, or unavailable catalog states without exposing raw endpoint details to consumers.
+- Content status is surfaced as friendly consumer labels such as `Catalog ready`, `Demo catalog`, or `Catalog unavailable` while developer-only Engine diagnostics may show deeper content/server details.
+- Beta and production-style builds should use explicit `WAVEZERO_API_BASE_URL` and content mode labels rather than local laptop defaults.
+- Production content server behavior remains metadata-first: catalog tracks require rights metadata, dev-only tracks are not production-safe, and no upload/auth/payment/content-moderation system is implied by this foundation.
+
+#83 and #84 are intentionally complementary: #83 defines safe content server status and catalog metadata plumbing, while #84 defines app environment boundaries, consumer-safe copy, and beta release checklist behavior.
