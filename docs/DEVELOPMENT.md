@@ -443,3 +443,116 @@ WaveZero #69 adds the first Android device-local music import foundation so the 
 14. Confirm API Catalog still works.
 
 This is a focused foundation PR, not the final full Library v2 experience.
+
+## WaveZero #70 — Library v2 + Search Experience
+
+WaveZero #70 upgrades Library from a source-specific technical list into a unified music-library surface while preserving the existing playback, queue, cache, and Android MediaStore foundations.
+
+### Unified Library sources
+
+Library v2 exposes four real sources from existing app state:
+
+- **All** — a combined view of API Catalog tracks, Android Device Music tracks, and cached/downloaded remote tracks.
+- **API Catalog** — tracks returned by the existing catalog API and manifest flow.
+- **Device Music** — user-imported Android MediaStore audio tracks that remain separate from app cache storage.
+- **Downloads / Cached** — remote/API tracks already available from the existing Downloads Manager cache metadata.
+
+The existing Downloads tab remains in place. The Downloads / Cached Library source is only an additional Library filter over the same cached-library state.
+
+### Source filters, counts, and source cards
+
+The Library screen now shows compact source summary cards for All, API Catalog, Device Music, and Downloads. Counts and statuses come from live app state only:
+
+- API track count and current catalog status.
+- Device import count, permission status, and last scan status.
+- Cached/downloaded track count and cache storage size.
+- Combined Library count across all Library sources.
+- Filtered result count for the selected source/search state.
+
+### Search behavior
+
+Search v2 remains deliberately lightweight and in-memory. It does not add a database, indexer, fuzzy-search package, AI search, or cloud service.
+
+Search runs only across the currently selected Library source and matches available metadata including:
+
+- Title
+- Artist/subtitle
+- Album
+- Display name
+- Codec
+- Quality label
+- Source
+- Track id
+
+Search states are explicit:
+
+- Empty query shows all tracks in the selected source.
+- Active query shows the result count for the selected source.
+- Empty results show a useful empty state and keep the clear-search action available in the search field.
+
+### Sort behavior
+
+Library v2 adds a sort control with safe handling for missing metadata:
+
+- Recently added / imported
+- Title A-Z
+- Artist A-Z
+- Longest duration
+- Shortest duration
+- Quality
+
+Recently added/imported uses cached-at timestamps for downloaded tracks, the last import timestamp for Device Music, and stable existing order for API Catalog tracks.
+
+### Source-aware rows and actions
+
+Library rows now surface source-specific context:
+
+- Title, artist/album subtitle, and duration.
+- Source badges for API, Device, and cached/downloaded tracks.
+- Quality and codec labels when available.
+- Cache state for remote/API tracks.
+- Already-local/device indicators for Device Music.
+
+Actions remain source-aware:
+
+- API Catalog tracks can be selected/played, added to Queue Engine v2, and cached/downloaded when an asset URL is available.
+- Device Music tracks can be selected/played and added to Queue Engine v2, but do not show a cache button because they are already local `content://` media.
+- Cached/downloaded Library rows can be played, added to Queue when safe, and deleted from cache using the same cache-delete behavior as the Downloads tab.
+
+### Downloads/Cached view inside Library
+
+The Downloads / Cached source shows cached remote/API tracks from the existing cached-library state. It displays quality, codec, download source, and cached/local status when available. It intentionally does not add new storage-manager logic.
+
+Deleting a cached row from the Library Downloads view uses the existing cache deletion path so the Downloads tab reflects the same state after refresh.
+
+### Device Music remains separate from Downloads cache
+
+Device Music continues to play directly from Android MediaStore `content://` URIs. WaveZero does not copy device files into Downloads, and cached remote/API files remain separate from MediaStore imports.
+
+### Intentionally not included
+
+WaveZero #70 is not:
+
+- Playlists.
+- Cloud library sync.
+- Login, upload, DRM, payments, or database-backed library storage.
+- AI recommendations or AI search.
+- Theme customization.
+- A change to Android native playback, Media3/ExoPlayer, Rust API behavior, MediaStore permission behavior, Queue Engine v2 semantics, Smart Downloads behavior, CacheService behavior, Audio Quality selection, or Audio Effects bridge behavior.
+
+### Manual checklist
+
+1. Start app.
+2. Open Library.
+3. Confirm source cards/counts show real state.
+4. Search API Catalog.
+5. Import Device Music and search device songs.
+6. Switch between All / API / Device / Downloads.
+7. Sort by title and duration.
+8. Play API track.
+9. Play Device track.
+10. Add API and Device tracks to Queue.
+11. Cache API track and confirm it appears in Downloads/Cached library view.
+12. Delete cached track from Library Downloads view and confirm Downloads tab updates.
+13. Confirm Now Playing still works.
+14. Confirm Engine diagnostics still exist.
