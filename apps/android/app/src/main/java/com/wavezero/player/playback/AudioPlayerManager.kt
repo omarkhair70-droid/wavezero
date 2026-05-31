@@ -429,8 +429,8 @@ class AudioPlayerManager(
             "notificationMetadataTitle" to currentTrack.title,
             "notificationSource" to currentTrack.source,
             "notificationQueueSnapshotCount" to notificationQueueSnapshot.size,
-            "notificationPreviousAvailable" to queueOffsetTarget(-1) != null,
-            "notificationNextAvailable" to queueOffsetTarget(1) != null,
+            "notificationPreviousAvailable" to (queueOffsetTarget(-1) != null),
+            "notificationNextAvailable" to (queueOffsetTarget(1) != null),
             "lastNotificationAction" to lastNotificationAction,
             "lastNotificationActionResult" to lastNotificationActionResult,
             "lastNotificationActionTrackId" to lastNotificationActionTrackId,
@@ -675,3 +675,4 @@ class AudioPlayerManager(
         const val MEDIA_SESSION_ID = "wavezero-playback"
     }
 }
+
