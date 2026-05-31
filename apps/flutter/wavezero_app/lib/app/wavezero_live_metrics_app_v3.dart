@@ -97,7 +97,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int _deviceMusicLastScanCount = 0;
   String? _deviceMusicLastError;
   int? _deviceMusicImportedAtMs;
-  _LibrarySourceFilter _librarySourceFilter = _LibrarySourceFilter.api;
+  _LibrarySourceFilter _librarySourceFilter = _LibrarySourceFilter.all;
+  _LibrarySortMode _librarySortMode = _LibrarySortMode.recentlyAdded;
 
   PlayerOperation _operation = PlayerOperation.idle;
   bool _refreshingMetrics = false;
@@ -176,18 +177,24 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<CatalogTrackSummary> get _deviceCatalogTracks =>
       _deviceMusicTracks.map(_catalogSummaryFromDeviceTrack).toList(growable: false);
 
+  List<CatalogTrackSummary> get _cachedCatalogTracks =>
+      _cachedLibrary.map(_catalogSummaryFromCachedTrack).toList(growable: false);
+
   List<CatalogTrackSummary> get _libraryTracks {
     return switch (_librarySourceFilter) {
+      _LibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks, ..._cachedCatalogTracks],
       _LibrarySourceFilter.api => _catalog,
       _LibrarySourceFilter.device => _deviceCatalogTracks,
-      _LibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks],
+      _LibrarySourceFilter.downloads => _cachedCatalogTracks,
     };
   }
 
   int get _libraryTotalTrackCount => _libraryTracks.length;
 
+  int get _libraryCombinedTrackCount => _catalog.length + _deviceMusicTracks.length + _cachedLibrary.length;
+
   List<CatalogTrackSummary> get _filteredCatalog =>
-      _libraryTracks.where((track) => track.matchesQuery(_catalogQuery)).toList(growable: false);
+      _sortLibraryTracks(_libraryTracks.where((track) => track.matchesQuery(_catalogQuery)).toList(growable: false));
 
   int get _queueIndex {
     final id = _queueCurrentTrackId ?? _selectedTrackId;
@@ -796,6 +803,52 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<CatalogTrackSummary> _queueFromSnapshot(List<CatalogTrackSummary> catalogTracks, QueueSessionSnapshot snapshot) {
     final byId = {for (final track in catalogTracks) track.trackId: track};
     return snapshot.queueTrackIds.map((id) => byId[id]).whereType<CatalogTrackSummary>().toList(growable: false);
+  }
+
+  List<CatalogTrackSummary> _sortLibraryTracks(List<CatalogTrackSummary> tracks) {
+    final indexed = tracks.indexed.toList(growable: false);
+    int compareNullableString(String? a, String? b) {
+      final left = (a == null || a.trim().isEmpty) ? '~' : a.trim().toLowerCase();
+      final right = (b == null || b.trim().isEmpty) ? '~' : b.trim().toLowerCase();
+      return left.compareTo(right);
+    }
+
+    int compareNullableDuration(int? a, int? b, {required bool longestFirst}) {
+      final left = a ?? (longestFirst ? -1 : 1 << 30);
+      final right = b ?? (longestFirst ? -1 : 1 << 30);
+      return longestFirst ? right.compareTo(left) : left.compareTo(right);
+    }
+
+    int addedRank(CatalogTrackSummary track) {
+      final cached = _cachedMetadataForTrack(track);
+      if (cached != null) return cached.cachedAt;
+      if (_isDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
+      return 0;
+    }
+
+    int compare((int, CatalogTrackSummary) a, (int, CatalogTrackSummary) b) {
+      final left = a.$2;
+      final right = b.$2;
+      final result = switch (_librarySortMode) {
+        _LibrarySortMode.recentlyAdded => addedRank(right).compareTo(addedRank(left)),
+        _LibrarySortMode.titleAz => compareNullableString(left.title, right.title),
+        _LibrarySortMode.artistAz => compareNullableString(left.artistName ?? left.albumName, right.artistName ?? right.albumName),
+        _LibrarySortMode.longestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: true),
+        _LibrarySortMode.shortestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: false),
+        _LibrarySortMode.quality => compareNullableString(left.primaryAsset?.qualityLabel, right.primaryAsset?.qualityLabel),
+      };
+      return result == 0 ? a.$1.compareTo(b.$1) : result;
+    }
+
+    indexed.sort(compare);
+    return indexed.map((entry) => entry.$2).toList(growable: false);
+  }
+
+  CachedTrackMetadata? _cachedMetadataForTrack(CatalogTrackSummary track) {
+    for (final entry in _cachedLibrary) {
+      if (entry.trackId == track.trackId) return entry;
+    }
+    return null;
   }
 
   Future<void> _saveSession() {
@@ -1483,7 +1536,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final engineSummary = '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
         '${_prefetchEnabled ? 'Instant Next on' : 'Instant Next off'} • '
         '${_offlineLibraryAvailable ? 'Offline Ready' : 'Offline empty'} • '
-        'Device ${_deviceMusicTracks.length}';
+        'Library $_libraryCombinedTrackCount • Device ${_deviceMusicTracks.length} • Cached ${_cachedLibrary.length}';
 
     // Build per-tab pages using existing widgets — keep behavior unchanged.
     final pages = <Widget>[
@@ -1654,6 +1707,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _CatalogListCard(
             tracks: _filteredCatalog,
             totalTrackCount: _libraryTotalTrackCount,
+            apiTrackCount: _catalog.length,
+            deviceTrackCount: _deviceMusicTracks.length,
+            cachedTrackCount: _cachedLibrary.length,
+            combinedTrackCount: _libraryCombinedTrackCount,
+            cacheBytes: _cacheBytes,
             selectedTrackId: _selectedTrackId,
             status: _catalogStatus,
             loading: _operation == PlayerOperation.loadingCatalog,
@@ -1661,17 +1719,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             addToQueueDisabled: _operation.isTrackLoading || _operation.isQueueAdvancing,
             searchController: _searchController,
             librarySourceFilter: _librarySourceFilter,
+            librarySortMode: _librarySortMode,
             devicePermissionStatus: _deviceMusicPermissionStatus.status,
             deviceScanStatus: _deviceMusicScanStatus,
-            deviceTrackCount: _deviceMusicTracks.length,
             deviceLastError: _deviceMusicLastError,
             onSourceFilterChanged: (filter) => setState(() => _librarySourceFilter = filter),
+            onSortModeChanged: (mode) => setState(() => _librarySortMode = mode),
             onClearSearch: () => _searchController.clear(),
             onRefresh: () => _loadCatalog(),
             onImportDeviceMusic: _importDeviceMusic,
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
             onAddToQueue: _addToQueue,
             onCache: (track) => _toggleCache(track),
+            onDeleteCachedTrack: (track) {
+              final cached = _cachedMetadataForTrack(track);
+              if (cached != null) _deleteCachedTrack(cached);
+            },
             offlineMode: _catalogStatus.toLowerCase().contains('offline'),
           ),
           const SizedBox(height: WzSpacing.md),
@@ -1791,6 +1854,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             importedAtMs: _deviceMusicImportedAtMs,
           ),
           const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Library v2', subtitle: 'Unified library filter, search, and source diagnostics.', icon: Icons.library_music),
+          _LibraryDiagnosticsPanel(
+            selectedSource: _librarySourceFilter.label,
+            filteredResultCount: _filteredCatalog.length,
+            sortMode: _librarySortMode.label,
+            deviceImportCount: _deviceMusicTracks.length,
+            cachedLibraryCount: _cachedLibrary.length,
+          ),
+          const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Raw Metrics', subtitle: 'Complete developer telemetry keeps original metric names.', icon: Icons.data_object),
           _PerformanceBaselinePanel(
             metrics: _metrics,
@@ -1864,14 +1936,48 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
 enum QueueAdvanceSource { manual, next, previous, auto }
 
-enum _LibrarySourceFilter { api, device, all }
+enum _LibrarySourceFilter { all, api, device, downloads }
 
 extension _LibrarySourceFilterLabel on _LibrarySourceFilter {
   String get label => switch (this) {
+        _LibrarySourceFilter.all => 'All',
         _LibrarySourceFilter.api => 'API Catalog',
         _LibrarySourceFilter.device => 'Device Music',
-        _LibrarySourceFilter.all => 'All',
+        _LibrarySourceFilter.downloads => 'Downloads / Cached',
       };
+}
+
+enum _LibrarySortMode { recentlyAdded, titleAz, artistAz, longestDuration, shortestDuration, quality }
+
+extension _LibrarySortModeLabel on _LibrarySortMode {
+  String get label => switch (this) {
+        _LibrarySortMode.recentlyAdded => 'Recently added / imported',
+        _LibrarySortMode.titleAz => 'Title A-Z',
+        _LibrarySortMode.artistAz => 'Artist A-Z',
+        _LibrarySortMode.longestDuration => 'Longest duration',
+        _LibrarySortMode.shortestDuration => 'Shortest duration',
+        _LibrarySortMode.quality => 'Quality',
+      };
+}
+
+CatalogTrackSummary _catalogSummaryFromCachedTrack(CachedTrackMetadata track) {
+  return CatalogTrackSummary(
+    trackId: track.trackId,
+    title: track.title,
+    artistId: null,
+    artistName: track.artistName,
+    durationMs: track.durationMs,
+    artworkUrl: track.artworkUrl,
+    displayName: '${track.downloadSource} cached download ${track.qualityLabel} ${track.codec ?? ''}',
+    source: 'cached',
+    primaryAsset: CatalogTrackAssetSummary(
+      assetId: 'cached-${track.trackId}',
+      manifestUrl: track.originalRemoteUrl,
+      qualityLabel: track.qualityLabel,
+      codec: track.codec,
+      bitrateKbps: track.bitrateKbps,
+    ),
+  );
 }
 
 CatalogTrackSummary _catalogSummaryFromDeviceTrack(DeviceMusicTrack track) {
@@ -1901,6 +2007,8 @@ bool _isDeviceTrackId(String? trackId) => trackId != null && trackId.startsWith(
 bool _isDeviceUrl(String? url) => url != null && url.startsWith('content://');
 
 bool _isDeviceCatalogTrack(CatalogTrackSummary track) => track.source == 'device' || _isDeviceTrackId(track.trackId) || _isDeviceUrl(track.primaryAsset?.manifestUrl);
+
+bool _isCachedCatalogTrack(CatalogTrackSummary track) => track.source == 'cached' || track.primaryAsset?.assetId.startsWith('cached-') == true;
 
 class _WzTokens {
   const _WzTokens._();
@@ -2322,6 +2430,37 @@ class _DeviceMusicDiagnosticsPanel extends StatelessWidget {
           Text('Last import: ${importedAtMs == null ? 'never' : DateTime.fromMillisecondsSinceEpoch(importedAtMs!).toLocal()}', style: _WzTokens.caption),
           Text('Last error: ${lastError ?? 'none'}', style: _WzTokens.caption),
           const Text('MediaStore scan is audio-only, capped at 500 tracks, and ignores clips under 30 seconds.', style: _WzTokens.caption),
+        ]),
+      );
+}
+
+class _LibraryDiagnosticsPanel extends StatelessWidget {
+  const _LibraryDiagnosticsPanel({
+    required this.selectedSource,
+    required this.filteredResultCount,
+    required this.sortMode,
+    required this.deviceImportCount,
+    required this.cachedLibraryCount,
+  });
+
+  final String selectedSource;
+  final int filteredResultCount;
+  final String sortMode;
+  final int deviceImportCount;
+  final int cachedLibraryCount;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _MetricCard(label: 'Source', value: selectedSource, active: true),
+            _MetricCard(label: 'Results', value: '$filteredResultCount', active: filteredResultCount > 0),
+            _MetricCard(label: 'Sort', value: sortMode, active: true),
+            _MetricCard(label: 'Device', value: '$deviceImportCount', active: deviceImportCount > 0),
+            _MetricCard(label: 'Cached', value: '$cachedLibraryCount', active: cachedLibraryCount > 0),
+          ]),
+          const SizedBox(height: 10),
+          const Text('Library v2 diagnostics are UI-only and do not alter playback, queue, cache, MediaStore scan, or quality selection semantics.', style: _WzTokens.caption),
         ]),
       );
 }
@@ -3435,6 +3574,11 @@ class _DownloadRow extends StatelessWidget {
       );
 }
 
+String _cachedSourceBadgeLabel(String? displayName) {
+  final source = displayName?.split(' ').first ?? 'unknown';
+  return _downloadSourceLabel(source);
+}
+
 String _downloadSourceLabel(String source) {
   switch (source) {
     case 'manual':
@@ -3448,10 +3592,54 @@ String _downloadSourceLabel(String source) {
   }
 }
 
+class _LibrarySourceSummaryCard extends StatelessWidget {
+  const _LibrarySourceSummaryCard({
+    required this.title,
+    required this.detail,
+    required this.status,
+    required this.icon,
+    required this.active,
+  });
+
+  final String title;
+  final String detail;
+  final String status;
+  final IconData icon;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 168,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: active ? const Color(0x227C5CFF) : const Color(0xFF0B0E18),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: active ? const Color(0xFF8D7CFF) : const Color(0xFF20273A)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: active ? const Color(0xFF8D7CFF) : const Color(0xFF98A1B8)),
+            const SizedBox(height: 8),
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(detail, style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 12, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+          ],
+        ),
+      );
+}
+
 class _CatalogListCard extends StatelessWidget {
   const _CatalogListCard({
     required this.tracks,
     required this.totalTrackCount,
+    required this.apiTrackCount,
+    required this.deviceTrackCount,
+    required this.cachedTrackCount,
+    required this.combinedTrackCount,
+    required this.cacheBytes,
     required this.selectedTrackId,
     required this.status,
     required this.loading,
@@ -3459,22 +3647,29 @@ class _CatalogListCard extends StatelessWidget {
     required this.addToQueueDisabled,
     required this.searchController,
     required this.librarySourceFilter,
+    required this.librarySortMode,
     required this.devicePermissionStatus,
     required this.deviceScanStatus,
-    required this.deviceTrackCount,
     required this.deviceLastError,
     required this.onSourceFilterChanged,
+    required this.onSortModeChanged,
     required this.onClearSearch,
     required this.onRefresh,
     required this.onImportDeviceMusic,
     required this.onSelectTrack,
     required this.onAddToQueue,
     required this.onCache,
+    required this.onDeleteCachedTrack,
     this.offlineMode = false,
   });
 
   final List<CatalogTrackSummary> tracks;
   final int totalTrackCount;
+  final int apiTrackCount;
+  final int deviceTrackCount;
+  final int cachedTrackCount;
+  final int combinedTrackCount;
+  final int cacheBytes;
   final String? selectedTrackId;
   final String status;
   final bool loading;
@@ -3482,17 +3677,19 @@ class _CatalogListCard extends StatelessWidget {
   final bool addToQueueDisabled;
   final TextEditingController searchController;
   final _LibrarySourceFilter librarySourceFilter;
+  final _LibrarySortMode librarySortMode;
   final String devicePermissionStatus;
   final String deviceScanStatus;
-  final int deviceTrackCount;
   final String? deviceLastError;
   final ValueChanged<_LibrarySourceFilter> onSourceFilterChanged;
+  final ValueChanged<_LibrarySortMode> onSortModeChanged;
   final VoidCallback onClearSearch;
   final VoidCallback onRefresh;
   final VoidCallback onImportDeviceMusic;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
   final ValueChanged<CatalogTrackSummary> onAddToQueue;
   final ValueChanged<CatalogTrackSummary> onCache;
+  final ValueChanged<CatalogTrackSummary> onDeleteCachedTrack;
   final bool offlineMode;
 
   @override
@@ -3510,7 +3707,7 @@ class _CatalogListCard extends StatelessWidget {
                   children: [
                     Text('Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                     SizedBox(height: 4),
-                    Text('Browse API Catalog, Device Music, or both.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                    Text('Browse API Catalog, Device Music, Downloads, or everything together.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
                   ],
                 ),
               ),
@@ -3521,11 +3718,23 @@ class _CatalogListCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _LibrarySourceSummaryCard(title: 'All', detail: '$combinedTrackCount tracks', status: 'Unified library', icon: Icons.library_music, active: librarySourceFilter == _LibrarySourceFilter.all),
+              _LibrarySourceSummaryCard(title: 'API Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue, active: librarySourceFilter == _LibrarySourceFilter.api),
+              _LibrarySourceSummaryCard(title: 'Device Music', detail: '$deviceTrackCount imported', status: 'Permission $devicePermissionStatus • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == _LibrarySourceFilter.device),
+              _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done, active: librarySourceFilter == _LibrarySourceFilter.downloads),
+            ],
+          ),
+          const SizedBox(height: 12),
           SegmentedButton<_LibrarySourceFilter>(
             segments: const [
+              ButtonSegment(value: _LibrarySourceFilter.all, label: Text('All'), icon: Icon(Icons.library_music)),
               ButtonSegment(value: _LibrarySourceFilter.api, label: Text('API Catalog'), icon: Icon(Icons.cloud_queue)),
               ButtonSegment(value: _LibrarySourceFilter.device, label: Text('Device Music'), icon: Icon(Icons.phone_android)),
-              ButtonSegment(value: _LibrarySourceFilter.all, label: Text('All'), icon: Icon(Icons.library_music)),
+              ButtonSegment(value: _LibrarySourceFilter.downloads, label: Text('Downloads'), icon: Icon(Icons.download_done)),
             ],
             selected: {librarySourceFilter},
             onSelectionChanged: (selection) => onSourceFilterChanged(selection.first),
@@ -3550,6 +3759,17 @@ class _CatalogListCard extends StatelessWidget {
             Text(deviceLastError!, style: const TextStyle(color: Color(0xFFFFC46B), fontSize: 12)),
           ],
           const SizedBox(height: 12),
+          DropdownButtonFormField<_LibrarySortMode>(
+            value: librarySortMode,
+            decoration: const InputDecoration(labelText: 'Sort library'),
+            items: _LibrarySortMode.values
+                .map((mode) => DropdownMenuItem(value: mode, child: Text(mode.label)))
+                .toList(growable: false),
+            onChanged: (mode) {
+              if (mode != null) onSortModeChanged(mode);
+            },
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: searchController,
             decoration: InputDecoration(
@@ -3560,7 +3780,9 @@ class _CatalogListCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status,
+            hasQuery
+                ? 'Search active: ${tracks.length} result${tracks.length == 1 ? '' : 's'} in ${librarySourceFilter.label} (from $totalTrackCount available).'
+                : 'Showing $totalTrackCount tracks in ${librarySourceFilter.label}. Total available: $combinedTrackCount. $status',
             style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -3569,20 +3791,39 @@ class _CatalogListCard extends StatelessWidget {
               message: offlineMode ? 'No cached tracks available offline.' : 'No catalog tracks loaded yet.',
             )
           else if (tracks.isEmpty)
-            const _EmptyCatalogMessage(message: 'No tracks match this search.')
+            _EmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear search to show ${librarySourceFilter.label}.' : 'No tracks available for ${librarySourceFilter.label}.')
           else ...tracks.map((track) => _CatalogRow(
                 track: track,
                 selected: track.trackId == selectedTrackId,
                 addDisabled: addToQueueDisabled,
                 onTap: () => onSelectTrack(track),
                 onAdd: () => onAddToQueue(track),
-                onCache: _isDeviceCatalogTrack(track) ? null : () => onCache(track),
+                onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) ? null : () => onCache(track),
+                onDeleteCached: _isCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
               )),
         ],
       ),
     );
   }
 }
+class _SourceBadge extends StatelessWidget {
+  const _SourceBadge({required this.label, required this.active});
+
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(left: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF172A36) : const Color(0xFF171B28),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(label, style: const TextStyle(color: Color(0xFF9EDBFF), fontSize: 10, fontWeight: FontWeight.w800)),
+      );
+}
+
 class _CatalogRow extends StatelessWidget {
   const _CatalogRow({
     required this.track,
@@ -3591,6 +3832,7 @@ class _CatalogRow extends StatelessWidget {
     required this.onTap,
     required this.onAdd,
     required this.onCache,
+    required this.onDeleteCached,
   });
 
   final CatalogTrackSummary track;
@@ -3599,10 +3841,15 @@ class _CatalogRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onAdd;
   final VoidCallback? onCache;
+  final VoidCallback? onDeleteCached;
 
   @override
   Widget build(BuildContext context) {
     final status = CacheService().statusForTrack(track.trackId);
+    final isDevice = _isDeviceCatalogTrack(track);
+    final isCached = _isCachedCatalogTrack(track);
+    final sourceLabel = isDevice ? 'Device' : isCached ? _cachedSourceBadgeLabel(track.displayName) : 'API';
+    final asset = track.primaryAsset;
     Icon cacheIcon;
     switch (status) {
       case TrackCacheStatus.caching:
@@ -3634,7 +3881,8 @@ class _CatalogRow extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(child: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
-                if (status == TrackCacheStatus.cached)
+                _SourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
+                if (status == TrackCacheStatus.cached && !isCached)
                   Container(
                     margin: const EdgeInsets.only(left: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -3644,12 +3892,15 @@ class _CatalogRow extends StatelessWidget {
               ]),
               const SizedBox(height: 4),
               Text(_trackSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+              const SizedBox(height: 3),
+              Text('${asset?.qualityLabel ?? 'quality unknown'}${asset?.codec == null ? '' : ' • ${asset!.codec}'}${isDevice ? ' • Already local' : isCached ? ' • Cached locally' : ' • ${status.name}'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
             ]),
           ),
           Text(_formatTime(track.durationMs), style: _timeStyle),
           IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
-          if (onCache != null) IconButton(onPressed: onCache, icon: cacheIcon),
-          if (onCache == null) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.phone_android, color: Color(0xFF38D996))),
+          if (onCache != null) IconButton(tooltip: 'Cache/download', onPressed: onCache, icon: cacheIcon),
+          if (onDeleteCached != null) IconButton(tooltip: 'Delete cached file', onPressed: onDeleteCached, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
+          if (onCache == null && onDeleteCached == null) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.phone_android, color: Color(0xFF38D996))),
           Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
         ]),
       ),
