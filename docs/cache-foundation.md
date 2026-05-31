@@ -75,3 +75,33 @@ Manual test checklist
 9. Stop audio server.
 10. Confirm auto-cached current/next tracks can still play from cache.
 11. Toggle Smart Downloads off and confirm no new auto-cache starts.
+
+Queue Engine v2 + Downloads Manager Foundation (WaveZero #64)
+
+Queue Engine v2 behavior
+- Queue rows now expose per-track controls for play/select, move up, move down, remove, and Play Next while keeping the existing add-to-queue behavior.
+- The current track and up-next track are called out directly in the Queue card summary and row labels.
+- Reorders, Play Next, removals, and additions save the existing queue session snapshot so the persisted queue order can survive app restart using the current session store.
+- Queue order changes also refresh the existing Smart Preload candidate and schedule Smart Downloads for the new up-next track. Smart Queue Policy internals and native prebuffer behavior are unchanged.
+
+Downloads Manager foundation
+- `CacheService` now supports per-track delete, cached count, cache bytes, cached library, and cached-track lookup actions while preserving clear-all cache behavior.
+- Cached metadata includes a lightweight `downloadSource` value: `manual`, `smart_current`, `smart_up_next`, or `unknown` for older records.
+- Manual downloads are tagged `manual`; Smart Downloads for the current track are tagged `smart_current`; Smart Downloads for the up-next track are tagged `smart_up_next`.
+- The product shell includes a Downloads section showing cached track title, artist/subtitle, source, play, delete, and clear-all cache actions.
+- Engine diagnostics include downloaded track count, total cache bytes, manual download count, smart download count, and the last cache delete result.
+
+WaveZero #64 manual checklist
+1. Start audio/API/app.
+2. Clear cache.
+3. Play track and confirm Smart Downloads caches it.
+4. Add multiple tracks to queue.
+5. Reorder queue.
+6. Use Play Next.
+7. Confirm up-next smart download follows new queue order.
+8. Open Downloads section.
+9. Confirm cached tracks appear.
+10. Delete one cached track.
+11. Confirm it is removed from Downloads and Library cached badge updates.
+12. Stop audio/API and confirm remaining cached tracks still play.
+13. Clear all cache and confirm Downloads becomes empty.
