@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::{collections::{HashMap, HashSet}, env, fs, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::net::TcpListener;
-use wavezero_core::{AudioCodec, NetworkType, PlaybackMetric, Track, TrackAsset};
+use wavezero_core::{AudioCodec, LicenseMetadata as CoreLicenseMetadata, LicenseStatus as CoreLicenseStatus, NetworkType, PlaybackMetric, Track, TrackAsset};
 
 const DEV_CATALOG_JSON: &str = include_str!("../fixtures/dev_catalog.json");
 
@@ -44,6 +44,82 @@ struct CatalogTrack {
     duration_ms: u32,
     artwork_url: Option<String>,
     assets: Vec<CatalogTrackAsset>,
+    #[serde(flatten)]
+    license: LicenseMetadata,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct LicenseMetadata {
+    #[serde(rename = "licenseStatus", alias = "license_status", default = "default_license_status")]
+    license_status: LicenseStatus,
+    #[serde(rename = "licenseName", alias = "license_name", default)]
+    license_name: Option<String>,
+    #[serde(rename = "licenseUrl", alias = "license_url", default)]
+    license_url: Option<String>,
+    #[serde(rename = "sourceName", alias = "source_name", default)]
+    source_name: Option<String>,
+    #[serde(rename = "sourceUrl", alias = "source_url", default)]
+    source_url: Option<String>,
+    #[serde(rename = "artistUrl", alias = "artist_url", default)]
+    artist_url: Option<String>,
+    #[serde(rename = "attributionText", alias = "attribution_text", default)]
+    attribution_text: Option<String>,
+    #[serde(rename = "attributionRequired", alias = "attribution_required", default)]
+    attribution_required: bool,
+    #[serde(rename = "commercialUseAllowed", alias = "commercial_use_allowed", default)]
+    commercial_use_allowed: bool,
+    #[serde(rename = "redistributionAllowed", alias = "redistribution_allowed", default)]
+    redistribution_allowed: bool,
+    #[serde(rename = "derivativesAllowed", alias = "derivatives_allowed", default)]
+    derivatives_allowed: bool,
+    #[serde(rename = "usageNotes", alias = "usage_notes", default)]
+    usage_notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum LicenseStatus {
+    Verified,
+    AttributionRequired,
+    PublicDomain,
+    DevOnly,
+    UserDevice,
+    LicensePending,
+    Unknown,
+}
+
+fn default_license_status() -> LicenseStatus {
+    LicenseStatus::Unknown
+}
+
+impl Default for LicenseMetadata {
+    fn default() -> Self {
+        Self {
+            license_status: LicenseStatus::Unknown,
+            license_name: None,
+            license_url: None,
+            source_name: None,
+            source_url: None,
+            artist_url: None,
+            attribution_text: None,
+            attribution_required: false,
+            commercial_use_allowed: false,
+            redistribution_allowed: false,
+            derivatives_allowed: false,
+            usage_notes: None,
+        }
+    }
+}
+
+impl LicenseMetadata {
+    fn local_folder() -> Self {
+        Self {
+            license_status: LicenseStatus::DevOnly,
+            source_name: Some("Local Folder".to_string()),
+            usage_notes: Some("Imported from local dev folder. Rights are not verified.".to_string()),
+            ..Self::default()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -112,6 +188,8 @@ struct TrackResponse {
     artwork_url: Option<String>,
     primary_asset: Option<TrackAssetResponse>,
     assets: Vec<TrackAssetResponse>,
+    #[serde(flatten)]
+    license: LicenseMetadata,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -325,6 +403,7 @@ impl CatalogStore {
             artwork_url: track.artwork_url.clone(),
             primary_asset: track.primary_asset().map(TrackAssetResponse::from),
             assets: track.assets.iter().map(TrackAssetResponse::from).collect(),
+            license: track.license.clone(),
         }
     }
 }
@@ -469,6 +548,7 @@ fn scan_local_audio_tracks(
                 segment_count: 1,
                 is_primary: true,
             }],
+            license: LicenseMetadata::local_folder(),
         });
     }
 
@@ -593,6 +673,7 @@ impl CatalogTrack {
                 .map(CatalogTrackAsset::to_core_asset)
                 .collect(),
         )
+        .with_license_metadata(self.license.clone().into())
     }
 }
 
@@ -664,6 +745,40 @@ impl From<NetworkTypeRequest> for NetworkType {
             NetworkTypeRequest::Ethernet => NetworkType::Ethernet,
             NetworkTypeRequest::Cellular4g => NetworkType::Cellular4g,
             NetworkTypeRequest::Cellular5g => NetworkType::Cellular5g,
+        }
+    }
+}
+
+
+impl From<LicenseMetadata> for CoreLicenseMetadata {
+    fn from(license: LicenseMetadata) -> Self {
+        Self {
+            license_status: license.license_status.into(),
+            license_name: license.license_name,
+            license_url: license.license_url,
+            source_name: license.source_name,
+            source_url: license.source_url,
+            artist_url: license.artist_url,
+            attribution_text: license.attribution_text,
+            attribution_required: license.attribution_required,
+            commercial_use_allowed: license.commercial_use_allowed,
+            redistribution_allowed: license.redistribution_allowed,
+            derivatives_allowed: license.derivatives_allowed,
+            usage_notes: license.usage_notes,
+        }
+    }
+}
+
+impl From<LicenseStatus> for CoreLicenseStatus {
+    fn from(status: LicenseStatus) -> Self {
+        match status {
+            LicenseStatus::Verified => CoreLicenseStatus::Verified,
+            LicenseStatus::AttributionRequired => CoreLicenseStatus::AttributionRequired,
+            LicenseStatus::PublicDomain => CoreLicenseStatus::PublicDomain,
+            LicenseStatus::DevOnly => CoreLicenseStatus::DevOnly,
+            LicenseStatus::UserDevice => CoreLicenseStatus::UserDevice,
+            LicenseStatus::LicensePending => CoreLicenseStatus::LicensePending,
+            LicenseStatus::Unknown => CoreLicenseStatus::Unknown,
         }
     }
 }

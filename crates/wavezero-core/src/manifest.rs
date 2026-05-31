@@ -6,6 +6,7 @@ pub struct Track {
     pub title: String,
     pub duration_ms: u32,
     pub assets: Vec<TrackAsset>,
+    pub license_metadata: LicenseMetadata,
 }
 
 impl Track {
@@ -22,7 +23,13 @@ impl Track {
             title: title.into(),
             duration_ms,
             assets,
+            license_metadata: LicenseMetadata::default(),
         }
+    }
+
+    pub fn with_license_metadata(mut self, license_metadata: LicenseMetadata) -> Self {
+        self.license_metadata = license_metadata;
+        self
     }
 
     pub fn primary_asset(&self) -> Option<&TrackAsset> {
@@ -65,6 +72,52 @@ impl TrackAsset {
             is_primary,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LicenseMetadata {
+    pub license_status: LicenseStatus,
+    pub license_name: Option<String>,
+    pub license_url: Option<String>,
+    pub source_name: Option<String>,
+    pub source_url: Option<String>,
+    pub artist_url: Option<String>,
+    pub attribution_text: Option<String>,
+    pub attribution_required: bool,
+    pub commercial_use_allowed: bool,
+    pub redistribution_allowed: bool,
+    pub derivatives_allowed: bool,
+    pub usage_notes: Option<String>,
+}
+
+impl Default for LicenseMetadata {
+    fn default() -> Self {
+        Self {
+            license_status: LicenseStatus::Unknown,
+            license_name: None,
+            license_url: None,
+            source_name: None,
+            source_url: None,
+            artist_url: None,
+            attribution_text: None,
+            attribution_required: false,
+            commercial_use_allowed: false,
+            redistribution_allowed: false,
+            derivatives_allowed: false,
+            usage_notes: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LicenseStatus {
+    Verified,
+    AttributionRequired,
+    PublicDomain,
+    DevOnly,
+    UserDevice,
+    LicensePending,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -911,3 +911,97 @@ Device Music tracks remain separate from downloaded/cached remote/API tracks and
 14. Confirm no raw debug text appears in consumer mode.
 15. Confirm Device Music tracks are not treated as cached downloads.
 16. Confirm Library, Downloads, Queue, Now, Settings, and notification controls still work.
+
+## WaveZero #76 — Legal Demo Catalog + License Ledger
+
+WaveZero now includes a legal-safe demo catalog foundation. The goal is to expose rights metadata without adding copyrighted/commercial songs and without implying a track is licensed unless explicit metadata says so.
+
+### License statuses
+
+- `verified`
+- `attribution_required`
+- `public_domain`
+- `dev_only`
+- `user_device`
+- `license_pending`
+- `unknown`
+
+Missing metadata remains safe by default: API/local entries are not treated as legally verified, and unknown entries are not production-safe.
+
+### API and model fields
+
+Catalog track responses and Flutter catalog models can carry:
+
+- `licenseStatus`
+- `licenseName`
+- `licenseUrl`
+- `sourceName`
+- `sourceUrl`
+- `artistUrl`
+- `attributionText`
+- `attributionRequired`
+- `commercialUseAllowed`
+- `redistributionAllowed`
+- `derivativesAllowed`
+- `usageNotes`
+
+The Rust API keeps old clients compatible because missing fields deserialize with safe defaults. Flutter parsing is nullable-safe and cached metadata preserves license fields when available.
+
+### Local dev tracks
+
+Fixture tracks such as `song.mp3`, `song3.mp3`, `song4.mp3`, and `song5.mp3` are classified as `dev_only` with source `Local Dev Audio`. Auto-discovered local folder files default to `dev_only`, source `Local Folder`, no attribution requirement, no commercial use, no redistribution, and usage notes stating that rights are not verified.
+
+### Device Music
+
+Device Music imported from Android MediaStore is classified as `user_device`. WaveZero labels it as device/user music and does not claim catalog, redistribution, commercial, or production rights for those files.
+
+### App UI entry points
+
+- Settings → About → **Open Legal / Licenses** opens the Credits / Licenses page.
+- Library rows show lightweight source/license badges such as Device music, Dev only, License pending, or Unknown.
+- No bottom-navigation item was added for legal pages.
+
+### Credits / Licenses page behavior
+
+The page explains that WaveZero separates user device music, local dev audio, demo catalog tracks, and future licensed/artist uploads. It lists loaded catalog/library tracks with license badges, attribution text when present, source/license labels when available, and a warning for dev-only, pending, or unknown entries: not for production distribution until rights are verified.
+
+### Legal-safe rules
+
+- Do not add real third-party music files.
+- Do not add copyrighted/commercial songs.
+- Do not claim royalty-free, public-domain, Creative Commons, commercial-use, redistribution, derivative, or verified status without explicit committed metadata.
+- Do not scrape, fetch, or verify licenses online in app/API code.
+
+### Intentionally not done
+
+- No copyrighted/commercial track was added.
+- No online license fetching, scraping, DRM, login, uploads, payments, playlists, or cloud/database catalog was added.
+- Android native playback, MediaStore behavior, Queue Engine v2 semantics, Smart Downloads, Audio Quality, Audio Effects, and notification behavior were not changed.
+
+### Future work
+
+- Real public-domain/Creative-Commons import after manual verification.
+- Artist upload rights declaration.
+- Signed rights records.
+- Production content pipeline.
+- Moderation/review workflow.
+- Distributor/licensing integrations.
+
+### Manual checklist
+
+1. Start API/app.
+2. Confirm API catalog still loads.
+3. Confirm old tracks without license metadata do not crash.
+4. Confirm local folder tracks appear as dev-only/license-pending.
+5. Confirm Device Music is labeled as user/device music.
+6. Open Settings → About → Legal / Licenses.
+7. Confirm Credits / Licenses page opens.
+8. Confirm license badges appear.
+9. Confirm dev-only/local tracks are not shown as production-safe.
+10. Confirm attribution text appears when present.
+11. Confirm Library rows show lightweight source/license badges without overflow.
+12. Cache a track and confirm cached playback still works.
+13. Confirm Downloads/Storage Manager still work.
+14. Confirm notification/Now/Queue still work.
+15. Confirm no copyrighted/commercial track was added.
+16. Confirm no raw debug/legal internals appear in consumer mode.

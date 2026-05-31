@@ -17,6 +17,99 @@ class CatalogIndex {
   }
 }
 
+enum LicenseStatus { verified, attributionRequired, publicDomain, devOnly, userDevice, licensePending, unknown }
+
+class LicenseMetadata {
+  const LicenseMetadata({
+    this.status = LicenseStatus.unknown,
+    this.licenseName,
+    this.licenseUrl,
+    this.sourceName,
+    this.sourceUrl,
+    this.artistUrl,
+    this.attributionText,
+    this.attributionRequired = false,
+    this.commercialUseAllowed = false,
+    this.redistributionAllowed = false,
+    this.derivativesAllowed = false,
+    this.usageNotes,
+  });
+
+  final LicenseStatus status;
+  final String? licenseName;
+  final String? licenseUrl;
+  final String? sourceName;
+  final String? sourceUrl;
+  final String? artistUrl;
+  final String? attributionText;
+  final bool attributionRequired;
+  final bool commercialUseAllowed;
+  final bool redistributionAllowed;
+  final bool derivativesAllowed;
+  final String? usageNotes;
+
+  static const unknown = LicenseMetadata();
+  static const userDevice = LicenseMetadata(status: LicenseStatus.userDevice, sourceName: 'Device Music', usageNotes: 'User device music. WaveZero does not claim catalog rights for this file.');
+  static const devOnly = LicenseMetadata(status: LicenseStatus.devOnly, sourceName: 'Local Dev Audio', usageNotes: 'Local development audio only. Do not ship as production catalog unless rights are verified.');
+
+  factory LicenseMetadata.fromJson(Map<String, Object?> json, {LicenseStatus fallbackStatus = LicenseStatus.unknown}) {
+    return LicenseMetadata(
+      status: _readLicenseStatus(json['licenseStatus'] ?? json['license_status']) ?? fallbackStatus,
+      licenseName: _readString(json['licenseName'] ?? json['license_name']),
+      licenseUrl: _readString(json['licenseUrl'] ?? json['license_url']),
+      sourceName: _readString(json['sourceName'] ?? json['source_name']),
+      sourceUrl: _readString(json['sourceUrl'] ?? json['source_url']),
+      artistUrl: _readString(json['artistUrl'] ?? json['artist_url']),
+      attributionText: _readString(json['attributionText'] ?? json['attribution_text']),
+      attributionRequired: _readBool(json['attributionRequired'] ?? json['attribution_required']) ?? false,
+      commercialUseAllowed: _readBool(json['commercialUseAllowed'] ?? json['commercial_use_allowed']) ?? false,
+      redistributionAllowed: _readBool(json['redistributionAllowed'] ?? json['redistribution_allowed']) ?? false,
+      derivativesAllowed: _readBool(json['derivativesAllowed'] ?? json['derivatives_allowed']) ?? false,
+      usageNotes: _readString(json['usageNotes'] ?? json['usage_notes']),
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+        'licenseStatus': status.wireName,
+        'licenseName': licenseName,
+        'licenseUrl': licenseUrl,
+        'sourceName': sourceName,
+        'sourceUrl': sourceUrl,
+        'artistUrl': artistUrl,
+        'attributionText': attributionText,
+        'attributionRequired': attributionRequired,
+        'commercialUseAllowed': commercialUseAllowed,
+        'redistributionAllowed': redistributionAllowed,
+        'derivativesAllowed': derivativesAllowed,
+        'usageNotes': usageNotes,
+      };
+
+  String get badgeLabel => status.label;
+  bool get needsRightsWarning => status == LicenseStatus.devOnly || status == LicenseStatus.licensePending || status == LicenseStatus.unknown;
+}
+
+extension LicenseStatusLabels on LicenseStatus {
+  String get wireName => switch (this) {
+        LicenseStatus.verified => 'verified',
+        LicenseStatus.attributionRequired => 'attribution_required',
+        LicenseStatus.publicDomain => 'public_domain',
+        LicenseStatus.devOnly => 'dev_only',
+        LicenseStatus.userDevice => 'user_device',
+        LicenseStatus.licensePending => 'license_pending',
+        LicenseStatus.unknown => 'unknown',
+      };
+
+  String get label => switch (this) {
+        LicenseStatus.verified => 'Verified',
+        LicenseStatus.attributionRequired => 'Attribution required',
+        LicenseStatus.publicDomain => 'Public domain',
+        LicenseStatus.devOnly => 'Dev only',
+        LicenseStatus.userDevice => 'Device music',
+        LicenseStatus.licensePending => 'License pending',
+        LicenseStatus.unknown => 'Unknown',
+      };
+}
+
 class CatalogTrackSummary {
   const CatalogTrackSummary({
     required this.trackId,
@@ -28,6 +121,7 @@ class CatalogTrackSummary {
     this.albumName,
     this.displayName,
     this.source = 'api',
+    this.license = LicenseMetadata.unknown,
     this.primaryAsset,
     this.assets = const [],
   });
@@ -41,6 +135,7 @@ class CatalogTrackSummary {
   final String? albumName;
   final String? displayName;
   final String source;
+  final LicenseMetadata license;
   final CatalogTrackAssetSummary? primaryAsset;
   final List<CatalogTrackAssetSummary> assets;
 
@@ -75,6 +170,7 @@ class CatalogTrackSummary {
       albumName: _readString(json['album_name']),
       displayName: _readString(json['display_name']),
       source: _readString(json['source']) ?? 'api',
+      license: LicenseMetadata.fromJson(json, fallbackStatus: _readString(json['source']) == 'device' ? LicenseStatus.userDevice : LicenseStatus.unknown),
       primaryAsset: primaryAsset,
       assets: assets.isEmpty && primaryAsset != null ? [primaryAsset] : assets,
     );
@@ -102,6 +198,8 @@ class CatalogTrackSummary {
       source,
       primaryAsset?.codec ?? '',
       primaryAsset?.qualityLabel ?? '',
+      license.badgeLabel,
+      license.sourceName ?? '',
     ].join(' '));
 
     return searchableText.contains(normalizedQuery);
@@ -118,6 +216,7 @@ class CatalogTrackAssetSummary {
     this.sampleRateHz,
     this.bitDepth,
     this.fileSizeBytes,
+    this.license = LicenseMetadata.unknown,
   });
 
   final String assetId;
@@ -128,6 +227,7 @@ class CatalogTrackAssetSummary {
   final int? sampleRateHz;
   final int? bitDepth;
   final int? fileSizeBytes;
+  final LicenseMetadata license;
 
   factory CatalogTrackAssetSummary.fromJson(Map<String, Object?> json) {
     final assetId = _readString(json['id']);
@@ -168,6 +268,7 @@ class CatalogTrackManifest {
     this.sampleRateHz,
     this.bitDepth,
     this.fileSizeBytes,
+    this.license = LicenseMetadata.unknown,
   });
 
   final String trackId;
@@ -184,6 +285,7 @@ class CatalogTrackManifest {
   final int? sampleRateHz;
   final int? bitDepth;
   final int? fileSizeBytes;
+  final LicenseMetadata license;
 
   factory CatalogTrackManifest.fromJson(Map<String, Object?> json) {
     final track = _readMap(json['track']);
@@ -217,6 +319,7 @@ class CatalogTrackManifest {
       sampleRateHz: _readInt(asset?['sample_rate_hz']),
       bitDepth: _readInt(asset?['bit_depth']),
       fileSizeBytes: _readInt(asset?['file_size_bytes']),
+      license: track == null ? LicenseMetadata.unknown : LicenseMetadata.fromJson(track),
     );
   }
 
@@ -242,6 +345,25 @@ int? _readInt(Object? value) {
   if (value is int) return value;
   if (value is num) return value.toInt();
   return null;
+}
+
+bool? _readBool(Object? value) {
+  if (value is bool) return value;
+  return null;
+}
+
+LicenseStatus? _readLicenseStatus(Object? value) {
+  final normalized = _readString(value)?.trim().toLowerCase().replaceAll('-', '_');
+  return switch (normalized) {
+    'verified' => LicenseStatus.verified,
+    'attribution_required' => LicenseStatus.attributionRequired,
+    'public_domain' => LicenseStatus.publicDomain,
+    'dev_only' => LicenseStatus.devOnly,
+    'user_device' => LicenseStatus.userDevice,
+    'license_pending' => LicenseStatus.licensePending,
+    'unknown' => LicenseStatus.unknown,
+    _ => null,
+  };
 }
 
 String _normalizeSearch(String value) => value.trim().toLowerCase();

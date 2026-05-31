@@ -1549,6 +1549,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           qualityLabel: selectedAsset?.qualityLabel ?? 'unknown',
           codec: selectedAsset?.codec,
           bitrateKbps: selectedAsset?.bitrateKbps,
+          license: track.license,
         ),
       );
       await _refreshCacheStats();
@@ -1595,6 +1596,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                 codec: entry.codec,
                 bitrateKbps: entry.bitrateKbps,
               ),
+              license: entry.license,
             ))
         .toList(growable: false);
     if (!mounted) return;
@@ -2250,6 +2252,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer),
       onOpenEngine: _developerMode ? () => _navigateTo(_AppTab.engine) : null,
       onManageStorage: () => _navigateTo(_AppTab.storage),
+      legalTracks: _libraryTracks,
     );
 
     final destinations = _developerMode ? _developerShellDestinations : _consumerShellDestinations;
@@ -2363,6 +2366,7 @@ CatalogTrackSummary _catalogSummaryFromCachedTrack(CachedTrackMetadata track) {
     artworkUrl: track.artworkUrl,
     displayName: '${track.downloadSource} cached download ${track.qualityLabel} ${track.codec ?? ''}',
     source: 'cached',
+    license: track.license,
     primaryAsset: CatalogTrackAssetSummary(
       assetId: 'cached-${track.trackId}',
       manifestUrl: track.originalRemoteUrl,
@@ -2384,6 +2388,7 @@ CatalogTrackSummary _catalogSummaryFromDeviceTrack(DeviceMusicTrack track) {
     durationMs: track.durationMs,
     artworkUrl: track.artworkUri,
     source: 'device',
+    license: LicenseMetadata.userDevice,
     primaryAsset: CatalogTrackAssetSummary(
       assetId: 'device-${track.trackId}',
       manifestUrl: track.contentUri,
@@ -2434,6 +2439,7 @@ class _SettingsPage extends StatelessWidget {
     required this.onDeveloperModeChanged,
     required this.onOpenEngine,
     required this.onManageStorage,
+    required this.legalTracks,
   });
 
   final WzThemeConfig themeConfig;
@@ -2464,6 +2470,7 @@ class _SettingsPage extends StatelessWidget {
   final ValueChanged<bool> onDeveloperModeChanged;
   final VoidCallback? onOpenEngine;
   final VoidCallback onManageStorage;
+  final List<CatalogTrackSummary> legalTracks;
 
   @override
   Widget build(BuildContext context) => WzPageScaffold(
@@ -2668,14 +2675,22 @@ class _SettingsPage extends StatelessWidget {
           WzPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text('WaveZero', style: WzText.title),
-                SizedBox(height: WzSpacing.xs),
-                Text('A smart music experience engine for native playback, offline listening, queue intelligence, and premium now-playing UX.', style: WzText.body),
-                SizedBox(height: WzSpacing.xs),
-                Text('Version/build: 0.1.0+1', style: WzText.caption),
-                SizedBox(height: WzSpacing.xs),
-                Text('Legal / Licenses coming later with the future legal catalog credits work.', style: WzText.caption),
+              children: [
+                const Text('WaveZero', style: WzText.title),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('A smart music experience engine for native playback, offline listening, queue intelligence, and premium now-playing UX.', style: WzText.body),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('Version/build: 0.1.0+1', style: WzText.caption),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('WaveZero does not claim rights for local/device files. Production catalog tracks require verified rights metadata.', style: WzText.caption),
+                const SizedBox(height: WzSpacing.sm),
+                WzPrimaryAction(
+                  label: 'Open Legal / Licenses',
+                  icon: Icons.policy,
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => _LegalLicensesPage(tracks: legalTracks, appMode: appMode),
+                  )),
+                ),
               ],
             ),
           ),
@@ -4894,6 +4909,150 @@ class _SourceBadge extends StatelessWidget {
       );
 }
 
+
+class _LicenseBadge extends StatelessWidget {
+  const _LicenseBadge({required this.label, this.warning = false});
+
+  final String label;
+  final bool warning;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: warning ? const Color(0xFF332613) : const Color(0xFF15251E),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: warning ? const Color(0xFFFFC46B) : const Color(0xFF38D996).withOpacity(0.4)),
+        ),
+        child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: warning ? const Color(0xFFFFC46B) : const Color(0xFF8FF0C0), fontSize: 10, fontWeight: FontWeight.w800)),
+      );
+}
+
+class _LegalLicensesPage extends StatelessWidget {
+  const _LegalLicensesPage({required this.tracks, required this.appMode});
+
+  final List<CatalogTrackSummary> tracks;
+  final _AppMode appMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final uniqueTracks = <String, CatalogTrackSummary>{};
+    for (final track in tracks) {
+      uniqueTracks.putIfAbsent(track.trackId, () => track);
+    }
+
+    return Scaffold(
+      backgroundColor: _WzTokens.canvas,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: WzPageScaffold(
+              children: [
+                Row(
+                  children: [
+                    IconButton.outlined(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.arrow_back)),
+                    const SizedBox(width: WzSpacing.sm),
+                    const Expanded(child: WzPageHeader(icon: Icons.policy, title: 'Legal / Licenses', subtitle: 'Credits, license status, and safe catalog source labels.')),
+                  ],
+                ),
+                const SizedBox(height: WzSpacing.md),
+                WzPanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text('WaveZero separates user device music, local dev audio, demo catalog tracks, and future licensed/artist uploads.', style: WzText.body),
+                      SizedBox(height: WzSpacing.xs),
+                      Text('Local or unknown tracks are not for production distribution until rights are verified.', style: WzText.caption),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: WzSpacing.md),
+                const WzSectionHeader(title: 'Status guide', subtitle: 'Badges are metadata labels, not automated legal verification.', icon: Icons.verified_user_outlined),
+                WzPanel(
+                  child: Wrap(
+                    spacing: WzSpacing.xs,
+                    runSpacing: WzSpacing.xs,
+                    children: LicenseStatus.values.map((status) => WzStatusPill(label: status.label, active: status == LicenseStatus.verified || status == LicenseStatus.publicDomain || status == LicenseStatus.userDevice, warning: status == LicenseStatus.devOnly || status == LicenseStatus.licensePending || status == LicenseStatus.unknown, icon: Icons.label_outline)).toList(growable: false),
+                  ),
+                ),
+                const SizedBox(height: WzSpacing.md),
+                const WzSectionHeader(title: 'Catalog credits', subtitle: 'Current library entries and their available rights metadata.', icon: Icons.library_music),
+                if (uniqueTracks.isEmpty)
+                  const WzPanel(child: Text('No catalog entries are loaded yet.', style: WzText.body))
+                else
+                  ...uniqueTracks.values.map((track) => _LegalTrackCard(track: track, developerMode: appMode == _AppMode.developer)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LegalTrackCard extends StatelessWidget {
+  const _LegalTrackCard({required this.track, required this.developerMode});
+
+  final CatalogTrackSummary track;
+  final bool developerMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final license = track.license;
+    final source = license.sourceName ?? (_isDeviceCatalogTrack(track) ? 'Device Music' : _isCachedCatalogTrack(track) ? 'Cached copy' : 'API Catalog');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: WzSpacing.sm),
+      child: WzPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+            const SizedBox(height: WzSpacing.xs),
+            Text(track.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            const SizedBox(height: WzSpacing.sm),
+            Wrap(
+              spacing: WzSpacing.xs,
+              runSpacing: WzSpacing.xs,
+              children: [
+                WzStatusPill(label: license.badgeLabel, active: !license.needsRightsWarning, warning: license.needsRightsWarning, icon: Icons.policy),
+                WzStatusPill(label: source, active: _isDeviceCatalogTrack(track), warning: license.status == LicenseStatus.devOnly, icon: Icons.source),
+                if (license.attributionRequired) const WzStatusPill(label: 'Attribution required', active: true, icon: Icons.badge),
+              ],
+            ),
+            if (license.attributionText != null && license.attributionText!.trim().isNotEmpty) ...[
+              const SizedBox(height: WzSpacing.sm),
+              Text(license.attributionText!, maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.body),
+            ],
+            if (license.licenseName != null || license.licenseUrl != null || license.sourceUrl != null) ...[
+              const SizedBox(height: WzSpacing.xs),
+              Text([license.licenseName, license.licenseUrl, license.sourceUrl].whereType<String>().where((value) => value.trim().isNotEmpty).join(' • '), maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            ],
+            if (license.needsRightsWarning) ...[
+              const SizedBox(height: WzSpacing.xs),
+              const Text('Not for production distribution until rights are verified.', style: WzText.caption),
+            ],
+            if (license.usageNotes != null && license.usageNotes!.trim().isNotEmpty) ...[
+              const SizedBox(height: WzSpacing.xs),
+              Text(license.usageNotes!, maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            ],
+            if (developerMode) ...[
+              const SizedBox(height: WzSpacing.xs),
+              Text('Track id: ${track.trackId} • source: ${track.source}', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _licenseBadgeLabel(CatalogTrackSummary track) {
+  if (_isDeviceCatalogTrack(track)) return 'Device music';
+  if (track.license.status == LicenseStatus.unknown && track.trackId.startsWith('track-local-')) return 'Dev only';
+  return track.license.badgeLabel;
+}
+
 class _CatalogRow extends StatelessWidget {
   const _CatalogRow({
     required this.track,
@@ -4918,7 +5077,8 @@ class _CatalogRow extends StatelessWidget {
     final status = CacheService().statusForTrack(track.trackId);
     final isDevice = _isDeviceCatalogTrack(track);
     final isCached = _isCachedCatalogTrack(track);
-    final sourceLabel = isDevice ? 'Device' : isCached ? _cachedSourceBadgeLabel(track.displayName) : 'API';
+    final sourceLabel = isDevice ? 'Device' : isCached ? _cachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'API');
+    final licenseLabel = _licenseBadgeLabel(track);
     final asset = track.primaryAsset;
     Icon cacheIcon;
     switch (status) {
@@ -4955,8 +5115,16 @@ class _CatalogRow extends StatelessWidget {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
                       Expanded(child: Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
-                      _SourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
                     ]),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        _SourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
+                        _LicenseBadge(label: licenseLabel, warning: track.license.needsRightsWarning),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Text(_trackSubtitle(track), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
                     const SizedBox(height: 3),
@@ -5177,7 +5345,7 @@ class _EmptyCatalogMessage extends StatelessWidget {
 }
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
-String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(_isDeviceCatalogTrack(track) ? 'source: Device' : 'source: API'); return parts.join(' • '); }
+String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(_isDeviceCatalogTrack(track) ? 'source: Device' : 'source: ${track.license.sourceName ?? 'API'}'); parts.add(track.license.badgeLabel); return parts.join(' • '); }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
