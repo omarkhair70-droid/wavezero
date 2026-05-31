@@ -4234,8 +4234,8 @@ class _DownloadsCard extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               alignment: WrapAlignment.spaceBetween,
               children: [
-                const ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 480),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -4881,3 +4881,4 @@ String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': c
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
 const _timeStyle = TextStyle(color: Color(0xFF9BA3B4), fontSize: 12);
+
