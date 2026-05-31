@@ -29,6 +29,9 @@ class CachedTrackMetadata {
     required this.originalRemoteUrl,
     required this.cachedAt,
     this.downloadSource = 'unknown',
+    this.qualityLabel = 'unknown',
+    this.codec,
+    this.bitrateKbps,
   });
 
   final String trackId;
@@ -40,6 +43,9 @@ class CachedTrackMetadata {
   final String originalRemoteUrl;
   final int cachedAt;
   final String downloadSource;
+  final String qualityLabel;
+  final String? codec;
+  final int? bitrateKbps;
 
   String get localFileUrl => 'file://$localFilePath';
 
@@ -59,6 +65,9 @@ class CachedTrackMetadata {
     String? originalRemoteUrl,
     int? cachedAt,
     String? downloadSource,
+    String? qualityLabel,
+    String? codec,
+    int? bitrateKbps,
   }) {
     return CachedTrackMetadata(
       trackId: trackId ?? this.trackId,
@@ -70,6 +79,9 @@ class CachedTrackMetadata {
       originalRemoteUrl: originalRemoteUrl ?? this.originalRemoteUrl,
       cachedAt: cachedAt ?? this.cachedAt,
       downloadSource: downloadSource ?? this.downloadSource,
+      qualityLabel: qualityLabel ?? this.qualityLabel,
+      codec: codec ?? this.codec,
+      bitrateKbps: bitrateKbps ?? this.bitrateKbps,
     );
   }
 
@@ -83,6 +95,9 @@ class CachedTrackMetadata {
         'originalRemoteUrl': originalRemoteUrl,
         'cachedAt': cachedAt,
         'downloadSource': downloadSource,
+        'qualityLabel': qualityLabel,
+        'codec': codec,
+        'bitrateKbps': bitrateKbps,
       };
 
   factory CachedTrackMetadata.fromJson(Map<String, Object?> json) {
@@ -103,6 +118,9 @@ class CachedTrackMetadata {
       originalRemoteUrl: originalRemoteUrl,
       cachedAt: _readInt(json['cachedAt']) ?? DateTime.now().millisecondsSinceEpoch,
       downloadSource: _readString(json['downloadSource']) ?? _readString(json['cacheSource']) ?? 'unknown',
+      qualityLabel: _readString(json['qualityLabel']) ?? _readString(json['quality_label']) ?? 'unknown',
+      codec: _readString(json['codec']),
+      bitrateKbps: _readInt(json['bitrateKbps']) ?? _readInt(json['bitrate_kbps']),
     );
   }
 }

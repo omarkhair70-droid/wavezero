@@ -53,6 +53,14 @@ struct CatalogTrackAsset {
     manifest_url: String,
     codec: CatalogAudioCodec,
     bitrate_kbps: u32,
+    #[serde(default)]
+    quality_label: Option<CatalogAudioQuality>,
+    #[serde(default)]
+    sample_rate_hz: Option<u32>,
+    #[serde(default)]
+    bit_depth: Option<u16>,
+    #[serde(default)]
+    file_size_bytes: Option<u64>,
     segment_count: u32,
     is_primary: bool,
 }
@@ -64,6 +72,15 @@ enum CatalogAudioCodec {
     Opus,
     Flac,
     Mp3,
+    Wav,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum CatalogAudioQuality {
+    Standard,
+    High,
+    Original,
 }
 
 #[derive(Debug, Serialize)]
@@ -102,8 +119,12 @@ struct TrackAssetResponse {
     id: String,
     track_id: String,
     manifest_url: String,
+    quality_label: String,
     codec: String,
     bitrate_kbps: u32,
+    sample_rate_hz: Option<u32>,
+    bit_depth: Option<u16>,
+    file_size_bytes: Option<u64>,
     segment_count: u32,
     is_primary: bool,
 }
@@ -394,7 +415,7 @@ fn scan_local_audio_tracks(
             .and_then(|ext| ext.to_str())
             .map(|ext| ext.to_lowercase());
         let extension = match extension.as_deref() {
-            Some("mp3") | Some("m4a") | Some("wav") | Some("aac") => extension.unwrap(),
+            Some("mp3") | Some("m4a") | Some("wav") | Some("aac") | Some("flac") => extension.unwrap(),
             _ => continue,
         };
 
@@ -423,6 +444,9 @@ fn scan_local_audio_tracks(
 
         let title = readable_title(stem);
         let codec = audio_codec_from_extension(&extension);
+        let bitrate_kbps = infer_bitrate_kbps(&extension, &file_name);
+        let quality_label = infer_quality_label(codec, bitrate_kbps, &file_name);
+        let file_size_bytes = fs::metadata(&path).ok().map(|metadata| metadata.len());
         let manifest_url = format!("{}/{}", audio_base_url, file_name);
         let asset_id = format!("asset-{}-{}", track_id, extension);
 
@@ -437,7 +461,11 @@ fn scan_local_audio_tracks(
                 track_id,
                 manifest_url,
                 codec,
-                bitrate_kbps: 128,
+                bitrate_kbps,
+                quality_label: Some(quality_label),
+                sample_rate_hz: None,
+                bit_depth: None,
+                file_size_bytes,
                 segment_count: 1,
                 is_primary: true,
             }],
@@ -507,11 +535,41 @@ fn readable_title(stem: &str) -> String {
         .join(" ")
 }
 
+fn infer_bitrate_kbps(extension: &str, file_name: &str) -> u32 {
+    let lower = file_name.to_lowercase();
+    for bitrate in [1411_u32, 1024, 768, 512, 320, 256, 192, 160, 128, 96] {
+        if lower.contains(&format!("{bitrate}kbps")) || lower.contains(&format!("{bitrate}k")) {
+            return bitrate;
+        }
+    }
+
+    match extension {
+        "flac" | "wav" => 1411,
+        "m4a" | "aac" => 256,
+        "mp3" => 128,
+        _ => 128,
+    }
+}
+
+fn infer_quality_label(codec: CatalogAudioCodec, bitrate_kbps: u32, source: &str) -> CatalogAudioQuality {
+    let source = source.to_lowercase();
+    if source.contains("original") || source.contains("lossless") || source.contains("flac") || source.contains("wav") {
+        return CatalogAudioQuality::Original;
+    }
+
+    match codec {
+        CatalogAudioCodec::Flac | CatalogAudioCodec::Wav => CatalogAudioQuality::Original,
+        CatalogAudioCodec::Mp3 | CatalogAudioCodec::AacLc if bitrate_kbps >= 256 => CatalogAudioQuality::High,
+        _ => CatalogAudioQuality::Standard,
+    }
+}
+
 fn audio_codec_from_extension(extension: &str) -> CatalogAudioCodec {
     match extension {
         "mp3" => CatalogAudioCodec::Mp3,
         "m4a" | "aac" => CatalogAudioCodec::AacLc,
-        "wav" => CatalogAudioCodec::Opus,
+        "wav" => CatalogAudioCodec::Wav,
+        "flac" => CatalogAudioCodec::Flac,
         _ => CatalogAudioCodec::AacLc,
     }
 }
@@ -539,6 +597,11 @@ impl CatalogTrack {
 }
 
 impl CatalogTrackAsset {
+    fn inferred_quality_label(&self) -> CatalogAudioQuality {
+        self.quality_label
+            .unwrap_or_else(|| infer_quality_label(self.codec, self.bitrate_kbps, &self.manifest_url))
+    }
+
     fn to_core_asset(&self) -> TrackAsset {
         TrackAsset::new(
             self.id.clone(),
@@ -568,14 +631,24 @@ impl From<&CatalogTrackAsset> for TrackAssetResponse {
             id: asset.id.clone(),
             track_id: asset.track_id.clone(),
             manifest_url: asset.manifest_url.clone(),
+            quality_label: match asset.inferred_quality_label() {
+                CatalogAudioQuality::Standard => "standard",
+                CatalogAudioQuality::High => "high",
+                CatalogAudioQuality::Original => "original",
+            }
+            .to_string(),
             codec: match asset.codec {
                 CatalogAudioCodec::AacLc => "aac_lc",
                 CatalogAudioCodec::Opus => "opus",
                 CatalogAudioCodec::Flac => "flac",
                 CatalogAudioCodec::Mp3 => "mp3",
+                CatalogAudioCodec::Wav => "wav",
             }
             .to_string(),
             bitrate_kbps: asset.bitrate_kbps,
+            sample_rate_hz: asset.sample_rate_hz,
+            bit_depth: asset.bit_depth,
+            file_size_bytes: asset.file_size_bytes,
             segment_count: asset.segment_count,
             is_primary: asset.is_primary,
         }
@@ -602,6 +675,7 @@ impl From<CatalogAudioCodec> for AudioCodec {
             CatalogAudioCodec::Opus => AudioCodec::Opus,
             CatalogAudioCodec::Flac => AudioCodec::Flac,
             CatalogAudioCodec::Mp3 => AudioCodec::Mp3,
+            CatalogAudioCodec::Wav => AudioCodec::Wav,
         }
     }
 }
@@ -725,6 +799,7 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(&temp_dir).expect("create temp audio dir");
         fs::write(temp_dir.join("song6.mp3"), b"audio").expect("create mp3 file");
+        fs::write(temp_dir.join("lossless-original.flac"), b"audio").expect("create flac file");
 
         env::set_var("WAVEZERO_AUDIO_DIR", &temp_dir);
         env::set_var("WAVEZERO_AUDIO_BASE_URL", "http://10.172.208.216:8090");
@@ -741,6 +816,14 @@ mod tests {
         assert_eq!(track.title, "Song 6");
         assert_eq!(asset.manifest_url, "http://10.172.208.216:8090/song6.mp3");
         assert!(matches!(asset.codec, CatalogAudioCodec::Mp3));
+        assert_eq!(asset.inferred_quality_label(), CatalogAudioQuality::Standard);
+
+        let flac_track = catalog
+            .find_track("track-local-lossless-original")
+            .expect("flac track exists");
+        let flac_asset = flac_track.primary_asset().expect("flac has primary asset");
+        assert!(matches!(flac_asset.codec, CatalogAudioCodec::Flac));
+        assert_eq!(flac_asset.inferred_quality_label(), CatalogAudioQuality::Original);
 
         fs::remove_dir_all(&temp_dir).expect("cleanup temp audio dir");
     }
@@ -777,6 +860,7 @@ mod tests {
 
         assert_eq!(track.artist_name.as_deref(), Some("Local Lab"));
         assert_eq!(track.primary_asset.as_ref().unwrap().codec, "mp3");
+        assert_eq!(track.primary_asset.as_ref().unwrap().quality_label, "standard");
     }
 
     #[test]

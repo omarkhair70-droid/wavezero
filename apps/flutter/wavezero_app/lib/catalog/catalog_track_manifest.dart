@@ -26,6 +26,7 @@ class CatalogTrackSummary {
     this.durationMs,
     this.artworkUrl,
     this.primaryAsset,
+    this.assets = const [],
   });
 
   final String trackId;
@@ -35,6 +36,7 @@ class CatalogTrackSummary {
   final int? durationMs;
   final String? artworkUrl;
   final CatalogTrackAssetSummary? primaryAsset;
+  final List<CatalogTrackAssetSummary> assets;
 
   factory CatalogTrackSummary.fromJson(Map<String, Object?> json) {
     final trackId = _readString(json['id']);
@@ -46,7 +48,17 @@ class CatalogTrackSummary {
       throw const FormatException('Catalog track is missing title');
     }
 
+    final rawAssets = json['assets'];
+    final assets = rawAssets is List
+        ? rawAssets
+            .map((asset) => CatalogTrackAssetSummary.fromJson(_readMap(asset) ?? const <String, Object?>{}))
+            .toList(growable: false)
+        : const <CatalogTrackAssetSummary>[];
     final primaryAssetJson = _readMap(json['primary_asset']);
+    final primaryAsset = primaryAssetJson == null
+        ? (assets.isEmpty ? null : assets.first)
+        : CatalogTrackAssetSummary.fromJson(primaryAssetJson);
+
     return CatalogTrackSummary(
       trackId: trackId,
       title: title,
@@ -54,9 +66,8 @@ class CatalogTrackSummary {
       artistName: _readString(json['artist_name']),
       durationMs: _readInt(json['duration_ms']),
       artworkUrl: _readString(json['artwork_url']),
-      primaryAsset: primaryAssetJson == null
-          ? null
-          : CatalogTrackAssetSummary.fromJson(primaryAssetJson),
+      primaryAsset: primaryAsset,
+      assets: assets.isEmpty && primaryAsset != null ? [primaryAsset] : assets,
     );
   }
 
@@ -76,6 +87,7 @@ class CatalogTrackSummary {
       trackId,
       artistId ?? '',
       primaryAsset?.codec ?? '',
+      primaryAsset?.qualityLabel ?? '',
     ].join(' '));
 
     return searchableText.contains(normalizedQuery);
@@ -86,14 +98,22 @@ class CatalogTrackAssetSummary {
   const CatalogTrackAssetSummary({
     required this.assetId,
     required this.manifestUrl,
+    this.qualityLabel,
     this.codec,
     this.bitrateKbps,
+    this.sampleRateHz,
+    this.bitDepth,
+    this.fileSizeBytes,
   });
 
   final String assetId;
   final String manifestUrl;
+  final String? qualityLabel;
   final String? codec;
   final int? bitrateKbps;
+  final int? sampleRateHz;
+  final int? bitDepth;
+  final int? fileSizeBytes;
 
   factory CatalogTrackAssetSummary.fromJson(Map<String, Object?> json) {
     final assetId = _readString(json['id']);
@@ -108,8 +128,12 @@ class CatalogTrackAssetSummary {
     return CatalogTrackAssetSummary(
       assetId: assetId,
       manifestUrl: manifestUrl,
+      qualityLabel: _readString(json['quality_label']) ?? _readString(json['qualityTier']) ?? _readString(json['quality_tier']),
       codec: _readString(json['codec']),
       bitrateKbps: _readInt(json['bitrate_kbps']),
+      sampleRateHz: _readInt(json['sample_rate_hz']),
+      bitDepth: _readInt(json['bit_depth']),
+      fileSizeBytes: _readInt(json['file_size_bytes']),
     );
   }
 }
@@ -124,8 +148,12 @@ class CatalogTrackManifest {
     this.durationMs,
     this.artworkUrl,
     this.assetId,
+    this.qualityLabel,
     this.codec,
     this.bitrateKbps,
+    this.sampleRateHz,
+    this.bitDepth,
+    this.fileSizeBytes,
   });
 
   final String trackId;
@@ -136,8 +164,12 @@ class CatalogTrackManifest {
   final int? durationMs;
   final String? artworkUrl;
   final String? assetId;
+  final String? qualityLabel;
   final String? codec;
   final int? bitrateKbps;
+  final int? sampleRateHz;
+  final int? bitDepth;
+  final int? fileSizeBytes;
 
   factory CatalogTrackManifest.fromJson(Map<String, Object?> json) {
     final track = _readMap(json['track']);
@@ -165,8 +197,12 @@ class CatalogTrackManifest {
       durationMs: _readInt(track?['duration_ms']),
       artworkUrl: _readString(track?['artwork_url']),
       assetId: _readString(asset?['id']),
+      qualityLabel: _readString(asset?['quality_label']) ?? _readString(asset?['qualityTier']) ?? _readString(asset?['quality_tier']),
       codec: _readString(asset?['codec']),
       bitrateKbps: _readInt(asset?['bitrate_kbps']),
+      sampleRateHz: _readInt(asset?['sample_rate_hz']),
+      bitDepth: _readInt(asset?['bit_depth']),
+      fileSizeBytes: _readInt(asset?['file_size_bytes']),
     );
   }
 
