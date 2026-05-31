@@ -14,7 +14,7 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-$env:WAVEZERO_API_BASE_URL = "http://$ip:8080"
+$env:WAVEZERO_API_BASE_URL = "http://$($ip):8080"
 Write-Output "WAVEZERO_API_BASE_URL = $env:WAVEZERO_API_BASE_URL"
 
 $userHelper = Join-Path $env:USERPROFILE 'Desktop\wavezero-dev.ps1'

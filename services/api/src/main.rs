@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, net::SocketAddr, sync::Arc};
+use std::{collections::{HashMap, HashSet}, env, fs, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::net::TcpListener;
 use wavezero_core::{AudioCodec, NetworkType, PlaybackMetric, Track, TrackAsset};
 
@@ -254,11 +254,15 @@ impl CatalogStore {
             .expect("parse services/api/fixtures/dev_catalog.json");
 
         let audio_base_url = env::var("WAVEZERO_AUDIO_BASE_URL").ok();
-        let fixture = rewrite_dev_catalog_audio_base(fixture, audio_base_url);
+        let fixture = rewrite_dev_catalog_audio_base(fixture, audio_base_url.clone());
+        let audio_dir = resolve_audio_directory();
+        let mut tracks = fixture.tracks;
+        let local_tracks = scan_local_audio_tracks(audio_dir, audio_base_url, &tracks);
+        tracks.extend(local_tracks);
 
         Self {
             artists: fixture.artists,
-            tracks: fixture.tracks,
+            tracks,
         }
     }
 
@@ -328,6 +332,188 @@ fn rewrite_dev_catalog_audio_base(
     }
 
     catalog
+}
+
+fn resolve_audio_directory() -> Option<PathBuf> {
+    if let Ok(dir) = env::var("WAVEZERO_AUDIO_DIR") {
+        let path = PathBuf::from(dir);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+
+    let default_path = PathBuf::from(r"C:\Users\dell\Desktop\wavezero-test-audio");
+    if default_path.is_dir() {
+        Some(default_path)
+    } else {
+        None
+    }
+}
+
+fn scan_local_audio_tracks(
+    audio_dir: Option<PathBuf>,
+    audio_base_url: Option<String>,
+    existing_tracks: &[CatalogTrack],
+) -> Vec<CatalogTrack> {
+    let audio_dir = match audio_dir {
+        Some(dir) if dir.is_dir() => dir,
+        _ => return Vec::new(),
+    };
+
+    let audio_base_url = match audio_base_url {
+        Some(url) if !url.trim().is_empty() => url.trim_end_matches('/').to_string(),
+        _ => return Vec::new(),
+    };
+
+    let existing_manifest_files: HashSet<String> = existing_tracks
+        .iter()
+        .flat_map(|track| track.assets.iter())
+        .filter_map(|asset| asset.manifest_url.rsplit('/').next().map(|name| name.to_lowercase()))
+        .collect();
+
+    let mut reserved_ids: HashSet<String> = existing_tracks
+        .iter()
+        .map(|track| track.id.clone())
+        .collect();
+
+    let mut tracks: Vec<CatalogTrack> = Vec::new();
+
+    for entry in audio_dir.read_dir().into_iter().flatten() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
+
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let extension = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_lowercase());
+        let extension = match extension.as_deref() {
+            Some("mp3") | Some("m4a") | Some("wav") | Some("aac") => extension.unwrap(),
+            _ => continue,
+        };
+
+        let file_name = match path.file_name().and_then(|name| name.to_str()) {
+            Some(name) => name.to_string(),
+            None => continue,
+        };
+
+        if existing_manifest_files.contains(&file_name.to_lowercase()) {
+            continue;
+        }
+
+        let stem = match path.file_stem().and_then(|stem| stem.to_str()) {
+            Some(stem) => stem,
+            None => continue,
+        };
+
+        let mut track_id = format!("track-local-{}", normalize_track_id(stem));
+        let base_track_id = track_id.clone();
+        let mut suffix = 1;
+        while reserved_ids.contains(&track_id) {
+            track_id = format!("{base_track_id}-{suffix}");
+            suffix += 1;
+        }
+        reserved_ids.insert(track_id.clone());
+
+        let title = readable_title(stem);
+        let codec = audio_codec_from_extension(&extension);
+        let manifest_url = format!("{}/{}", audio_base_url, file_name);
+        let asset_id = format!("asset-{}-{}", track_id, extension);
+
+        tracks.push(CatalogTrack {
+            id: track_id.clone(),
+            artist_id: "artist-local-lab".to_string(),
+            title,
+            duration_ms: 180_000,
+            artwork_url: None,
+            assets: vec![CatalogTrackAsset {
+                id: asset_id,
+                track_id,
+                manifest_url,
+                codec,
+                bitrate_kbps: 128,
+                segment_count: 1,
+                is_primary: true,
+            }],
+        });
+    }
+
+    tracks
+}
+
+fn normalize_track_id(stem: &str) -> String {
+    let mut sanitized = String::new();
+    let mut last_was_dash = false;
+
+    for ch in stem.chars() {
+        if ch.is_ascii_alphanumeric() {
+            sanitized.push(ch.to_ascii_lowercase());
+            last_was_dash = false;
+        } else {
+            if !last_was_dash {
+                sanitized.push('-');
+                last_was_dash = true;
+            }
+        }
+    }
+
+    sanitized.trim_matches('-').to_string()
+}
+
+fn readable_title(stem: &str) -> String {
+    let mut normalized = String::new();
+    let mut last_is_whitespace = false;
+    let mut last_is_digit = false;
+    let mut last_is_letter = false;
+
+    for ch in stem.chars() {
+        if ch.is_ascii_alphanumeric() {
+            if ch.is_ascii_digit() && last_is_letter && !last_is_whitespace {
+                normalized.push(' ');
+            }
+            if ch.is_ascii_alphabetic() && last_is_digit && !last_is_whitespace {
+                normalized.push(' ');
+            }
+            normalized.push(ch);
+            last_is_whitespace = false;
+            last_is_digit = ch.is_ascii_digit();
+            last_is_letter = ch.is_ascii_alphabetic();
+        } else {
+            if !last_is_whitespace {
+                normalized.push(' ');
+                last_is_whitespace = true;
+            }
+            last_is_digit = false;
+            last_is_letter = false;
+        }
+    }
+
+    normalized
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str().to_ascii_lowercase().as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn audio_codec_from_extension(extension: &str) -> CatalogAudioCodec {
+    match extension {
+        "mp3" => CatalogAudioCodec::Mp3,
+        "m4a" | "aac" => CatalogAudioCodec::AacLc,
+        "wav" => CatalogAudioCodec::Opus,
+        _ => CatalogAudioCodec::AacLc,
+    }
 }
 
 impl CatalogTrack {
@@ -531,6 +717,52 @@ mod tests {
             assert!(matches!(asset.codec, CatalogAudioCodec::Mp3));
             assert!(asset.is_primary);
         }
+    }
+
+    #[test]
+    fn dev_catalog_fixture_discovers_local_audio_directory_tracks() {
+        let temp_dir = env::temp_dir().join("wavezero_local_audio_test");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).expect("create temp audio dir");
+        fs::write(temp_dir.join("song6.mp3"), b"audio").expect("create mp3 file");
+
+        env::set_var("WAVEZERO_AUDIO_DIR", &temp_dir);
+        env::set_var("WAVEZERO_AUDIO_BASE_URL", "http://10.172.208.216:8090");
+
+        let catalog = CatalogStore::from_dev_fixture();
+        env::remove_var("WAVEZERO_AUDIO_DIR");
+        env::remove_var("WAVEZERO_AUDIO_BASE_URL");
+
+        let track = catalog
+            .find_track("track-local-song6")
+            .expect("song6 track exists");
+        let asset = track.primary_asset().expect("song6 has primary asset");
+
+        assert_eq!(track.title, "Song 6");
+        assert_eq!(asset.manifest_url, "http://10.172.208.216:8090/song6.mp3");
+        assert!(matches!(asset.codec, CatalogAudioCodec::Mp3));
+
+        fs::remove_dir_all(&temp_dir).expect("cleanup temp audio dir");
+    }
+
+    #[test]
+    fn dev_catalog_fixture_does_not_duplicate_existing_fixture_files() {
+        let temp_dir = env::temp_dir().join("wavezero_local_audio_test_dup");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).expect("create temp audio dir");
+        fs::write(temp_dir.join("song3.mp3"), b"audio").expect("create mp3 file");
+
+        env::set_var("WAVEZERO_AUDIO_DIR", &temp_dir);
+        env::set_var("WAVEZERO_AUDIO_BASE_URL", "http://10.172.208.216:8090");
+
+        let catalog = CatalogStore::from_dev_fixture();
+        env::remove_var("WAVEZERO_AUDIO_DIR");
+        env::remove_var("WAVEZERO_AUDIO_BASE_URL");
+
+        let count = catalog.tracks.iter().filter(|t| t.id == "track-local-song-3").count();
+        assert_eq!(count, 1);
+
+        fs::remove_dir_all(&temp_dir).expect("cleanup temp audio dir");
     }
 
     #[test]

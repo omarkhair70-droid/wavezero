@@ -123,7 +123,16 @@ powershell -ExecutionPolicy Bypass -File scripts\wavezero-run-flutter.ps1
 ```
 
 These scripts auto-detect your active local IPv4 address and update `WAVEZERO_AUDIO_BASE_URL` for the Rust API at startup. That means `services/api/fixtures/dev_catalog.json` can keep its existing hardcoded local URLs without manual editing.
+The Rust API also now auto-discovers supported local audio files from `WAVEZERO_AUDIO_DIR` or the default Windows path `C:\Users\dell\Desktop\wavezero-test-audio`.
 
+Supported formats:
+
+- `.mp3`
+- `.m4a`
+- `.wav`
+- `.aac`
+
+If a supported file is present in the local audio folder, the API will add a catalog track such as `track-local-song6` with a generated title like `Song 6` and a manifest URL under `http://<ip>:8090/<filename>`. This is a dev-only local catalog discovery feature, not a production upload path.
 If auto-detection fails, run `.\scripts\wavezero-local-ip.ps1` to verify your local address or use a fixed `WAVEZERO_AUDIO_BASE_URL` during API startup as a fallback.
 
 ## CI status
