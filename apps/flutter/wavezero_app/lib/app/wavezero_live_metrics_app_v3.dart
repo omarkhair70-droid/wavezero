@@ -109,6 +109,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _audioPreparedBeforeNext = false;
   bool _nextPreparedBeforePlay = false;
 
+  // Smart downloads (predictive auto-cache) state
+  bool _smartDownloadsEnabled = true;
+  final Set<String> _autoCacheInFlight = <String>{};
+  String? _lastSmartDownloadTrackId;
+  String? _lastSmartDownloadTitle;
+  String? _lastSmartDownloadReason;
+  String? _lastSmartDownloadResult;
+  int _smartDownloadStartedCount = 0;
+  int _smartDownloadCompletedCount = 0;
+  int _smartDownloadFailedCount = 0;
+  int _smartDownloadSkippedCount = 0;
+  static const int _maxSmartDownloadCachedTracks = 10;
+
   // Cache service and diagnostics
   final CacheService _cacheService = CacheService();
   int _cachedTrackCount = 0;
@@ -308,6 +321,124 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (id == null || id == _lastAutoAdvanceTrackId) return;
     _lastAutoAdvanceTrackId = id;
     await _playNext(autoStart: true, source: QueueAdvanceSource.auto);
+  }
+
+  // Predictive Smart Downloads helpers
+  Future<bool> _canAutoCacheTrack({required String trackId, required String? url}) async {
+    if (!_smartDownloadsEnabled) {
+      _lastSmartDownloadReason = 'smart downloads disabled';
+      return false;
+    }
+    if (url == null || url.isEmpty) {
+      _lastSmartDownloadReason = 'no remote url';
+      return false;
+    }
+    await _cacheService.ensureInitialized();
+    final status = _cacheService.statusForTrack(trackId);
+    if (status == TrackCacheStatus.cached) {
+      _lastSmartDownloadReason = 'already cached';
+      return false;
+    }
+    if (status == TrackCacheStatus.caching) {
+      _lastSmartDownloadReason = 'already caching';
+      return false;
+    }
+    if (_autoCacheInFlight.contains(trackId)) {
+      _lastSmartDownloadReason = 'already in-flight';
+      return false;
+    }
+    final cachedLibrary = await _cacheService.cachedLibrary();
+    if (cachedLibrary.length >= _maxSmartDownloadCachedTracks) {
+      _lastSmartDownloadReason = 'smart download cache limit reached';
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto'}) async {
+    final can = await _canAutoCacheTrack(trackId: trackId, url: url);
+    if (!can) {
+      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+      return;
+    }
+    _autoCacheInFlight.add(trackId);
+    _smartDownloadStartedCount += 1;
+    _lastSmartDownloadTrackId = trackId;
+    _lastSmartDownloadTitle = title;
+    _lastSmartDownloadReason = reason;
+    if (mounted) setState(() {});
+    try {
+      final ok = await _cacheService.downloadAndCache(
+        trackId,
+        url,
+        metadata: CachedTrackMetadata(
+          trackId: trackId,
+          title: title,
+          artistName: artistName,
+          durationMs: durationMs,
+          artworkUrl: artworkUrl,
+          localFilePath: '',
+          originalRemoteUrl: url,
+          cachedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      _lastSmartDownloadResult = ok ? 'cached' : 'error';
+      if (ok) {
+        _smartDownloadCompletedCount += 1;
+      } else {
+        _smartDownloadFailedCount += 1;
+      }
+    } catch (error) {
+      _lastSmartDownloadResult = 'error:${error.toString()}';
+      _smartDownloadFailedCount += 1;
+    } finally {
+      _autoCacheInFlight.remove(trackId);
+      unawaited(_refreshCacheStats());
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _maybeAutoCacheCurrentTrack(CatalogTrackManifest manifest) async {
+    if (manifest.trackId.isEmpty) return;
+    final url = manifest.streamUrl;
+    final can = await _canAutoCacheTrack(trackId: manifest.trackId, url: url);
+    if (!can) return;
+    unawaited(_autoCacheTrack(
+      trackId: manifest.trackId,
+      url: url!,
+      title: manifest.title,
+      artistName: manifest.artistName,
+      durationMs: manifest.durationMs,
+      artworkUrl: manifest.artworkUrl,
+      reason: 'current_played',
+    ));
+  }
+
+  Future<void> _maybeAutoCacheNextQueuedTrack() async {
+    final next = _upNextQueueTrack;
+    if (next == null) return;
+    final assetUrl = next.primaryAsset?.manifestUrl;
+    if (assetUrl != null && assetUrl.isNotEmpty) {
+      final can = await _canAutoCacheTrack(trackId: next.trackId, url: assetUrl);
+      if (!can) return;
+      unawaited(_autoCacheTrack(trackId: next.trackId, url: assetUrl, title: next.title, artistName: next.artistName, durationMs: next.durationMs, artworkUrl: next.artworkUrl, reason: 'up_next'));
+      return;
+    }
+    // fallback: try to fetch manifest to find a streamUrl
+    final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
+    try {
+      final manifest = await client.fetchTrackManifest(trackId: next.trackId);
+      final url2 = manifest.streamUrl;
+      if (url2 != null && url2.isNotEmpty) {
+        final can2 = await _canAutoCacheTrack(trackId: manifest.trackId, url: url2);
+        if (!can2) return;
+        unawaited(_autoCacheTrack(trackId: manifest.trackId, url: url2, title: manifest.title, artistName: manifest.artistName, durationMs: manifest.durationMs, artworkUrl: manifest.artworkUrl, reason: 'up_next_fetched'));
+      }
+    } catch (_) {
+      // ignore manifest fetch errors for non-blocking auto-cache
+    } finally {
+      client.close();
+    }
   }
 
   Future<void> _loadCatalog({bool fallbackToDemo = false}) {
@@ -512,6 +643,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       });
     }
     unawaited(_updatePredictivePreloadCandidate());
+    // Schedule smart downloads for current and next queued tracks
+    unawaited(_maybeAutoCacheCurrentTrack(manifest));
+    unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
   void _clearNextPlaybackAttemptMetrics() {
@@ -756,6 +890,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
     unawaited(_saveSession());
     unawaited(_updatePredictivePreloadCandidate());
+    unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
   void _removeFromQueue(CatalogTrackSummary track) {
@@ -778,6 +913,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
     unawaited(_saveSession());
     unawaited(_updatePredictivePreloadCandidate());
+    unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
   void _clearQueue() {
@@ -791,6 +927,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
     unawaited(widget.sessionStore.clear());
     unawaited(_updatePredictivePreloadCandidate());
+    unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
   Future<void> _playQueueTrack(CatalogTrackSummary track, {bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.manual}) async {
@@ -882,7 +1019,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
     await _refreshMetrics(allowAutoAdvance: false);
     unawaited(_saveSession());
-    if (_upNextQueueTrack != null) unawaited(_updatePredictivePreloadCandidate());
+    unawaited(_updatePredictivePreloadCandidate());
+    unawaited(_maybeAutoCacheCurrentTrack(manifest));
+    unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
   Future<void> _playNext({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.next}) async {
@@ -1026,6 +1165,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             smartQueueReason: _smartQueueReason,
             controlsDisabled: _queueDisabled,
             onToggle: _setPrefetchEnabled,
+          ),
+          const SizedBox(height: 12),
+          _SmartDownloadsCard(
+            enabled: _smartDownloadsEnabled,
+            lastTrackId: _lastSmartDownloadTrackId,
+            lastTitle: _lastSmartDownloadTitle,
+            lastReason: _lastSmartDownloadReason,
+            lastResult: _lastSmartDownloadResult,
+            startedCount: _smartDownloadStartedCount,
+            completedCount: _smartDownloadCompletedCount,
+            failedCount: _smartDownloadFailedCount,
+            skippedCount: _smartDownloadSkippedCount,
+            inFlight: _autoCacheInFlight.length,
+            onToggle: (v) => setState(() { _smartDownloadsEnabled = v; }),
           ),
         ]),
       ),
@@ -1619,6 +1772,75 @@ class _SmartPreloadCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SmartDownloadsCard extends StatelessWidget {
+  const _SmartDownloadsCard({
+    required this.enabled,
+    required this.lastTrackId,
+    required this.lastTitle,
+    required this.lastReason,
+    required this.lastResult,
+    required this.startedCount,
+    required this.completedCount,
+    required this.failedCount,
+    required this.skippedCount,
+    required this.inFlight,
+    required this.onToggle,
+  });
+
+  final bool enabled;
+  final String? lastTrackId;
+  final String? lastTitle;
+  final String? lastReason;
+  final String? lastResult;
+  final int startedCount;
+  final int completedCount;
+  final int failedCount;
+  final int skippedCount;
+  final int inFlight;
+  final ValueChanged<bool> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      padding: const EdgeInsets.all(_WzTokens.space5),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Expanded(
+            child: _PanelHeader(
+              icon: Icons.download_for_offline,
+              title: 'Smart Downloads',
+              subtitle: 'Predictive background caching for current and up-next tracks.',
+            ),
+          ),
+          Switch(value: enabled, onChanged: onToggle),
+        ]),
+        const SizedBox(height: _WzTokens.space4),
+        _MetricSection(
+          title: 'Last Smart Download',
+          description: lastTitle ?? 'No smart downloads yet',
+          metrics: [
+            _MetricCard(label: 'Track', value: lastTrackId ?? 'none', active: lastTrackId != null),
+            _MetricCard(label: 'Result', value: lastResult ?? 'none', active: lastResult == 'cached'),
+            _MetricCard(label: 'Reason', value: lastReason ?? 'none', active: lastReason != null),
+          ],
+        ),
+        const SizedBox(height: _WzTokens.space4),
+        _MetricSection(
+          title: 'Counters',
+          description: 'Started / Completed / Failed / Skipped',
+          metrics: [
+            _MetricCard(label: 'Started', value: '$startedCount', active: startedCount > 0),
+            _MetricCard(label: 'Completed', value: '$completedCount', active: completedCount > 0),
+            _MetricCard(label: 'Failed', value: '$failedCount', active: failedCount > 0),
+            _MetricCard(label: 'Skipped', value: '$skippedCount', active: skippedCount > 0),
+            _MetricCard(label: 'InFlight', value: '$inFlight', active: inFlight > 0),
+          ],
+        ),
+      ]),
     );
   }
 }
