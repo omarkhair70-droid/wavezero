@@ -538,7 +538,7 @@ impl CatalogStore {
         filter_catalog_for_mode(&config, &mut fixture);
 
         let mut tracks = fixture.tracks;
-        if config.local_folder_catalog_enabled {
+        if config.content_mode.is_dev() && config.local_folder_catalog_enabled {
             let local_tracks = scan_local_audio_tracks(config.local_audio_dir.clone(), config.audio_base_url.clone(), &tracks);
             tracks.extend(local_tracks);
         }
@@ -1168,4 +1168,384 @@ impl From<CatalogAudioCodec> for AudioCodec {
 #[allow(dead_code)]
 fn example_metric() -> PlaybackMetric {
     PlaybackMetric::new("track-apple-bipbop-hls", 420, 0, NetworkType::Wifi, false, 95)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use serde_json::Value;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_config(content_mode: ContentMode) -> ApiConfig {
+        ApiConfig {
+            content_mode,
+            catalog_path: None,
+            content_base_url: None,
+            audio_base_url: Some(DEFAULT_DEV_AUDIO_BASE_URL.to_string()),
+            artwork_base_url: None,
+            local_audio_dir: None,
+            local_folder_catalog_enabled: false,
+        }
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after unix epoch")
+            .as_nanos();
+        env::temp_dir().join(format!("wavezero_{name}_{nonce}"))
+    }
+
+    fn artist() -> Artist {
+        Artist {
+            id: "artist-test".to_string(),
+            name: "Test Artist".to_string(),
+            image_url: None,
+        }
+    }
+
+    fn asset(track_id: &str, manifest_url: &str) -> CatalogTrackAsset {
+        CatalogTrackAsset {
+            id: format!("asset-{track_id}"),
+            track_id: track_id.to_string(),
+            manifest_url: manifest_url.to_string(),
+            stream_url: None,
+            asset_url: None,
+            asset_path: None,
+            codec: CatalogAudioCodec::Mp3,
+            bitrate_kbps: 128,
+            quality_label: Some(CatalogAudioQuality::Standard),
+            sample_rate_hz: Some(44_100),
+            bit_depth: None,
+            file_size_bytes: None,
+            segment_count: 1,
+            is_primary: true,
+        }
+    }
+
+    fn track(
+        id: &str,
+        license_status: LicenseStatus,
+        production_safe: bool,
+        manifest_url: &str,
+    ) -> CatalogTrack {
+        CatalogTrack {
+            id: id.to_string(),
+            artist_id: "artist-test".to_string(),
+            artist_name: Some("Test Artist".to_string()),
+            title: id.to_string(),
+            album_name: Some("Test Album".to_string()),
+            duration_ms: 180_000,
+            artwork_url: None,
+            artwork_path: None,
+            assets: vec![asset(id, manifest_url)],
+            source_type: Some("test".to_string()),
+            production_safe: Some(production_safe),
+            license: LicenseMetadata {
+                license_status,
+                license_name: Some("Test license".to_string()),
+                source_name: Some("Test Catalog".to_string()),
+                commercial_use_allowed: false,
+                redistribution_allowed: false,
+                ..LicenseMetadata::default()
+            },
+        }
+    }
+
+    fn catalog_file(fixture: &CatalogFixture) -> PathBuf {
+        let path = temp_path("catalog").with_extension("json");
+        fs::write(
+            &path,
+            serde_json::to_string(fixture).expect("serialize test catalog"),
+        )
+        .expect("write test catalog");
+        path
+    }
+
+    async fn response_json(response: axum::response::Response) -> Value {
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response body");
+        serde_json::from_slice(&body).expect("response body is json")
+    }
+
+    #[tokio::test]
+    async fn routes_are_registered() {
+        let router = app(AppState {
+            catalog: Arc::new(CatalogStore::from_config(test_config(ContentMode::Dev))),
+        });
+
+        let _ = router;
+    }
+
+    #[test]
+    fn dev_catalog_loads_bundled_fixture() {
+        let catalog = CatalogStore::from_config(test_config(ContentMode::Dev));
+
+        assert!(catalog.catalog_loaded);
+        assert!(catalog.catalog_error.is_none());
+        assert_eq!(catalog.config.content_mode, ContentMode::Dev);
+        assert_eq!(catalog.artists.len(), 1);
+        assert_eq!(catalog.tracks.len(), 4);
+    }
+
+    #[test]
+    fn dev_catalog_keeps_local_playback_chain_playable() {
+        let catalog = CatalogStore::from_config(test_config(ContentMode::Dev));
+        let expected_tracks = [
+            ("track-local-real-song", "Local Real Song", "http://192.168.1.7:8090/song.mp3"),
+            ("track-local-song-3", "Song 3", "http://192.168.1.7:8090/song3.mp3"),
+            ("track-local-song-4", "Song 4", "http://192.168.1.7:8090/song4.mp3"),
+            ("track-local-song-5", "Song 5", "http://192.168.1.7:8090/song5.mp3"),
+        ];
+
+        for (track_id, title, manifest_url) in expected_tracks {
+            let track = catalog
+                .find_track(track_id)
+                .unwrap_or_else(|| panic!("{track_id} exists in dev catalog"));
+            let asset = track
+                .primary_asset()
+                .unwrap_or_else(|| panic!("{track_id} has primary asset"));
+
+            assert_eq!(track.title, title);
+            assert_eq!(asset.manifest_url, manifest_url);
+            assert!(matches!(asset.codec, CatalogAudioCodec::Mp3));
+            assert!(asset.is_primary);
+            assert!(track.to_core_track().primary_asset().is_some());
+        }
+    }
+
+    #[test]
+    fn config_audio_base_url_normalizes_relative_asset_urls() {
+        let fixture = CatalogFixture {
+            artists: vec![artist()],
+            tracks: vec![track(
+                "track-relative",
+                LicenseStatus::PublicDomain,
+                true,
+                "audio/relative.mp3",
+            )],
+        };
+        let path = catalog_file(&fixture);
+        let mut config = test_config(ContentMode::Dev);
+        config.catalog_path = Some(path.clone());
+        config.audio_base_url = Some("https://cdn.example.test/audio/".to_string());
+
+        let catalog = CatalogStore::from_config(config);
+        fs::remove_file(path).expect("cleanup test catalog");
+        let asset = catalog
+            .find_track("track-relative")
+            .and_then(CatalogTrack::primary_asset)
+            .expect("relative track has primary asset");
+
+        assert_eq!(asset.manifest_url, "https://cdn.example.test/audio/audio/relative.mp3");
+    }
+
+    #[test]
+    fn local_folder_discovery_works_only_in_dev_mode() {
+        let dir = temp_path("local_audio_dev_only");
+        fs::create_dir_all(&dir).expect("create temp audio dir");
+        fs::write(dir.join("dev-only.mp3"), b"audio").expect("create mp3 file");
+
+        let fixture = CatalogFixture {
+            artists: vec![artist()],
+            tracks: vec![track("track-safe", LicenseStatus::PublicDomain, true, "safe.mp3")],
+        };
+        let path = catalog_file(&fixture);
+
+        let mut dev_config = test_config(ContentMode::Dev);
+        dev_config.catalog_path = Some(path.clone());
+        dev_config.local_audio_dir = Some(dir.clone());
+        dev_config.audio_base_url = Some("http://127.0.0.1:8090".to_string());
+        dev_config.local_folder_catalog_enabled = true;
+        let dev_catalog = CatalogStore::from_config(dev_config);
+        assert!(dev_catalog.find_track("track-local-dev-only").is_some());
+
+        let mut demo_config = test_config(ContentMode::Demo);
+        demo_config.catalog_path = Some(path.clone());
+        demo_config.local_audio_dir = Some(dir.clone());
+        demo_config.audio_base_url = Some("http://127.0.0.1:8090".to_string());
+        demo_config.local_folder_catalog_enabled = true;
+        let demo_catalog = CatalogStore::from_config(demo_config);
+        assert!(demo_catalog.find_track("track-local-dev-only").is_none());
+
+        let mut production_config = test_config(ContentMode::Production);
+        production_config.catalog_path = Some(path.clone());
+        production_config.local_audio_dir = Some(dir.clone());
+        production_config.audio_base_url = Some("http://127.0.0.1:8090".to_string());
+        production_config.local_folder_catalog_enabled = true;
+        let production_catalog = CatalogStore::from_config(production_config);
+        assert!(production_catalog.find_track("track-local-dev-only").is_none());
+
+        fs::remove_file(path).expect("cleanup test catalog");
+        fs::remove_dir_all(dir).expect("cleanup temp audio dir");
+    }
+
+    #[test]
+    fn local_folder_discovery_includes_mp3_and_flac_as_dev_only_not_production_safe() {
+        let dir = temp_path("local_audio_formats");
+        fs::create_dir_all(&dir).expect("create temp audio dir");
+        fs::write(dir.join("song6.mp3"), b"audio").expect("create mp3 file");
+        fs::write(dir.join("lossless-original.flac"), b"audio").expect("create flac file");
+
+        let mut config = test_config(ContentMode::Dev);
+        config.local_audio_dir = Some(dir.clone());
+        config.audio_base_url = Some("http://127.0.0.1:8090".to_string());
+        config.local_folder_catalog_enabled = true;
+
+        let catalog = CatalogStore::from_config(config);
+        let mp3_track = catalog
+            .find_track("track-local-song6")
+            .expect("song6 discovered");
+        let mp3_asset = mp3_track.primary_asset().expect("mp3 primary asset");
+        assert!(matches!(mp3_track.license.license_status, LicenseStatus::DevOnly));
+        assert!(!mp3_track.is_production_safe());
+        assert!(matches!(mp3_asset.codec, CatalogAudioCodec::Mp3));
+        assert_eq!(mp3_asset.manifest_url, "http://127.0.0.1:8090/song6.mp3");
+
+        let flac_track = catalog
+            .find_track("track-local-lossless-original")
+            .expect("flac discovered");
+        let flac_asset = flac_track.primary_asset().expect("flac primary asset");
+        assert!(matches!(flac_track.license.license_status, LicenseStatus::DevOnly));
+        assert!(!flac_track.is_production_safe());
+        assert!(matches!(flac_asset.codec, CatalogAudioCodec::Flac));
+        assert_eq!(flac_asset.inferred_quality_label(), CatalogAudioQuality::Original);
+
+        fs::remove_dir_all(dir).expect("cleanup temp audio dir");
+    }
+
+    #[test]
+    fn local_folder_discovery_does_not_duplicate_existing_fixture_files() {
+        let dir = temp_path("local_audio_dup");
+        fs::create_dir_all(&dir).expect("create temp audio dir");
+        fs::write(dir.join("song3.mp3"), b"audio").expect("create mp3 file");
+
+        let mut config = test_config(ContentMode::Dev);
+        config.local_audio_dir = Some(dir.clone());
+        config.audio_base_url = Some("http://127.0.0.1:8090".to_string());
+        config.local_folder_catalog_enabled = true;
+
+        let catalog = CatalogStore::from_config(config);
+        let count = catalog
+            .tracks
+            .iter()
+            .filter(|track| track.id == "track-local-song-3")
+            .count();
+        assert_eq!(count, 1);
+
+        fs::remove_dir_all(dir).expect("cleanup temp audio dir");
+    }
+
+    #[test]
+    fn demo_mode_without_catalog_path_returns_safe_empty_status() {
+        let catalog = CatalogStore::from_config(test_config(ContentMode::Demo));
+        let status = catalog.status_response();
+
+        assert!(!status.ok);
+        assert!(!status.catalog_loaded);
+        assert_eq!(status.track_count, 0);
+        assert_eq!(status.asset_count, 0);
+        assert_eq!(status.error.as_ref().map(|error| error.error.as_str()), Some("catalog_not_configured"));
+    }
+
+    #[test]
+    fn production_mode_without_catalog_path_returns_safe_empty_status() {
+        let catalog = CatalogStore::from_config(test_config(ContentMode::Production));
+        let status = catalog.status_response();
+
+        assert!(!status.ok);
+        assert!(!status.catalog_loaded);
+        assert_eq!(status.track_count, 0);
+        assert_eq!(status.asset_count, 0);
+        assert_eq!(status.error.as_ref().map(|error| error.error.as_str()), Some("catalog_not_configured"));
+    }
+
+    #[test]
+    fn production_mode_filters_out_dev_only_and_not_production_safe_tracks() {
+        let fixture = CatalogFixture {
+            artists: vec![artist()],
+            tracks: vec![
+                track("track-safe", LicenseStatus::PublicDomain, true, "safe.mp3"),
+                track("track-dev-only", LicenseStatus::DevOnly, true, "dev.mp3"),
+                track("track-not-safe", LicenseStatus::Verified, false, "unsafe.mp3"),
+            ],
+        };
+        let path = catalog_file(&fixture);
+        let mut config = test_config(ContentMode::Production);
+        config.catalog_path = Some(path.clone());
+        config.audio_base_url = Some("https://cdn.example.test".to_string());
+
+        let catalog = CatalogStore::from_config(config);
+        fs::remove_file(path).expect("cleanup test catalog");
+
+        assert!(catalog.find_track("track-safe").is_some());
+        assert!(catalog.find_track("track-dev-only").is_none());
+        assert!(catalog.find_track("track-not-safe").is_none());
+        assert_eq!(catalog.tracks.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn manifest_response_exposes_track_asset_and_stream_url() {
+        let state = AppState {
+            catalog: Arc::new(CatalogStore::from_config(test_config(ContentMode::Dev))),
+        };
+
+        let response = get_track_manifest(
+            Path("track-local-song-3".to_string()),
+            State(state),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_json(response).await;
+
+        assert_eq!(json["track"]["id"], "track-local-song-3");
+        assert_eq!(json["asset"]["id"], "asset-local-song-3-mp3");
+        assert_eq!(json["stream_url"], "http://192.168.1.7:8090/song3.mp3");
+    }
+
+    #[tokio::test]
+    async fn missing_track_returns_json_track_not_found() {
+        let state = AppState {
+            catalog: Arc::new(CatalogStore::from_config(test_config(ContentMode::Dev))),
+        };
+
+        let response = get_track_manifest(Path("missing-track".to_string()), State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let json = response_json(response).await;
+
+        assert_eq!(json["error"], "track_not_found");
+    }
+
+    #[tokio::test]
+    async fn url_less_asset_returns_json_asset_not_available() {
+        let fixture = CatalogFixture {
+            artists: vec![artist()],
+            tracks: vec![track(
+                "track-url-less",
+                LicenseStatus::PublicDomain,
+                true,
+                "",
+            )],
+        };
+        let path = catalog_file(&fixture);
+        let mut config = test_config(ContentMode::Dev);
+        config.catalog_path = Some(path.clone());
+        let state = AppState {
+            catalog: Arc::new(CatalogStore::from_config(config)),
+        };
+
+        let response = get_track_manifest(Path("track-url-less".to_string()), State(state))
+            .await
+            .into_response();
+        fs::remove_file(path).expect("cleanup test catalog");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let json = response_json(response).await;
+
+        assert_eq!(json["error"], "asset_not_available");
+    }
 }
