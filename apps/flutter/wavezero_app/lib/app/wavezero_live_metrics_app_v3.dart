@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -2292,46 +2293,63 @@ class _ProductShellHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(22, 14, 22, 8),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
         child: WzPanel(
-          padding: const EdgeInsets.symmetric(horizontal: WzSpacing.md, vertical: WzSpacing.sm),
+          padding: const EdgeInsets.symmetric(horizontal: WzSpacing.sm, vertical: WzSpacing.xs),
           gradient: WzColors.heroGradient,
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              GestureDetector(
-                onLongPress: onLogoLongPress,
-                child: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    gradient: WzColors.accentGradient,
-                    borderRadius: BorderRadius.circular(WzRadius.md),
-                  ),
-                  child: const Icon(Icons.graphic_eq, color: Colors.white),
-                ),
-              ),
-              const SizedBox(width: WzSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('WaveZero', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
-                    const SizedBox(height: WzSpacing.xxs),
-                    Text(
-                      appMode == _AppMode.developer
-                          ? '$selectedTabLabel • Developer mode • $engineSummary'
-                          : '$selectedTabLabel • $engineSummary',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: WzText.caption,
+              Row(
+                children: [
+                  GestureDetector(
+                    onLongPress: onLogoLongPress,
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        gradient: WzColors.accentGradient,
+                        borderRadius: BorderRadius.circular(WzRadius.md),
+                      ),
+                      child: const Icon(Icons.graphic_eq, color: Colors.white, size: 20),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: WzSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'WaveZero',
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.4),
+                        ),
+                        const SizedBox(height: WzSpacing.xxs),
+                        Text(
+                          appMode == _AppMode.developer
+                              ? '$selectedTabLabel • Developer mode • $engineSummary'
+                              : '$selectedTabLabel • $engineSummary',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: WzText.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: WzSpacing.sm),
-              WzStatusPill(label: status, active: status == 'Playing', warning: status == 'Error', icon: Icons.radio_button_checked),
-              const SizedBox(width: WzSpacing.xs),
-              WzStatusPill(label: offlineReady ? 'Offline Ready' : 'Online catalog', active: offlineReady, icon: Icons.offline_pin),
+              const SizedBox(height: WzSpacing.xs),
+              Wrap(
+                spacing: WzSpacing.xs,
+                runSpacing: WzSpacing.xs,
+                children: [
+                  WzStatusPill(label: status, active: status == 'Playing', warning: status == 'Error', icon: Icons.radio_button_checked),
+                  WzStatusPill(label: offlineReady ? 'Offline Ready' : 'Online catalog', active: offlineReady, icon: Icons.offline_pin),
+                ],
+              ),
             ],
           ),
         ),
@@ -2345,15 +2363,15 @@ class _HomeHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => WzPanel(
-        padding: const EdgeInsets.all(WzSpacing.xl),
+        padding: const EdgeInsets.all(WzSpacing.md),
         gradient: WzColors.heroGradient,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('WaveZero', style: WzText.display),
+            const Text('WaveZero', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: WzText.title),
             const SizedBox(height: WzSpacing.xs),
-            const Text('A smart music experience engine.', style: TextStyle(fontSize: 17, color: WzColors.textMuted, height: 1.35)),
-            const SizedBox(height: WzSpacing.lg),
+            const Text('A smart music experience engine.', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 15, color: WzColors.textMuted, height: 1.35)),
+            const SizedBox(height: WzSpacing.md),
             Wrap(
               spacing: WzSpacing.xs,
               runSpacing: WzSpacing.xs,
@@ -2398,21 +2416,36 @@ class _CurrentListeningCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const WzSectionHeader(title: 'Current listening', subtitle: 'Real playback state from the engine.', icon: Icons.album),
-          Row(
-            children: [
-              _Artwork(artworkUrl: manifest?.artworkUrl),
-              const SizedBox(width: WzSpacing.md),
-              Expanded(
-                child: Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 340;
+              final art = _Artwork(artworkUrl: manifest?.artworkUrl, size: compact ? 84 : 108);
+              final identity = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
+                  const SizedBox(height: WzSpacing.xs),
+                  Text(manifest?.subtitle ?? 'Choose a track from Library to start listening.', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
+                ],
+              );
+              if (compact) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
-                    const SizedBox(height: WzSpacing.xs),
-                    Text(manifest?.subtitle ?? 'Choose a track from Library to start listening.', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
+                    art,
+                    const SizedBox(height: WzSpacing.sm),
+                    identity,
                   ],
-                ),
-              ),
-            ],
+                );
+              }
+              return Row(
+                children: [
+                  art,
+                  const SizedBox(width: WzSpacing.md),
+                  Expanded(child: identity),
+                ],
+              );
+            },
           ),
           const SizedBox(height: WzSpacing.md),
           Wrap(
@@ -2580,14 +2613,16 @@ class _AudioQualityPanel extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           const _PanelHeader(icon: Icons.high_quality, title: 'Audio Quality', subtitle: 'Selection foundation without changing quality logic.'),
           const SizedBox(height: 10),
-          SegmentedButton<AudioQualityTier>(
-            segments: const [
-              ButtonSegment(value: AudioQualityTier.standard, label: Text('Standard')),
-              ButtonSegment(value: AudioQualityTier.high, label: Text('High')),
-              ButtonSegment(value: AudioQualityTier.original, label: Text('Original')),
-            ],
-            selected: {preferredAudioQuality},
-            onSelectionChanged: controlsDisabled ? null : onSelected,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: AudioQualityTier.values
+                .map((tier) => ChoiceChip(
+                      label: Text(tier.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      selected: tier == preferredAudioQuality,
+                      onSelected: controlsDisabled ? null : (_) => onSelected({tier}),
+                    ))
+                .toList(growable: false),
           ),
           const SizedBox(height: 10),
           Text('Preferred quality: ${_productQualityLabel(preferredAudioQuality.label)}', style: _WzTokens.caption),
@@ -2695,25 +2730,26 @@ class _CacheDiagnosticsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _Panel(
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const _PanelHeader(icon: Icons.offline_pin, title: 'Cache / Offline', subtitle: 'Offline Ready plus raw cache counters.'),
-                const SizedBox(height: 10),
-                Text('Cached tracks: $cachedTrackCount • ${(cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
-                Text('Offline cached library: ${offlineLibraryAvailable ? 'available' : 'unavailable'}', style: _WzTokens.caption),
-                Text('Offline cache items: $offlineCachedTrackCount', style: _WzTokens.caption),
-                Text('downloadedTrackCount: $cachedTrackCount', style: _WzTokens.caption),
-                Text('totalCacheBytes: $cacheBytes', style: _WzTokens.caption),
-                Text('manualDownloadedCount: $manualDownloadedCount', style: _WzTokens.caption),
-                Text('smartDownloadedCount: $smartDownloadedCount', style: _WzTokens.caption),
-                Text('Offline status: $lastOfflineLibraryStatus', style: _WzTokens.caption),
-                if (lastCacheResult != null) Text('Last: $lastCacheResult', style: _WzTokens.caption),
-                if (lastCacheDeleteResult != null) Text('lastCacheDeleteResult: $lastCacheDeleteResult', style: _WzTokens.caption),
-              ]),
+            const _PanelHeader(icon: Icons.offline_pin, title: 'Cache / Offline', subtitle: 'Offline Ready plus raw cache counters.'),
+            const SizedBox(height: 10),
+            Text('Cached tracks: $cachedTrackCount • ${(cacheBytes / 1024).toStringAsFixed(1)} KB', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            Text('Offline cached library: ${offlineLibraryAvailable ? 'available' : 'unavailable'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            Text('Offline cache items: $offlineCachedTrackCount', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            Text('downloadedTrackCount: $cachedTrackCount', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            Text('totalCacheBytes: $cacheBytes', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            Text('manualDownloadedCount: $manualDownloadedCount', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            Text('smartDownloadedCount: $smartDownloadedCount', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            Text('Offline status: $lastOfflineLibraryStatus', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            if (lastCacheResult != null) Text('Last: $lastCacheResult', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            if (lastCacheDeleteResult != null) Text('lastCacheDeleteResult: $lastCacheDeleteResult', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonalIcon(onPressed: controlsDisabled ? null : () async { await onClearCache(); }, icon: const Icon(Icons.clear_all), label: const Text('Clear cache')),
             ),
-            FilledButton.tonalIcon(onPressed: controlsDisabled ? null : () async { await onClearCache(); }, icon: const Icon(Icons.clear_all), label: const Text('Clear cache')),
           ],
         ),
       );
@@ -2835,7 +2871,7 @@ class _NowPlayingCard extends StatelessWidget {
     final subtitle = manifest?.subtitle ?? 'Choose a track from Library to begin playback.';
     final status = metrics.isPlaying ? 'Playing' : _statusFromEvent(metrics.lastEvent);
     return WzPanel(
-      padding: const EdgeInsets.all(WzSpacing.xl),
+      padding: const EdgeInsets.all(WzSpacing.md),
       gradient: WzColors.heroGradient,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2843,7 +2879,8 @@ class _NowPlayingCard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final stacked = constraints.maxWidth < 620;
-              final art = _NowHeroArtwork(artworkUrl: manifest?.artworkUrl, size: stacked ? 240 : 280);
+              final artSize = stacked ? math.min(220.0, constraints.maxWidth) : 280.0;
+              final art = _NowHeroArtwork(artworkUrl: manifest?.artworkUrl, size: artSize);
               final identity = _NowTrackIdentity(title: title, subtitle: subtitle, status: status);
               if (stacked) {
                 return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Center(child: art), const SizedBox(height: WzSpacing.xl), identity]);
@@ -3561,9 +3598,16 @@ class _QueueCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              Expanded(child: Text(status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12))),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+              ),
               Switch(value: autoAdvanceEnabled, onChanged: controlsDisabled ? null : onToggleAutoAdvance),
             ],
           ),
@@ -3657,25 +3701,38 @@ class _QueueRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: current ? const Color(0xFF8D7CFF) : upNext ? const Color(0xFF38D996) : const Color(0xFF20273A)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(current ? Icons.equalizer : upNext ? Icons.next_plan : Icons.queue_music, color: current || upNext ? const Color(0xFF8D7CFF) : const Color(0xFF98A1B8)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text(label, style: _WzTokens.caption),
-              ],
-            ),
+          Row(
+            children: [
+              Icon(current ? Icons.equalizer : upNext ? Icons.next_plan : Icons.queue_music, color: current || upNext ? const Color(0xFF8D7CFF) : const Color(0xFF98A1B8)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                  ],
+                ),
+              ),
+            ],
           ),
-          IconButton(tooltip: 'Play/select', onPressed: disabled ? null : onPlay, icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF))),
-          IconButton(tooltip: 'Move up', onPressed: disabled || !canMoveUp ? null : onMoveUp, icon: const Icon(Icons.keyboard_arrow_up, color: Color(0xFF98A1B8))),
-          IconButton(tooltip: 'Move down', onPressed: disabled || !canMoveDown ? null : onMoveDown, icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF98A1B8))),
-          IconButton(tooltip: 'Play next', onPressed: disabled || current || upNext ? null : onPlayNext, icon: const Icon(Icons.low_priority, color: Color(0xFF38D996))),
-          IconButton(tooltip: 'Remove', onPressed: disabled ? null : onRemove, icon: const Icon(Icons.close, color: Color(0xFF98A1B8))),
+          const SizedBox(height: 6),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 2,
+            runSpacing: 2,
+            children: [
+              IconButton(tooltip: 'Play/select', onPressed: disabled ? null : onPlay, icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF))),
+              IconButton(tooltip: 'Move up', onPressed: disabled || !canMoveUp ? null : onMoveUp, icon: const Icon(Icons.keyboard_arrow_up, color: Color(0xFF98A1B8))),
+              IconButton(tooltip: 'Move down', onPressed: disabled || !canMoveDown ? null : onMoveDown, icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF98A1B8))),
+              IconButton(tooltip: 'Play next', onPressed: disabled || current || upNext ? null : onPlayNext, icon: const Icon(Icons.low_priority, color: Color(0xFF38D996))),
+              IconButton(tooltip: 'Remove', onPressed: disabled ? null : onRemove, icon: const Icon(Icons.close, color: Color(0xFF98A1B8))),
+            ],
+          ),
         ],
       ),
     );
@@ -3704,20 +3761,24 @@ class _DownloadsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
               children: [
-                const Expanded(
+                const ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: 480),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Downloads', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                       SizedBox(height: 4),
-                      Text('Cached tracks available for offline playback.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                      Text('Cached tracks available for offline playback.', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
                     ],
                   ),
                 ),
                 Text('${downloads.length} • ${(cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
-                const SizedBox(width: 8),
                 IconButton.outlined(
                   tooltip: 'Clear all cache',
                   onPressed: downloads.isEmpty || controlsDisabled ? null : onClearAll,
@@ -3757,22 +3818,35 @@ class _DownloadRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: Border.all(color: const Color(0xFF20273A)),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Artwork(artworkUrl: track.artworkUrl, size: 48),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  Text('${track.subtitle} • ${track.qualityLabel}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • source: ${_downloadSourceLabel(track.downloadSource)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-                ],
-              ),
+            Row(
+              children: [
+                _Artwork(artworkUrl: track.artworkUrl, size: 48),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text('${track.subtitle} • ${track.qualityLabel}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • source: ${_downloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            IconButton(tooltip: 'Play cached track', onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow, color: Color(0xFF8D7CFF))),
-            IconButton(tooltip: 'Delete cached track', onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
+            const SizedBox(height: 6),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                IconButton(tooltip: 'Play cached track', onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow, color: Color(0xFF8D7CFF))),
+                IconButton(tooltip: 'Delete cached track', onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
+              ],
+            ),
           ],
         ),
       );
@@ -3813,7 +3887,7 @@ class _LibrarySourceSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 168,
+        constraints: const BoxConstraints(minWidth: 132, maxWidth: 220),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: active ? const Color(0x227C5CFF) : const Color(0xFF0B0E18),
@@ -3922,26 +3996,35 @@ class _CatalogListCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _LibrarySourceSummaryCard(title: 'All', detail: '$combinedTrackCount tracks', status: 'Unified library', icon: Icons.library_music, active: librarySourceFilter == _LibrarySourceFilter.all),
-              _LibrarySourceSummaryCard(title: 'API Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue, active: librarySourceFilter == _LibrarySourceFilter.api),
-              _LibrarySourceSummaryCard(title: 'Device Music', detail: '$deviceTrackCount imported', status: 'Permission $devicePermissionStatus • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == _LibrarySourceFilter.device),
-              _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done, active: librarySourceFilter == _LibrarySourceFilter.downloads),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = constraints.maxWidth >= 360
+                  ? (constraints.maxWidth - 10) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'All', detail: '$combinedTrackCount tracks', status: 'Unified library', icon: Icons.library_music, active: librarySourceFilter == _LibrarySourceFilter.all)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'API Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue, active: librarySourceFilter == _LibrarySourceFilter.api)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Device Music', detail: '$deviceTrackCount imported', status: 'Permission $devicePermissionStatus • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == _LibrarySourceFilter.device)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done, active: librarySourceFilter == _LibrarySourceFilter.downloads)),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 12),
-          SegmentedButton<_LibrarySourceFilter>(
-            segments: const [
-              ButtonSegment(value: _LibrarySourceFilter.all, label: Text('All'), icon: Icon(Icons.library_music)),
-              ButtonSegment(value: _LibrarySourceFilter.api, label: Text('API Catalog'), icon: Icon(Icons.cloud_queue)),
-              ButtonSegment(value: _LibrarySourceFilter.device, label: Text('Device Music'), icon: Icon(Icons.phone_android)),
-              ButtonSegment(value: _LibrarySourceFilter.downloads, label: Text('Downloads'), icon: Icon(Icons.download_done)),
-            ],
-            selected: {librarySourceFilter},
-            onSelectionChanged: (selection) => onSourceFilterChanged(selection.first),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _LibrarySourceFilter.values
+                .map((filter) => ChoiceChip(
+                      avatar: Icon(_librarySourceFilterIcon(filter), size: 16),
+                      label: Text(_librarySourceFilterShortLabel(filter), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      selected: librarySourceFilter == filter,
+                      onSelected: (_) => onSourceFilterChanged(filter),
+                    ))
+                .toList(growable: false),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -4010,6 +4093,21 @@ class _CatalogListCard extends StatelessWidget {
     );
   }
 }
+
+IconData _librarySourceFilterIcon(_LibrarySourceFilter filter) => switch (filter) {
+      _LibrarySourceFilter.all => Icons.library_music,
+      _LibrarySourceFilter.api => Icons.cloud_queue,
+      _LibrarySourceFilter.device => Icons.phone_android,
+      _LibrarySourceFilter.downloads => Icons.download_done,
+    };
+
+String _librarySourceFilterShortLabel(_LibrarySourceFilter filter) => switch (filter) {
+      _LibrarySourceFilter.all => 'All',
+      _LibrarySourceFilter.api => 'API',
+      _LibrarySourceFilter.device => 'Device',
+      _LibrarySourceFilter.downloads => 'Downloads',
+    };
+
 class _SourceBadge extends StatelessWidget {
   const _SourceBadge({required this.label, required this.active});
 
@@ -4078,35 +4176,50 @@ class _CatalogRow extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(color: selected ? const Color(0x227C5CFF) : const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: selected ? const Color(0xFF8D7CFF) : const Color(0xFF20273A))),
-        child: Row(children: [
-          _Artwork(artworkUrl: track.artworkUrl, size: 54),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(child: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
-                _SourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                _Artwork(artworkUrl: track.artworkUrl, size: 54),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Expanded(child: Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))),
+                      _SourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(_trackSubtitle(track), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+                    const SizedBox(height: 3),
+                    Text('${asset?.qualityLabel ?? 'quality unknown'}${asset?.codec == null ? '' : ' • ${asset!.codec}'}${isDevice ? ' • Already local' : isCached ? ' • Cached locally' : ' • ${status.name}'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                  ]),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                Text(_formatTime(track.durationMs), style: _timeStyle),
                 if (status == TrackCacheStatus.cached && !isCached)
                   Container(
-                    margin: const EdgeInsets.only(left: 6),
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(color: const Color(0xFF173626), borderRadius: BorderRadius.circular(10)),
                     child: const Text('Cached', style: TextStyle(color: Color(0xFF38D996), fontSize: 10, fontWeight: FontWeight.w800)),
                   ),
-              ]),
-              const SizedBox(height: 4),
-              Text(_trackSubtitle(track), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
-              const SizedBox(height: 3),
-              Text('${asset?.qualityLabel ?? 'quality unknown'}${asset?.codec == null ? '' : ' • ${asset!.codec}'}${isDevice ? ' • Already local' : isCached ? ' • Cached locally' : ' • ${status.name}'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-            ]),
-          ),
-          Text(_formatTime(track.durationMs), style: _timeStyle),
-          IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
-          if (onCache != null) IconButton(tooltip: 'Cache/download', onPressed: onCache, icon: cacheIcon),
-          if (onDeleteCached != null) IconButton(tooltip: 'Delete cached file', onPressed: onDeleteCached, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
-          if (onCache == null && onDeleteCached == null) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.phone_android, color: Color(0xFF38D996))),
-          Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
-        ]),
+                IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
+                if (onCache != null) IconButton(tooltip: 'Cache/download', onPressed: onCache, icon: cacheIcon),
+                if (onDeleteCached != null) IconButton(tooltip: 'Delete cached file', onPressed: onDeleteCached, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
+                if (onCache == null && onDeleteCached == null) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.phone_android, color: Color(0xFF38D996))),
+                Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
