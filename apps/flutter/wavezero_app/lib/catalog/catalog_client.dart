@@ -24,6 +24,11 @@ class CatalogClient {
     return CatalogIndex.fromJson(json);
   }
 
+  Future<ContentStatus> fetchContentStatus() async {
+    final json = await _getJsonObject('$baseUrl/api/content/status');
+    return ContentStatus.fromJson(json);
+  }
+
   Future<CatalogTrackManifest> fetchTrackManifest({
     String trackId = 'track-apple-bipbop-hls',
   }) async {
