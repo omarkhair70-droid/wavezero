@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../audio/audio_effects.dart';
 import '../catalog/audio_quality.dart';
 import '../catalog/catalog_client.dart';
 import '../catalog/catalog_track_manifest.dart';
@@ -72,6 +74,7 @@ class _PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<_PlayerScreen> {
   static const _refreshInterval = Duration(milliseconds: 500);
   static const _autoAdvanceThresholdMs = 1200;
+  static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
 
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
@@ -114,6 +117,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _smartDownloadsEnabled = true;
   AudioQualityTier _preferredAudioQuality = AudioQualityTier.high;
   String _lastQualityFallbackReason = 'No catalog asset selected yet.';
+  AudioEffectProfile _selectedAudioEffectProfile = AudioEffectProfile.off;
+  NativeAudioEffectStatus _nativeAudioEffectStatus = NativeAudioEffectStatus.off;
+  String _lastAudioEffectApplyResult = 'Audio effects are off; original playback is preserved.';
   String? _currentAssetUrl;
   String? _currentCachedQuality;
   final Set<String> _autoCacheInFlight = <String>{};
@@ -223,6 +229,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _poller = Timer.periodic(_refreshInterval, (_) => _refreshMetrics());
     _loadCatalog(fallbackToDemo: true);
     unawaited(_initCache());
+    unawaited(_initAudioEffects());
   }
 
   Future<void> _initCache() async {
@@ -230,6 +237,66 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       await _cacheService.init();
       await _refreshCacheStats();
     } catch (_) {}
+  }
+
+  Future<void> _initAudioEffects() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedProfile = parseAudioEffectProfile(prefs.getString(_audioEffectPreferenceKey));
+      if (!mounted) return;
+      setState(() {
+        _selectedAudioEffectProfile = storedProfile;
+        _nativeAudioEffectStatus = storedProfile == AudioEffectProfile.off
+            ? NativeAudioEffectStatus.off
+            : NativeAudioEffectStatus.pending;
+        _lastAudioEffectApplyResult = storedProfile == AudioEffectProfile.off
+            ? 'Audio effects are off; original playback is preserved.'
+            : 'Restored ${storedProfile.label}; applying to native playback bridge.';
+      });
+      await _applyAudioEffectProfile(storedProfile, persist: false);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _nativeAudioEffectStatus = NativeAudioEffectStatus.failed;
+        _lastAudioEffectApplyResult = 'Could not load audio effect preference: $error';
+      });
+    }
+  }
+
+  Future<void> _setAudioEffectProfile(AudioEffectProfile profile) async {
+    if (_selectedAudioEffectProfile == profile && _nativeAudioEffectStatus != NativeAudioEffectStatus.failed) return;
+    await _applyAudioEffectProfile(profile, persist: true);
+  }
+
+  Future<void> _applyAudioEffectProfile(AudioEffectProfile profile, {required bool persist}) async {
+    if (!mounted) return;
+    setState(() {
+      _selectedAudioEffectProfile = profile;
+      _nativeAudioEffectStatus = profile == AudioEffectProfile.off
+          ? NativeAudioEffectStatus.off
+          : NativeAudioEffectStatus.pending;
+      _lastAudioEffectApplyResult = profile == AudioEffectProfile.off
+          ? 'Turning audio effects off to preserve original playback.'
+          : 'Applying ${profile.label} to native playback bridge...';
+    });
+
+    if (persist) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_audioEffectPreferenceKey, profile.id);
+      } catch (error) {
+        if (mounted) {
+          setState(() => _lastAudioEffectApplyResult = 'Effect selected but preference was not persisted: $error');
+        }
+      }
+    }
+
+    final applyResult = await widget.playbackBridge.setAudioEffectProfile(profile);
+    if (!mounted) return;
+    setState(() {
+      _nativeAudioEffectStatus = applyResult.status;
+      _lastAudioEffectApplyResult = applyResult.message;
+    });
   }
 
   @override
@@ -1470,6 +1537,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             nextPreparedBeforePlay: _nextPreparedBeforePlay,
           ),
           const SizedBox(height: 12),
+          _AudioEffectsPanel(
+            selectedProfile: _selectedAudioEffectProfile,
+            nativeStatus: _nativeAudioEffectStatus,
+            lastApplyResult: _lastAudioEffectApplyResult,
+            preferredAudioQuality: _preferredAudioQuality,
+            controlsDisabled: _queueDisabled,
+            onSelected: _setAudioEffectProfile,
+          ),
+          const SizedBox(height: 12),
           _Panel(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('Audio Quality', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
@@ -1930,6 +2006,72 @@ class _PerformanceBaselinePanel extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _AudioEffectsPanel extends StatelessWidget {
+  const _AudioEffectsPanel({
+    required this.selectedProfile,
+    required this.nativeStatus,
+    required this.lastApplyResult,
+    required this.preferredAudioQuality,
+    required this.controlsDisabled,
+    required this.onSelected,
+  });
+
+  final AudioEffectProfile selectedProfile;
+  final NativeAudioEffectStatus nativeStatus;
+  final String lastApplyResult;
+  final AudioQualityTier preferredAudioQuality;
+  final bool controlsDisabled;
+  final ValueChanged<AudioEffectProfile> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectsMayAlterOriginalAudio = selectedProfile != AudioEffectProfile.off;
+    return _Panel(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Audio Effects', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Text(
+          'Effects may alter original audio. Original/lossless playback stays unchanged unless you explicitly select a profile.',
+          style: _WzTokens.caption,
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: AudioEffectProfile.values
+              .map(
+                (profile) => ChoiceChip(
+                  label: Text(profile.shortLabel),
+                  selected: profile == selectedProfile,
+                  onSelected: controlsDisabled ? null : (_) => onSelected(profile),
+                ),
+              )
+              .toList(growable: false),
+        ),
+        const SizedBox(height: 12),
+        Text('Selected effect profile: ${selectedProfile.label}', style: _WzTokens.caption),
+        Text('Description: ${selectedProfile.description}', style: _WzTokens.caption),
+        Text('Profile intensity: ${selectedProfile.safetyLabel}', style: _WzTokens.caption),
+        Text('Bass / Mid / Treble / Preamp: ${_formatDb(selectedProfile.bassGainDb)} / ${_formatDb(selectedProfile.midGainDb)} / ${_formatDb(selectedProfile.trebleGainDb)} / ${_formatDb(selectedProfile.preampGainDb)}', style: _WzTokens.caption),
+        Text('Native effect status: ${nativeStatus.label}', style: _WzTokens.caption),
+        Text('Last effect apply result: $lastApplyResult', style: _WzTokens.caption),
+        if (preferredAudioQuality == AudioQualityTier.original && effectsMayAlterOriginalAudio) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Original quality is selected and ${selectedProfile.label} was explicitly enabled by the user; effects may alter original audio.',
+            style: _WzTokens.caption.copyWith(color: _WzTokens.warning),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  String _formatDb(double value) {
+    if (value == 0) return '0.0 dB';
+    return '${value > 0 ? '+' : ''}${value.toStringAsFixed(1)} dB';
+  }
 }
 
 class _SmartPreloadCard extends StatelessWidget {

@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../audio/audio_effects.dart';
 import 'playback_metrics.dart';
 
 abstract class PlaybackBridge {
@@ -48,6 +49,8 @@ abstract class PlaybackBridge {
   Future<void> seekTo(int positionMs);
 
   Future<void> resetMetrics();
+
+  Future<AudioEffectApplyResult> setAudioEffectProfile(AudioEffectProfile profile);
 
   Future<PlaybackMetrics> metricsSnapshot();
 }
@@ -180,6 +183,26 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
 
   @override
   Future<void> resetMetrics() => _invokeVoid('resetMetrics');
+
+  @override
+  Future<AudioEffectApplyResult> setAudioEffectProfile(AudioEffectProfile profile) async {
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'setAudioEffectProfile',
+        profile.toBridgeJson(),
+      );
+      _lastBridgeError = null;
+      return AudioEffectApplyResult.fromJson(result ?? const <Object?, Object?>{});
+    } on MissingPluginException catch (error) {
+      final message = 'Android audio effects bridge is not available: $error';
+      _lastBridgeError = message;
+      return AudioEffectApplyResult.unsupported(message);
+    } on PlatformException catch (error) {
+      final message = 'Android audio effects bridge error: ${error.message ?? error.code}';
+      _lastBridgeError = message;
+      return AudioEffectApplyResult.failed(message);
+    }
+  }
 
   @override
   Future<PlaybackMetrics> metricsSnapshot() async {
@@ -489,6 +512,16 @@ class MockPlaybackBridge implements PlaybackBridge {
       trackTitle: _loadedTitle,
       trackUrl: _loadedUrl,
       lastEvent: 'metrics_reset',
+    );
+  }
+
+  @override
+  Future<AudioEffectApplyResult> setAudioEffectProfile(AudioEffectProfile profile) async {
+    if (profile == AudioEffectProfile.off) {
+      return AudioEffectApplyResult.off('Mock bridge accepted Off / Original; no native DSP is active.');
+    }
+    return AudioEffectApplyResult.unsupported(
+      'Mock bridge accepted ${profile.label}; no native DSP is active in mock playback.',
     );
   }
 
