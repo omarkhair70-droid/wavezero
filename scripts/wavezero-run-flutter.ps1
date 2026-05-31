@@ -1,6 +1,6 @@
 param()
 
-$scriptRoot = Split-Path -Parent $PSScriptRoot
+$scriptRoot = $PSScriptRoot
 $repoRoot = Split-Path -Parent $scriptRoot
 $localIpScript = Join-Path $scriptRoot 'wavezero-local-ip.ps1'
 

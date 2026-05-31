@@ -2,7 +2,8 @@ param(
     [string]$AudioDir = "$env:USERPROFILE\Desktop\wavezero-test-audio"
 )
 
-$scriptRoot = Split-Path -Parent $PSScriptRoot
+$scriptRoot = $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptRoot
 $localIpScript = Join-Path $scriptRoot 'wavezero-local-ip.ps1'
 
 if (-not (Test-Path $localIpScript)) {
