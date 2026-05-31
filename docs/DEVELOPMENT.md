@@ -1937,3 +1937,67 @@ WaveZero #83 does not add auth, cloud sync, database storage, backend uploads, p
 16. Confirm developer mode can inspect content status.
 17. Confirm no real copyrighted/commercial music was added.
 18. Confirm dev-only tracks are not treated as production-safe.
+
+## WaveZero #85 — Personal Cloud Music Vault Foundation
+
+WaveZero #85 adds the first safe Flutter-side foundation for Cloud Vault, a private personal cloud music source concept for music the user owns. The goal is product/data-model/UX readiness for future Google Drive, Dropbox, OneDrive, Nextcloud, and manual private URL work without adding risky provider authentication or backend music storage.
+
+### Cloud Vault safety model
+
+- User cloud files belong to the user.
+- WaveZero does not upload cloud files to WaveZero servers.
+- Only files the user chooses should appear in Cloud Vault.
+- Sharing copyrighted files with others is not supported.
+- Cloud Vault is a private playback/source organization feature, not a piracy, public redistribution, or friend-to-friend transfer feature.
+- The foundation does not scan an entire cloud drive and does not ingest YouTube, SoundCloud, Spotify, Anghami, or commercial catalog tracks.
+
+### Provider roadmap
+
+Provider cards are intentionally placeholders:
+
+- Google Drive — Coming soon
+- Dropbox — Later
+- OneDrive — Later
+- Nextcloud / self-hosted — Later
+- Manual private URL — Developer preview only when Developer Mode is enabled
+
+Future provider work must be reviewed separately before adding OAuth, token refresh, provider SDKs, signed URL resolution, or cloud account sync.
+
+### What is stored locally
+
+Cloud Vault stores a SharedPreferences JSON list containing lightweight metadata such as `cloudTrackId`, title, artist/album names, duration, artwork URL, provider enum, provider file placeholder, source/playable URI placeholders, MIME type, size, import/play timestamps, availability, and privacy/local-only flags.
+
+Corrupt Cloud Vault JSON fails safe: the raw payload is moved to a corruption backup preference key and the active Cloud Vault list returns empty.
+
+### What is not stored
+
+WaveZero #85 does not store OAuth tokens, refresh tokens, provider credentials, Google API credentials, backend database rows, uploaded user music, public sharing links, provider sync account state, DRM state, or payment/subscription state.
+
+### Privacy/legal boundaries
+
+Cloud Vault is private source organization for music the user owns. WaveZero does not claim rights to user cloud files, does not upload those files to WaveZero servers, and does not support redistribution of copyrighted files. Future provider integrations must preserve the consumer-safe copy and keep developer-only controls separated from consumer mode.
+
+### Manual checklist
+
+1. Start app.
+2. Open Settings.
+3. Open Cloud Vault.
+4. Confirm consumer copy is privacy-safe.
+5. Confirm provider cards show coming-soon states.
+6. Confirm no OAuth/token/API credential UI appears in consumer mode.
+7. Enable Developer Mode.
+8. Confirm developer preview/manual seed controls appear only in Developer Mode.
+9. Add a manual test cloud track if supported.
+10. Confirm it appears in Cloud Vault list.
+11. Confirm unavailable cloud tracks show friendly unavailable copy.
+12. Confirm playable developer-preview track uses existing playback path.
+13. Confirm Add to Queue works only when track is resolvable.
+14. Confirm remove-one and clear-all work.
+15. Restart app and confirm Cloud Vault entries persist.
+16. Corrupt/clear storage behavior should fail safe.
+17. Confirm Library/Search integration does not clutter consumer UI.
+18. Confirm no raw provider IDs/tokens/URLs appear in consumer surfaces unless Developer Mode is active.
+19. Confirm Device Music, Downloads, Library, Search, Queue, Now, Settings still work.
+20. Confirm no bottom-nav item was added.
+
+See [Cloud Vault](cloud-vault.md) for the detailed safety model and roadmap.

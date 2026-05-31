@@ -16,6 +16,8 @@ import '../playback/playback_bridge.dart';
 import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
 import '../cache/cache_service.dart';
+import '../cloud_vault/cloud_vault_models.dart';
+import '../cloud_vault/cloud_vault_service.dart';
 import '../design/wavezero_design_system.dart';
 import '../device_music/device_music_service.dart';
 import '../device_music/device_music_track.dart';
@@ -351,6 +353,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   late final TextEditingController _apiBaseUrlController;
   late final TextEditingController _searchController;
   late final TextEditingController _fullSearchController;
+  late final TextEditingController _cloudSeedTitleController;
+  late final TextEditingController _cloudSeedArtistController;
+  late final TextEditingController _cloudSeedUrlController;
+  late final TextEditingController _cloudSeedProviderController;
 
   Timer? _poller;
   Timer? _sleepTimer;
@@ -362,6 +368,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   DeviceMusicPermissionStatus _deviceMusicPermissionStatus = const DeviceMusicPermissionStatus(status: 'unknown');
   String _deviceMusicScanStatus = 'not_scanned';
   List<DeviceMusicTrack> _deviceMusicTracks = const [];
+  final CloudVaultService _cloudVaultService = const CloudVaultService();
+  List<CloudVaultTrack> _cloudVaultTracks = const [];
   int _deviceMusicLastScanCount = 0;
   String? _deviceMusicLastError;
   int? _deviceMusicImportedAtMs;
@@ -508,18 +516,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<CatalogTrackSummary> get _cachedCatalogTracks =>
       _cachedLibrary.map(_catalogSummaryFromCachedTrack).toList(growable: false);
 
+  List<CatalogTrackSummary> get _cloudCatalogTracks =>
+      _cloudVaultTracks.map((track) => track.toCatalogSummary()).toList(growable: false);
+
   List<CatalogTrackSummary> get _libraryTracks {
     return switch (_librarySourceFilter) {
-      _LibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks, ..._cachedCatalogTracks],
+      _LibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks, ..._cachedCatalogTracks, ..._cloudCatalogTracks],
       _LibrarySourceFilter.api => _catalog,
       _LibrarySourceFilter.device => _deviceCatalogTracks,
       _LibrarySourceFilter.downloads => _cachedCatalogTracks,
+      _LibrarySourceFilter.cloud => _cloudCatalogTracks,
     };
   }
 
   int get _libraryTotalTrackCount => _libraryTracks.length;
 
-  int get _libraryCombinedTrackCount => _catalog.length + _deviceMusicTracks.length + _cachedLibrary.length;
+  int get _libraryCombinedTrackCount => _catalog.length + _deviceMusicTracks.length + _cachedLibrary.length + _cloudVaultTracks.length;
 
   List<CatalogTrackSummary> get _filteredCatalog =>
       _sortLibraryTracks(_libraryTracks.where((track) => track.matchesQuery(_catalogQuery)).toList(growable: false));
@@ -571,6 +583,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
     for (final track in _cachedCatalogTracks) {
       results.add(resultForTrack(track, WzSearchResultType.downloadedTrack, WzSearchSource.downloads, 'Offline Ready download'));
+    }
+    for (final track in _cloudCatalogTracks) {
+      results.add(resultForTrack(track, WzSearchResultType.cloudTrack, WzSearchSource.cloudVault, 'Cloud Vault metadata only'));
     }
 
     for (final collection in _collections) {
@@ -727,6 +742,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _apiBaseUrlController = TextEditingController(text: widget.appConfig.apiBaseUrl);
     _searchController = TextEditingController();
     _fullSearchController = TextEditingController();
+    _cloudSeedTitleController = TextEditingController();
+    _cloudSeedArtistController = TextEditingController();
+    _cloudSeedUrlController = TextEditingController();
+    _cloudSeedProviderController = TextEditingController(text: CloudVaultProvider.manualUrl.label);
     _searchController.addListener(() {
       if (mounted) setState(() => _catalogQuery = _searchController.text);
     });
@@ -742,7 +761,127 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_loadCollections());
     unawaited(_loadListeningHistory());
     unawaited(_loadRecentSearches());
+    unawaited(_loadCloudVault());
     unawaited(_loadPlaybackModePrefs());
+  }
+
+  Future<void> _loadCloudVault() async {
+    final tracks = await _cloudVaultService.listTracks();
+    if (!mounted) return;
+    setState(() => _cloudVaultTracks = tracks);
+  }
+
+  Future<void> _addDeveloperCloudSeed() async {
+    final title = _cloudSeedTitleController.text.trim();
+    final playableUrl = _cloudSeedUrlController.text.trim();
+    if (title.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add a title for the developer preview track.')));
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final track = CloudVaultTrack(
+      cloudTrackId: 'cloud-manual-$now',
+      title: title,
+      artistName: _cloudSeedArtistController.text.trim().isEmpty ? null : _cloudSeedArtistController.text.trim(),
+      provider: CloudVaultProvider.manualUrl,
+      providerFileId: _cloudSeedProviderController.text.trim().isEmpty ? null : _cloudSeedProviderController.text.trim(),
+      sourceUri: playableUrl.isEmpty ? null : playableUrl,
+      playableUri: playableUrl.isEmpty ? null : playableUrl,
+      importedAtMs: now,
+      isAvailable: playableUrl.isNotEmpty,
+      isLocalOnly: true,
+      isPrivate: true,
+      userOwned: true,
+    );
+    final next = await _cloudVaultService.addTrack(track);
+    if (!mounted) return;
+    setState(() => _cloudVaultTracks = next);
+    _cloudSeedTitleController.clear();
+    _cloudSeedArtistController.clear();
+    _cloudSeedUrlController.clear();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Developer preview cloud track added locally.')));
+  }
+
+  Future<void> _removeCloudVaultTrack(CloudVaultTrack track) async {
+    final next = await _cloudVaultService.removeTrack(track.cloudTrackId);
+    if (!mounted) return;
+    setState(() => _cloudVaultTracks = next);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Removed from Cloud Vault.')));
+  }
+
+  Future<void> _clearCloudVaultTracks() async {
+    await _cloudVaultService.clearTracks();
+    if (!mounted) return;
+    setState(() => _cloudVaultTracks = const <CloudVaultTrack>[]);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Vault entries cleared from this device.')));
+  }
+
+  Future<void> _playCloudVaultTrack(CloudVaultTrack track, {bool autoPlay = true}) async {
+    if (!track.isResolvable) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud playback is not connected yet.')));
+      return;
+    }
+    final manifest = CatalogTrackManifest(
+      trackId: track.cloudTrackId,
+      title: track.title,
+      streamUrl: track.playableUri!,
+      artistName: track.artistName,
+      durationMs: track.durationMs,
+      artworkUrl: track.artworkUrl,
+      assetId: 'cloud-vault-${track.cloudTrackId}',
+      qualityLabel: 'Cloud',
+      codec: track.mimeType,
+      fileSizeBytes: track.fileSizeBytes,
+      license: const LicenseMetadata(
+        status: LicenseStatus.userDevice,
+        sourceName: 'Cloud Vault',
+        usageNotes: 'Private user-owned cloud source. Public redistribution is not supported.',
+      ),
+    );
+    return _runOperation(PlayerOperation.loadingManualTrack, () async {
+      await _clearNativeNextPrebuffer();
+      await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
+      await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: 'cloud_vault');
+      final next = await _cloudVaultService.markPlayed(track.cloudTrackId, DateTime.now().millisecondsSinceEpoch);
+      if (!mounted) return;
+      setState(() {
+        _cloudVaultTracks = next;
+        _manifest = manifest;
+        _selectedTrackId = manifest.trackId;
+        _queueCurrentTrackId = manifest.trackId;
+        _currentAssetUrl = manifest.streamUrl;
+        _currentCachedQuality = null;
+        _catalogStatus = 'Loaded Cloud Vault track: ${manifest.title}';
+      });
+      if (autoPlay) await widget.playbackBridge.play();
+      unawaited(_saveSession());
+    });
+  }
+
+  void _addCloudVaultTrackToQueue(CloudVaultTrack track) {
+    if (!track.isResolvable) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud playback is not connected yet.')));
+      return;
+    }
+    _addToQueue(track.toCatalogSummary());
+  }
+
+  Future<void> _openCloudVaultPage() async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _CloudVaultPage(
+        tracks: _cloudVaultTracks,
+        developerMode: _developerMode,
+        titleController: _cloudSeedTitleController,
+        artistController: _cloudSeedArtistController,
+        playableUrlController: _cloudSeedUrlController,
+        providerLabelController: _cloudSeedProviderController,
+        onAddDeveloperTrack: _addDeveloperCloudSeed,
+        onPlay: _playCloudVaultTrack,
+        onAddToQueue: _addCloudVaultTrackToQueue,
+        onRemove: (track) => unawaited(_removeCloudVaultTrack(track)),
+        onClearAll: _cloudVaultTracks.isEmpty ? null : () => unawaited(_clearCloudVaultTracks()),
+      ),
+    ));
   }
 
   Future<void> _loadListeningHistory() async {
@@ -1461,6 +1600,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _apiBaseUrlController.dispose();
     _searchController.dispose();
     _fullSearchController.dispose();
+    _cloudSeedTitleController.dispose();
+    _cloudSeedArtistController.dispose();
+    _cloudSeedUrlController.dispose();
+    _cloudSeedProviderController.dispose();
     super.dispose();
   }
 
@@ -2073,6 +2216,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final deviceTrack = _findDeviceTrack(id);
     if (deviceTrack != null) {
       return _loadDeviceMusicTrack(deviceTrack, autoPlay: autoPlay, operation: operation, status: status);
+    }
+    CloudVaultTrack? cloudTrack;
+    for (final candidate in _cloudVaultTracks) {
+      if (candidate.cloudTrackId == id) {
+        cloudTrack = candidate;
+        break;
+      }
+    }
+    if (cloudTrack != null) {
+      return _playCloudVaultTrack(cloudTrack, autoPlay: autoPlay);
     }
     return _runOperation(operation, () async {
       final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
@@ -3034,6 +3187,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             apiTrackCount: _catalog.length,
             deviceTrackCount: _deviceMusicTracks.length,
             cachedTrackCount: _cachedLibrary.length,
+            cloudTrackCount: _cloudVaultTracks.length,
             combinedTrackCount: _libraryCombinedTrackCount,
             cacheBytes: _cacheBytes,
             selectedTrackId: _selectedTrackId,
@@ -3051,6 +3205,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onSortModeChanged: (mode) => setState(() => _librarySortMode = mode),
             onClearSearch: () => _searchController.clear(),
             onOpenFullSearch: () => _openSearch(query: _searchController.text),
+            onOpenCloudVault: _openCloudVaultPage,
             onRefresh: () => _loadCatalog(),
             onImportDeviceMusic: _importDeviceMusic,
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
@@ -3345,6 +3500,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer),
       onOpenEngine: _developerMode ? () => _navigateTo(_AppTab.engine) : null,
       onManageStorage: () => _navigateTo(_AppTab.storage),
+      cloudVaultCount: _cloudVaultTracks.length,
+      onOpenCloudVault: _openCloudVaultPage,
+      onClearCloudVault: _cloudVaultTracks.isEmpty ? null : () => unawaited(_clearCloudVaultTracks()),
       listeningHistoryCount: _listeningHistory.length,
       mostPlayedHistoryTitle: _mostPlayedHistoryEntry?.title,
       onOpenHistory: () => _navigateTo(_AppTab.history),
@@ -3453,7 +3611,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
 enum QueueAdvanceSource { manual, next, previous, auto, shuffle }
 
-enum _LibrarySourceFilter { all, api, device, downloads }
+enum _LibrarySourceFilter { all, api, device, downloads, cloud }
 
 extension _LibrarySourceFilterLabel on _LibrarySourceFilter {
   String get label => switch (this) {
@@ -3461,15 +3619,16 @@ extension _LibrarySourceFilterLabel on _LibrarySourceFilter {
         _LibrarySourceFilter.api => 'Catalog',
         _LibrarySourceFilter.device => 'Device music',
         _LibrarySourceFilter.downloads => 'Downloaded',
+        _LibrarySourceFilter.cloud => 'Cloud',
       };
 }
 
 
-enum WzSearchResultType { track, deviceTrack, downloadedTrack, collection, historyEntry, artistLike, unknown }
+enum WzSearchResultType { track, deviceTrack, downloadedTrack, cloudTrack, collection, historyEntry, artistLike, unknown }
 
-enum WzSearchSource { apiCatalog, deviceMusic, downloads, collections, history, legalDemo }
+enum WzSearchSource { apiCatalog, deviceMusic, downloads, cloudVault, collections, history, legalDemo }
 
-enum _SearchFilter { all, songs, device, downloads, collections, history, legalDemo }
+enum _SearchFilter { all, songs, device, downloads, cloud, collections, history, legalDemo }
 
 extension _SearchFilterLabel on _SearchFilter {
   String get label => switch (this) {
@@ -3477,6 +3636,7 @@ extension _SearchFilterLabel on _SearchFilter {
         _SearchFilter.songs => 'Songs',
         _SearchFilter.device => 'Device',
         _SearchFilter.downloads => 'Downloads',
+        _SearchFilter.cloud => 'Cloud',
         _SearchFilter.collections => 'Collections',
         _SearchFilter.history => 'History',
         _SearchFilter.legalDemo => 'Legal / Demo',
@@ -3540,6 +3700,7 @@ String _searchSourceLabel(WzSearchSource source) => switch (source) {
       WzSearchSource.apiCatalog => 'Catalog',
       WzSearchSource.deviceMusic => 'Device music',
       WzSearchSource.downloads => 'Downloads',
+      WzSearchSource.cloudVault => 'Cloud Vault',
       WzSearchSource.collections => 'Collections',
       WzSearchSource.history => 'History',
       WzSearchSource.legalDemo => 'Legal demo catalog',
@@ -3549,6 +3710,7 @@ String _searchTypeLabel(WzSearchResultType type) => switch (type) {
       WzSearchResultType.track => 'Song',
       WzSearchResultType.deviceTrack => 'Device song',
       WzSearchResultType.downloadedTrack => 'Offline song',
+      WzSearchResultType.cloudTrack => 'Cloud track',
       WzSearchResultType.collection => 'Collection',
       WzSearchResultType.historyEntry => 'Recent play',
       WzSearchResultType.artistLike => 'Artist',
@@ -3558,6 +3720,7 @@ String _searchTypeLabel(WzSearchResultType type) => switch (type) {
 IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
       WzSearchResultType.deviceTrack => Icons.phone_android,
       WzSearchResultType.downloadedTrack => Icons.download_done,
+      WzSearchResultType.cloudTrack => Icons.cloud_done_outlined,
       WzSearchResultType.collection => Icons.playlist_play,
       WzSearchResultType.historyEntry => Icons.history,
       WzSearchResultType.artistLike => Icons.person,
@@ -3566,9 +3729,10 @@ IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
 
 bool _searchFilterAllows(_SearchFilter filter, WzSearchResult result) => switch (filter) {
       _SearchFilter.all => true,
-      _SearchFilter.songs => result.type == WzSearchResultType.track || result.type == WzSearchResultType.deviceTrack || result.type == WzSearchResultType.downloadedTrack,
+      _SearchFilter.songs => result.type == WzSearchResultType.track || result.type == WzSearchResultType.deviceTrack || result.type == WzSearchResultType.downloadedTrack || result.type == WzSearchResultType.cloudTrack,
       _SearchFilter.device => result.source == WzSearchSource.deviceMusic,
       _SearchFilter.downloads => result.source == WzSearchSource.downloads,
+      _SearchFilter.cloud => result.source == WzSearchSource.cloudVault,
       _SearchFilter.collections => result.type == WzSearchResultType.collection || result.source == WzSearchSource.collections,
       _SearchFilter.history => result.source == WzSearchSource.history,
       _SearchFilter.legalDemo => result.source == WzSearchSource.legalDemo || result.license?.needsRightsWarning == true,
@@ -4197,6 +4361,225 @@ class _HistoryEntryTile extends StatelessWidget {
 }
 
 
+class _CloudVaultPage extends StatelessWidget {
+  const _CloudVaultPage({
+    required this.tracks,
+    required this.developerMode,
+    required this.titleController,
+    required this.artistController,
+    required this.playableUrlController,
+    required this.providerLabelController,
+    required this.onAddDeveloperTrack,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onRemove,
+    required this.onClearAll,
+  });
+
+  final List<CloudVaultTrack> tracks;
+  final bool developerMode;
+  final TextEditingController titleController;
+  final TextEditingController artistController;
+  final TextEditingController playableUrlController;
+  final TextEditingController providerLabelController;
+  final Future<void> Function() onAddDeveloperTrack;
+  final ValueChanged<CloudVaultTrack> onPlay;
+  final ValueChanged<CloudVaultTrack> onAddToQueue;
+  final ValueChanged<CloudVaultTrack> onRemove;
+  final VoidCallback? onClearAll;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Cloud Vault')),
+        body: WzPageScaffold(
+          children: [
+            const WzPageHeader(
+              icon: Icons.cloud_done_outlined,
+              title: 'Cloud Vault',
+              subtitle: 'Play music you own from your private cloud sources.',
+            ),
+            const SizedBox(height: WzSpacing.md),
+            const WzSectionHeader(title: 'Privacy-first foundation', subtitle: 'Cloud Vault stores source metadata locally and does not add cloud auth yet.', icon: Icons.privacy_tip),
+            const WzPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('WaveZero does not upload your cloud files to WaveZero servers.', style: WzText.body),
+                  SizedBox(height: WzSpacing.xs),
+                  Text('Only files you choose should appear here.', style: WzText.body),
+                  SizedBox(height: WzSpacing.xs),
+                  Text('Sharing copyrighted files with others is not supported.', style: WzText.body),
+                ],
+              ),
+            ),
+            const SizedBox(height: WzSpacing.md),
+            const WzSectionHeader(title: 'Private source providers', subtitle: 'Provider connections are intentionally coming-soon; no OAuth, tokens, uploads, or account sync are present.', icon: Icons.cloud_queue),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final cardWidth = constraints.maxWidth >= 360 ? (constraints.maxWidth - 10) / 2 : constraints.maxWidth;
+                final cards = <Widget>[
+                  _CloudProviderCard(title: 'Google Drive', status: 'Coming soon', icon: Icons.add_to_drive),
+                  _CloudProviderCard(title: 'Dropbox', status: 'Later', icon: Icons.cloud_outlined),
+                  _CloudProviderCard(title: 'OneDrive', status: 'Later', icon: Icons.cloud_circle_outlined),
+                  _CloudProviderCard(title: 'Nextcloud / self-hosted', status: 'Later', icon: Icons.dns_outlined),
+                  if (developerMode) _CloudProviderCard(title: 'Manual private URL', status: 'Developer preview', icon: Icons.link),
+                ];
+                return Wrap(spacing: 10, runSpacing: 10, children: cards.map((card) => SizedBox(width: cardWidth, child: card)).toList(growable: false));
+              },
+            ),
+            if (developerMode) ...[
+              const SizedBox(height: WzSpacing.md),
+              const WzSectionHeader(title: 'Developer preview', subtitle: 'Manual seed controls are only visible in Developer Mode and persist locally for test playback.', icon: Icons.developer_mode),
+              WzPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Developer preview: add a private URL placeholder for local UI and playback-path testing. Do not add public copyrighted catalog links.', style: WzText.caption),
+                    const SizedBox(height: WzSpacing.sm),
+                    TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Title')),
+                    const SizedBox(height: WzSpacing.sm),
+                    TextField(controller: artistController, decoration: const InputDecoration(labelText: 'Artist')),
+                    const SizedBox(height: WzSpacing.sm),
+                    TextField(controller: playableUrlController, decoration: const InputDecoration(labelText: 'Playable URL')),
+                    const SizedBox(height: WzSpacing.sm),
+                    TextField(controller: providerLabelController, decoration: const InputDecoration(labelText: 'Provider label')),
+                    const SizedBox(height: WzSpacing.md),
+                    Align(alignment: Alignment.centerLeft, child: WzPrimaryAction(label: 'Add developer preview track', icon: Icons.add_link, onPressed: () => unawaited(onAddDeveloperTrack()))),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: WzSpacing.md),
+            WzPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(child: Text('Cloud music entries', style: WzText.title)),
+                      Text('${tracks.length} tracks', style: WzText.caption),
+                    ],
+                  ),
+                  const SizedBox(height: WzSpacing.sm),
+                  if (tracks.isEmpty) ...[
+                    const _EmptyCatalogMessage(message: 'No cloud music connected yet.\nYour device music and downloads still work offline.'),
+                  ] else ...[
+                    ...tracks.map((track) => _CloudVaultTrackRow(
+                          track: track,
+                          developerMode: developerMode,
+                          onPlay: track.isResolvable ? () => onPlay(track) : () => onPlay(track),
+                          onAddToQueue: track.isResolvable ? () => onAddToQueue(track) : null,
+                          onRemove: () => onRemove(track),
+                        )),
+                    const SizedBox(height: WzSpacing.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: onClearAll,
+                        icon: const Icon(Icons.delete_sweep),
+                        label: const Text('Clear all Cloud Vault entries from this device'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _CloudProviderCard extends StatelessWidget {
+  const _CloudProviderCard({required this.title, required this.status, required this.icon});
+
+  final String title;
+  final String status;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        child: Row(
+          children: [
+            Icon(icon, color: WzColors.accentAlt),
+            const SizedBox(width: WzSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: WzText.sectionTitle),
+                  const SizedBox(height: WzSpacing.xs),
+                  Text(status, style: WzText.caption),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _CloudVaultTrackRow extends StatelessWidget {
+  const _CloudVaultTrackRow({
+    required this.track,
+    required this.developerMode,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onRemove,
+  });
+
+  final CloudVaultTrack track;
+  final bool developerMode;
+  final VoidCallback onPlay;
+  final VoidCallback? onAddToQueue;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(top: WzSpacing.sm),
+        padding: const EdgeInsets.all(WzSpacing.sm),
+        decoration: BoxDecoration(
+          color: WzColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(WzRadius.md),
+          border: Border.all(color: WzColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(track.isResolvable ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, color: track.isResolvable ? WzColors.accentAlt : WzColors.textSubtle),
+                const SizedBox(width: WzSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                      Text('${track.subtitle} • ${track.provider.label}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: WzSpacing.xs),
+            Text(track.isResolvable ? 'Private placeholder is available through the existing playback path.' : 'Cloud playback is not connected yet.', style: WzText.caption),
+            if (developerMode && track.playableUri?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: WzSpacing.xs),
+              Text('Developer preview URL: ${track.playableUri}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            ],
+            const SizedBox(height: WzSpacing.sm),
+            Wrap(
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: [
+                FilledButton.tonalIcon(onPressed: onPlay, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
+                OutlinedButton.icon(onPressed: onAddToQueue, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
+                OutlinedButton.icon(onPressed: onRemove, icon: const Icon(Icons.delete_outline), label: const Text('Remove from Vault')),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
 class _SettingsPage extends StatelessWidget {
   const _SettingsPage({
     required this.themeConfig,
@@ -4238,6 +4621,9 @@ class _SettingsPage extends StatelessWidget {
     required this.onDeveloperModeChanged,
     required this.onOpenEngine,
     required this.onManageStorage,
+    required this.cloudVaultCount,
+    required this.onOpenCloudVault,
+    required this.onClearCloudVault,
     required this.listeningHistoryCount,
     required this.mostPlayedHistoryTitle,
     required this.onOpenHistory,
@@ -4286,6 +4672,9 @@ class _SettingsPage extends StatelessWidget {
   final ValueChanged<bool> onDeveloperModeChanged;
   final VoidCallback? onOpenEngine;
   final VoidCallback onManageStorage;
+  final int cloudVaultCount;
+  final VoidCallback onOpenCloudVault;
+  final VoidCallback? onClearCloudVault;
   final int listeningHistoryCount;
   final String? mostPlayedHistoryTitle;
   final VoidCallback onOpenHistory;
@@ -4465,6 +4854,36 @@ class _SettingsPage extends StatelessWidget {
                       icon: const Icon(Icons.clear_all),
                       label: const Text('Clear all downloads'),
                     ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Cloud Vault / Personal Cloud Music', subtitle: 'Private cloud sources stay local until future providers are connected.', icon: Icons.cloud_done_outlined),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzMiniMetric(label: 'Imported', value: '$cloudVaultCount', active: cloudVaultCount > 0, icon: Icons.library_music),
+                    const WzMiniMetric(label: 'Privacy', value: 'Local only', active: true, icon: Icons.lock),
+                    const WzMiniMetric(label: 'Sharing', value: 'Unsupported', active: true, icon: Icons.block),
+                  ],
+                ),
+                const SizedBox(height: WzSpacing.sm),
+                const Text('Cloud Vault is for music you own from private cloud sources. WaveZero does not upload your cloud files to WaveZero servers.', style: WzText.caption),
+                const Text('Google Drive, Dropbox, OneDrive, and Nextcloud integrations are future provider work; no OAuth tokens or API credentials are stored here.', style: WzText.caption),
+                const SizedBox(height: WzSpacing.md),
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzPrimaryAction(label: 'Open Cloud Vault', icon: Icons.cloud_done_outlined, onPressed: onOpenCloudVault),
+                    OutlinedButton.icon(onPressed: onClearCloudVault, icon: const Icon(Icons.delete_sweep), label: const Text('Clear Cloud Vault entries')),
                   ],
                 ),
               ],
@@ -7169,6 +7588,7 @@ class _CatalogListCard extends StatelessWidget {
     required this.apiTrackCount,
     required this.deviceTrackCount,
     required this.cachedTrackCount,
+    required this.cloudTrackCount,
     required this.combinedTrackCount,
     required this.cacheBytes,
     required this.selectedTrackId,
@@ -7186,6 +7606,7 @@ class _CatalogListCard extends StatelessWidget {
     required this.onSortModeChanged,
     required this.onClearSearch,
     required this.onOpenFullSearch,
+    required this.onOpenCloudVault,
     required this.onRefresh,
     required this.onImportDeviceMusic,
     required this.onSelectTrack,
@@ -7204,6 +7625,7 @@ class _CatalogListCard extends StatelessWidget {
   final int apiTrackCount;
   final int deviceTrackCount;
   final int cachedTrackCount;
+  final int cloudTrackCount;
   final int combinedTrackCount;
   final int cacheBytes;
   final String? selectedTrackId;
@@ -7221,6 +7643,7 @@ class _CatalogListCard extends StatelessWidget {
   final ValueChanged<_LibrarySortMode> onSortModeChanged;
   final VoidCallback onClearSearch;
   final VoidCallback onOpenFullSearch;
+  final VoidCallback onOpenCloudVault;
   final VoidCallback onRefresh;
   final VoidCallback onImportDeviceMusic;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
@@ -7272,6 +7695,7 @@ class _CatalogListCard extends StatelessWidget {
                   SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue, active: librarySourceFilter == _LibrarySourceFilter.api)),
                   SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Device music', detail: '$deviceTrackCount imported', status: 'Permission $devicePermissionStatus • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == _LibrarySourceFilter.device)),
                   SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done, active: librarySourceFilter == _LibrarySourceFilter.downloads)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Private sources • coming soon', icon: Icons.cloud_done_outlined, active: librarySourceFilter == _LibrarySourceFilter.cloud)),
                 ],
               );
             },
@@ -7309,6 +7733,11 @@ class _CatalogListCard extends StatelessWidget {
                 onPressed: onOpenFullSearch,
                 icon: const Icon(Icons.search),
                 label: const Text('Open full search'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onOpenCloudVault,
+                icon: const Icon(Icons.cloud_done_outlined),
+                label: const Text('Cloud Vault'),
               ),
               Text('Permission: $devicePermissionStatus', style: _WzTokens.caption),
               Text('Device scan: $deviceScanStatus • $deviceTrackCount tracks', style: _WzTokens.caption),
@@ -7355,13 +7784,13 @@ class _CatalogListCard extends StatelessWidget {
           else ...tracks.map((track) => _CatalogRow(
                 track: track,
                 selected: track.trackId == selectedTrackId,
-                addDisabled: addToQueueDisabled,
+                addDisabled: addToQueueDisabled || (track.source == 'cloud_vault' && track.primaryAsset == null),
                 onTap: () => onSelectTrack(track),
                 onAdd: () => onAddToQueue(track),
                 onToggleLike: () => onToggleLike(track),
                 onAddToCollection: () => onAddToCollection(track),
                 liked: isLiked(track),
-                onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) ? null : () => onCache(track),
+                onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) || track.source == 'cloud_vault' ? null : () => onCache(track),
                 onDeleteCached: _isCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
               )),
         ],
@@ -7375,6 +7804,7 @@ IconData _librarySourceFilterIcon(_LibrarySourceFilter filter) => switch (filter
       _LibrarySourceFilter.api => Icons.cloud_queue,
       _LibrarySourceFilter.device => Icons.phone_android,
       _LibrarySourceFilter.downloads => Icons.download_done,
+      _LibrarySourceFilter.cloud => Icons.cloud_done_outlined,
     };
 
 String _librarySourceFilterShortLabel(_LibrarySourceFilter filter) => switch (filter) {
@@ -7382,6 +7812,7 @@ String _librarySourceFilterShortLabel(_LibrarySourceFilter filter) => switch (fi
       _LibrarySourceFilter.api => 'API',
       _LibrarySourceFilter.device => 'Device',
       _LibrarySourceFilter.downloads => 'Downloads',
+      _LibrarySourceFilter.cloud => 'Cloud',
     };
 
 class _SourceBadge extends StatelessWidget {
@@ -7653,7 +8084,7 @@ class _CatalogRow extends StatelessWidget {
                 IconButton(tooltip: 'Add to collection', onPressed: onAddToCollection, icon: const Icon(Icons.library_add, color: Color(0xFF8D7CFF))),
                 if (onCache != null) IconButton(tooltip: 'Cache/download', onPressed: onCache, icon: cacheIcon),
                 if (onDeleteCached != null) IconButton(tooltip: 'Delete cached file', onPressed: onDeleteCached, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
-                if (onCache == null && onDeleteCached == null) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.phone_android, color: Color(0xFF38D996))),
+                if (onCache == null && onDeleteCached == null) Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Icon(track.source == 'cloud_vault' ? Icons.cloud_done_outlined : Icons.phone_android, color: const Color(0xFF38D996))),
                 Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
               ],
             ),

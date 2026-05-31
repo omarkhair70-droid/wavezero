@@ -53,19 +53,11 @@ class ContentStatus {
       contentMode: _readString(json['contentMode'] ?? json['content_mode'] ?? json['mode']),
       catalogLoaded: _readBool(json['catalogLoaded'] ?? json['catalog_loaded']) ?? false,
       trackCount: _readInt(json['trackCount'] ?? json['track_count'] ?? json['tracks']) ?? 0,
-  factory ContentStatus.fromJson(Map<String, Object?> json) {
-    final error = _readMap(json['error']);
-    return ContentStatus(
-      ok: _readBool(json['ok']) ?? false,
-      contentMode: _readString(json['contentMode'] ?? json['content_mode']),
-      catalogLoaded: _readBool(json['catalogLoaded'] ?? json['catalog_loaded']) ?? false,
-      trackCount: _readInt(json['trackCount'] ?? json['track_count']) ?? 0,
-      assetCount: _readInt(json['assetCount'] ?? json['asset_count']) ?? 0,
+      assetCount: _readInt(json['assetCount'] ?? json['asset_count'] ?? json['assets']) ?? 0,
       localFolderCatalogEnabled: _readBool(json['localFolderCatalogEnabled'] ?? json['local_folder_catalog_enabled']) ?? false,
       productionSafeTrackCount: _readInt(json['productionSafeTrackCount'] ?? json['production_safe_track_count']) ?? 0,
       serverVersion: _readString(json['serverVersion'] ?? json['server_version']),
       errorMessage: _readString(error?['message']) ?? _readString(error?['error']) ?? _readString(json['message'] ?? json['status']),
-      errorMessage: _readString(error?['message']) ?? _readString(error?['error']),
     );
   }
 
