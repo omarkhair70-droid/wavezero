@@ -1775,6 +1775,74 @@ The Flutter auto-advance path now evaluates playback modes in this order:
 19. Confirm no raw debug UI appears in consumer mode.
 20. Confirm Search, Library, Collections, History, Downloads, Storage, Settings still work.
 
+## WaveZero #84 — Release Config + Beta Hardening
+
+WaveZero #84 adds a lightweight app environment model and beta hardening guidance so the app can be built and reviewed with clearer release expectations while preserving the current dev workflow.
+
+### App environments
+
+Flutter reads the app environment from:
+
+```text
+--dart-define=WAVEZERO_APP_ENV=dev|beta|production
+```
+
+The default is `dev`.
+
+Environment behavior:
+
+- `dev`: keeps local API workflows available, defaults the API base URL to the Android emulator development server, and keeps Developer Mode entry visible.
+- `beta`: expects an explicit API base URL from dart-define, hides manual API setup from consumer mode, and keeps Developer Mode available for API/content inspection.
+- `production`: expects explicit release configuration, avoids local laptop defaults in consumer-facing copy, and hides developer entry points from normal Settings unless the existing internal logo gesture is used.
+
+### API/content dart-defines
+
+Use explicit API and content labels for beta or production-style builds:
+
+```text
+--dart-define=WAVEZERO_API_BASE_URL=<api-base-url>
+--dart-define=WAVEZERO_CONTENT_MODE_LABEL=<Demo catalog|Catalog ready|Catalog configured by build>
+```
+
+The API base URL should be the API root. Do not use endpoint paths, manifest URLs, stream URLs, or local laptop URLs for beta/production consumer builds.
+
+### Consumer/developer boundary
+
+Consumer mode should not prominently expose API base URLs, raw content config, raw JSON/status payloads, manifest URLs, stream URLs, stack traces, file paths, internal IDs, SharedPreferences keys, or Rust/service implementation details. Developer Mode keeps Engine diagnostics and manual API setup separated from consumer navigation.
+
+### Startup/catalog failure behavior
+
+The app should not block launch on server availability. If the catalog is unavailable, consumer copy should say the catalog is unavailable, suggest checking the connection or trying later, and remind testers that Device Music and Downloads may still work. Home, Settings, Device Music, Downloads, Search, Queue, Now Playing, and Storage surfaces should continue to render where local state is available.
+
+### Build metadata/About behavior
+
+Settings → About shows the WaveZero name, build placeholder, app environment, content mode label, friendly catalog status, local-only privacy note, and Legal / Licenses entry. This intentionally avoids adding a package/version plugin for #84.
+
+### Android build notes
+
+Android build command examples for dev and beta debug/profile/release-style builds live in [`docs/beta-release-checklist.md`](beta-release-checklist.md). The examples are documentation-only placeholders; do not commit signing secrets, keystores, Play Store metadata, or production credentials.
+
+### Legal/release-safe messaging
+
+WaveZero legal messaging remains metadata-based. Device Music belongs to the user/device context and is not uploaded by WaveZero. Catalog tracks require explicit rights metadata. Dev-only tracks are not production-safe, and beta builds do not claim licensed commercial catalog rights.
+
+### What intentionally did not change
+
+WaveZero #84 does not add auth, login, cloud sync, Supabase, a database, hosted deployment scripts, CI/CD, Play Store signing, keystores, crash reporting, analytics, payments, artist uploads, an admin dashboard, DRM, real music files, or copyrighted/commercial songs. It also does not change Android native playback, Rust API behavior, Device Music MediaStore behavior, CacheService file format, Queue Engine v2, Smart Downloads logic, Audio Quality selection, Audio Effects bridge, Legal Catalog rules, or bottom navigation structure.
+
+### Future work
+
+- CI build pipeline.
+- Signing/release keystore setup.
+- Play Store/internal testing track.
+- Hosted production API deployment.
+- Crash reporting.
+- Analytics with privacy controls.
+- Auth.
+- Cloud sync.
+- Content moderation.
+- Artist upload beta.
+
 ## WaveZero #83 — Production Content Server Foundation
 
 WaveZero now has explicit Rust API content modes so the local dev catalog can remain useful without being confused with a production catalog.
@@ -1788,6 +1856,11 @@ WaveZero now has explicit Rust API content modes so the local dev catalog can re
 ### API/content environment variables
 
 - `WAVEZERO_CONTENT_MODE=dev|demo|production`
+- `WAVEZERO_CATALOG_PATH=`
+- `WAVEZERO_CONTENT_BASE_URL=`
+- `WAVEZERO_AUDIO_BASE_URL=`
+- `WAVEZERO_ARTWORK_BASE_URL=`
+- `WAVEZERO_LOCAL_AUDIO_DIR=`
 - `WAVEZERO_CATALOG_PATH=<catalog.json>`
 - `WAVEZERO_CONTENT_BASE_URL=<base-url-for-relative-content>`
 - `WAVEZERO_AUDIO_BASE_URL=<base-url-for-relative-audio>`
@@ -1823,6 +1896,8 @@ No real copyrighted/commercial music is added. Nothing is treated as verified un
 ### Flutter integration
 
 The Flutter catalog client can read content status. Consumer library/search surfaces keep friendly statuses such as Catalog ready, Catalog unavailable, Demo catalog, Device music, and Downloaded. API base URL and content mode details stay in developer/Engine diagnostics.
+
+See [`docs/production-content-server.md`](production-content-server.md) for the longer content-server checklist.
 
 ### Intentionally not changed
 
