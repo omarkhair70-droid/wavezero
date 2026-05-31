@@ -217,5 +217,13 @@ Design and constraints
 Developer notes
 
  - This change is intentionally UI-only and keeps all existing widgets and behaviors to avoid any runtime or engine regressions.
- - For local QA, use the manual visual/playback checklist in `docs/premium-product-shell.md` which lists the core screens and interactions to verify.
 
+**Manual visual/playback checklist**
+
+- App opens on Home.
+- Bottom navigation switches Home / Now / Queue / Library / Engine.
+- Play/Pause/Stop/Next still work from Now.
+- Queue actions still work from Queue.
+- Catalog search and track selection still work from Library.
+- Smart Preload and raw metrics remain available from Engine.
+- `playbackError` remains `none` during normal local playback.
