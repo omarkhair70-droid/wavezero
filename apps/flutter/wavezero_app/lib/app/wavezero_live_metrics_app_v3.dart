@@ -422,11 +422,62 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       setState(() {
         _metrics = next;
         _capturePlaybackBaselineMetrics(next);
+        _alignQueueWithNativeNotificationAction(next);
       });
       if (allowAutoAdvance) await _maybeAutoAdvance(next);
     } finally {
       _refreshingMetrics = false;
     }
+  }
+
+  void _alignQueueWithNativeNotificationAction(PlaybackMetrics metrics) {
+    final trackId = metrics.currentTrackId ?? metrics.lastNotificationActionTrackId;
+    if (trackId == null || trackId.isEmpty) return;
+    final existsInQueue = _queue.any((track) => track.trackId == trackId);
+    final existsInLibrary = _catalog.any((track) => track.trackId == trackId) || _cachedLibrary.any((track) => track.trackId == trackId) || _deviceMusicTracks.any((track) => track.trackId == trackId);
+    if (!existsInQueue && !existsInLibrary) return;
+    _selectedTrackId = trackId;
+    if (existsInQueue) _queueCurrentTrackId = trackId;
+    if (metrics.lastNotificationAction == 'next' || metrics.lastNotificationAction == 'previous') {
+      _queueStatus = 'Notification ${metrics.lastNotificationAction} selected native track $trackId.';
+    }
+  }
+
+  Future<void> _pushNotificationMetadata(CatalogTrackManifest manifest, {required String url, required String source}) async {
+    await widget.playbackBridge.updateMediaNotificationMetadata(
+      NotificationTrackSnapshot.fromManifest(manifest, url: url, source: source),
+    );
+    await _pushNotificationQueueSnapshot();
+  }
+
+  Future<void> _pushNotificationQueueSnapshot() {
+    return widget.playbackBridge.updateNotificationQueueSnapshot(
+      _queue.map(_notificationSnapshotForQueueTrack).where((track) => track.url.isNotEmpty).toList(growable: false),
+    );
+  }
+
+  NotificationTrackSnapshot _notificationSnapshotForQueueTrack(CatalogTrackSummary track) {
+    CachedTrackMetadata? cached;
+    for (final entry in _cachedLibrary) {
+      if (entry.trackId == track.trackId) {
+        cached = entry;
+        break;
+      }
+    }
+    if (cached != null) {
+      return NotificationTrackSnapshot(
+        trackId: cached.trackId,
+        title: cached.title,
+        artistName: cached.artistName,
+        url: cached.localFileUrl,
+        artworkUrl: cached.artworkUrl,
+        durationMs: cached.durationMs,
+        source: 'cached',
+        qualityLabel: cached.qualityLabel,
+        codec: cached.codec,
+      );
+    }
+    return NotificationTrackSnapshot.fromSummary(track);
   }
 
   Future<void> _refreshCacheStats() async {
@@ -770,6 +821,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           });
           if (fallbackToDemo) {
             await widget.playbackBridge.loadTrack(title: waveZeroTestTrack.title, url: waveZeroTestTrack.url);
+            await widget.playbackBridge.updateMediaNotificationMetadata(
+              NotificationTrackSnapshot(title: waveZeroTestTrack.title, artistName: 'WaveZero', url: waveZeroTestTrack.url, source: 'manual'),
+            );
           }
         }
       } finally {
@@ -906,6 +960,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _lastSmartDownloadReason = 'device local track already local';
       });
       await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
+      await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: 'device');
       if (autoPlay) await widget.playbackBridge.play();
       unawaited(_saveSession());
       unawaited(_updatePredictivePreloadCandidate());
@@ -1020,6 +1075,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       setState(() => _currentCachedQuality = cachedMetadata?.qualityLabel ?? 'unknown');
     }
     await widget.playbackBridge.loadTrack(title: manifest.title, url: resolvedUrl);
+    await _pushNotificationMetadata(manifest, url: resolvedUrl, source: resolvedUrl.startsWith('file://') ? 'cached' : 'api');
     unawaited(_refreshCacheStats());
     if (autoPlay) await widget.playbackBridge.play();
     if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
@@ -1168,7 +1224,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return _runOperation(PlayerOperation.loadingManualTrack, () async {
       await _clearNativeNextPrebuffer();
       final title = _titleController.text.trim().isEmpty ? waveZeroTestTrack.title : _titleController.text.trim();
-      await widget.playbackBridge.loadTrack(title: title, url: _urlController.text.trim());
+      final url = _urlController.text.trim();
+      await widget.playbackBridge.loadTrack(title: title, url: url);
+      await widget.playbackBridge.updateMediaNotificationMetadata(
+        NotificationTrackSnapshot(title: title, artistName: 'WaveZero', url: url, source: 'manual'),
+      );
       if (mounted) setState(() => _catalogStatus = 'Manual track loaded.');
     });
   }
@@ -1335,6 +1395,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
+    unawaited(_pushNotificationQueueSnapshot());
     unawaited(_updatePredictivePreloadCandidate());
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
@@ -1354,6 +1415,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
+    unawaited(_pushNotificationQueueSnapshot());
     unawaited(_updatePredictivePreloadCandidate());
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
@@ -1374,6 +1436,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
+    unawaited(_pushNotificationQueueSnapshot());
     unawaited(_updatePredictivePreloadCandidate());
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
@@ -1397,6 +1460,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
+    unawaited(_pushNotificationQueueSnapshot());
     unawaited(_updatePredictivePreloadCandidate());
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
@@ -1411,6 +1475,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sessionStatus = 'Session cleared.';
     });
     unawaited(widget.sessionStore.clear());
+    unawaited(_pushNotificationQueueSnapshot());
     unawaited(_updatePredictivePreloadCandidate());
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
@@ -1502,6 +1567,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _audioPreparedBeforeNext = false;
       _nextPreparedBeforePlay = true;
     });
+    await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: manifest.streamUrl.startsWith('file://') ? 'cached' : 'api');
     await _refreshMetrics(allowAutoAdvance: false);
     unawaited(_saveSession());
     unawaited(_updatePredictivePreloadCandidate());

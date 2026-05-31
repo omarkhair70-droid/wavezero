@@ -26,7 +26,9 @@ class WaveZeroMediaSessionService : MediaSessionService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val manager = WaveZeroPlaybackSession.getOrCreate(applicationContext)
         when (intent?.action) {
+            ACTION_PREVIOUS -> manager.playPreviousFromNotification()
             ACTION_TOGGLE_PLAYBACK -> manager.togglePlayPause()
+            ACTION_NEXT -> manager.playNextFromNotification()
             ACTION_STOP_AND_DISMISS -> {
                 manager.stop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -47,17 +49,26 @@ class WaveZeroMediaSessionService : MediaSessionService() {
     private fun showForegroundMediaNotification(manager: AudioPlayerManager) {
         val snapshot = manager.metricsSnapshotMap()
         val isPlaying = snapshot["isPlaying"] as? Boolean ?: false
-        val title = snapshot["trackTitle"] as? String ?: DemoTrack.title
+        val title = snapshot["currentTrackTitle"] as? String ?: snapshot["trackTitle"] as? String ?: DemoTrack.title
+        val subtitle = snapshot["currentTrackArtist"] as? String ?: snapshot["currentTrackSource"] as? String ?: "WaveZero"
         val playPauseLabel = if (isPlaying) "Pause" else "Play"
         val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
 
         val notification = Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(title)
-            .setContentText("WaveZero")
+            .setContentText(subtitle)
+            .setSubText(snapshot["currentTrackAlbum"] as? String)
             .setOngoing(isPlaying)
             .setShowWhen(false)
             .setOnlyAlertOnce(true)
+            .addAction(
+                Notification.Action.Builder(
+                    android.R.drawable.ic_media_previous,
+                    "Previous",
+                    servicePendingIntent(ACTION_PREVIOUS),
+                ).build(),
+            )
             .addAction(
                 Notification.Action.Builder(
                     playPauseIcon,
@@ -67,11 +78,19 @@ class WaveZeroMediaSessionService : MediaSessionService() {
             )
             .addAction(
                 Notification.Action.Builder(
+                    android.R.drawable.ic_media_next,
+                    "Next",
+                    servicePendingIntent(ACTION_NEXT),
+                ).build(),
+            )
+            .addAction(
+                Notification.Action.Builder(
                     android.R.drawable.ic_menu_close_clear_cancel,
                     "Stop",
                     servicePendingIntent(ACTION_STOP_AND_DISMISS),
                 ).build(),
             )
+            .setStyle(Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -113,7 +132,9 @@ class WaveZeroMediaSessionService : MediaSessionService() {
 
     companion object {
         const val ACTION_SHOW_NOTIFICATION = "com.wavezero.player.playback.SHOW_NOTIFICATION"
+        const val ACTION_PREVIOUS = "com.wavezero.player.playback.PREVIOUS"
         const val ACTION_TOGGLE_PLAYBACK = "com.wavezero.player.playback.TOGGLE_PLAYBACK"
+        const val ACTION_NEXT = "com.wavezero.player.playback.NEXT"
         const val ACTION_STOP_AND_DISMISS = "com.wavezero.player.playback.STOP_AND_DISMISS"
 
         private const val NOTIFICATION_CHANNEL_ID = "wavezero_playback"

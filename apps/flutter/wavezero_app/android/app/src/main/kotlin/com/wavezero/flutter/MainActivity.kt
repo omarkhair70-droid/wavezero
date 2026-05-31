@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.provider.MediaStore
 import com.wavezero.player.playback.AudioPlayerManager
+import com.wavezero.player.playback.NotificationTrackSnapshot
 import com.wavezero.player.playback.WaveZeroPlaybackSession
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -83,7 +84,6 @@ class MainActivity : FlutterActivity() {
             .apply()
         requestPermissions(arrayOf(deviceMusicPermissionName()), REQUEST_DEVICE_MUSIC_PERMISSION)
     }
-
     private fun hasDeviceMusicPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         return checkSelfPermission(deviceMusicPermissionName()) == PackageManager.PERMISSION_GRANTED
@@ -151,6 +151,28 @@ class PlaybackMethodChannelHandler(
                         return
                     }
                     audioPlayerManager.loadTrack(title = title, hlsUrl = url)
+                    result.success(null)
+                }
+
+                "updateMediaNotificationMetadata" -> {
+                    audioPlayerManager.updateMediaNotificationMetadata(notificationTrackFromCall(call))
+                    WaveZeroPlaybackSession.showMediaControls(context)
+                    result.success(null)
+                }
+
+                "updateNotificationQueueSnapshot" -> {
+                    audioPlayerManager.updateNotificationQueueSnapshot(notificationQueueFromCall(call))
+                    WaveZeroPlaybackSession.showMediaControls(context)
+                    result.success(null)
+                }
+
+                "showMediaControls" -> {
+                    WaveZeroPlaybackSession.showMediaControls(context)
+                    result.success(null)
+                }
+
+                "dismissMediaControls" -> {
+                    WaveZeroPlaybackSession.dismissMediaControls(context)
                     result.success(null)
                 }
 
@@ -302,6 +324,48 @@ class PlaybackMethodChannelHandler(
             result.error("invalid_arguments", error.message, null)
         } catch (error: IllegalStateException) {
             result.error("playback_state_error", error.message, null)
+        }
+    }
+
+    private fun notificationTrackFromCall(call: MethodCall): NotificationTrackSnapshot {
+        val title = call.argument<String>("title").orEmpty()
+        val url = call.argument<String>("url").orEmpty()
+        if (url.isBlank()) throw IllegalArgumentException("notification metadata requires a non-empty url")
+        return NotificationTrackSnapshot(
+            trackId = call.argument<String>("trackId")?.takeIf { it.isNotBlank() },
+            title = title.ifBlank { "WaveZero" },
+            artistName = call.argument<String>("artistName")?.takeIf { it.isNotBlank() },
+            albumName = call.argument<String>("albumName")?.takeIf { it.isNotBlank() },
+            url = url,
+            artworkUrl = call.argument<String>("artworkUrl")?.takeIf { it.isNotBlank() },
+            durationMs = call.argument<Number>("durationMs")?.toLong(),
+            source = call.argument<String>("source") ?: NotificationTrackSnapshot.SOURCE_UNKNOWN,
+            qualityLabel = call.argument<String>("qualityLabel")?.takeIf { it.isNotBlank() },
+            codec = call.argument<String>("codec")?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun notificationQueueFromCall(call: MethodCall): List<NotificationTrackSnapshot> {
+        val rawQueue = call.argument<List<Map<String, Any?>>>("queue") ?: return emptyList()
+        return rawQueue.mapNotNull { item ->
+            val title = (item["title"] as? String).orEmpty()
+            val url = (item["url"] as? String).orEmpty()
+            if (url.isBlank()) {
+                null
+            } else {
+                NotificationTrackSnapshot(
+                    trackId = (item["trackId"] as? String)?.takeIf { it.isNotBlank() },
+                    title = title.ifBlank { "WaveZero" },
+                    artistName = (item["artistName"] as? String)?.takeIf { it.isNotBlank() },
+                    albumName = (item["albumName"] as? String)?.takeIf { it.isNotBlank() },
+                    url = url,
+                    artworkUrl = (item["artworkUrl"] as? String)?.takeIf { it.isNotBlank() },
+                    durationMs = (item["durationMs"] as? Number)?.toLong(),
+                    source = (item["source"] as? String) ?: NotificationTrackSnapshot.SOURCE_UNKNOWN,
+                    qualityLabel = (item["qualityLabel"] as? String)?.takeIf { it.isNotBlank() },
+                    codec = (item["codec"] as? String)?.takeIf { it.isNotBlank() },
+                )
+            }
         }
     }
 

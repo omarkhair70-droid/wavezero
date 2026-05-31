@@ -50,6 +50,22 @@ class PlaybackMetrics {
     this.lastEvent,
     this.trackTitle,
     this.trackUrl,
+    this.currentTrackId,
+    this.currentTrackUrl,
+    this.currentTrackTitle,
+    this.currentTrackArtist,
+    this.currentTrackAlbum,
+    this.currentTrackSource,
+    this.notificationMetadataTitle,
+    this.notificationSource,
+    this.notificationQueueSnapshotCount = 0,
+    this.notificationPreviousAvailable = false,
+    this.notificationNextAvailable = false,
+    this.lastNotificationAction,
+    this.lastNotificationActionResult,
+    this.lastNotificationActionTrackId,
+    this.notificationArtworkStatus,
+    this.mediaSessionStatus,
   });
 
   final int? appScreenReadyMs;
@@ -102,6 +118,22 @@ class PlaybackMetrics {
   final String? lastEvent;
   final String? trackTitle;
   final String? trackUrl;
+  final String? currentTrackId;
+  final String? currentTrackUrl;
+  final String? currentTrackTitle;
+  final String? currentTrackArtist;
+  final String? currentTrackAlbum;
+  final String? currentTrackSource;
+  final String? notificationMetadataTitle;
+  final String? notificationSource;
+  final int notificationQueueSnapshotCount;
+  final bool notificationPreviousAvailable;
+  final bool notificationNextAvailable;
+  final String? lastNotificationAction;
+  final String? lastNotificationActionResult;
+  final String? lastNotificationActionTrackId;
+  final String? notificationArtworkStatus;
+  final String? mediaSessionStatus;
 
   PlaybackMetrics copyWith({
     int? appScreenReadyMs,
@@ -174,6 +206,22 @@ class PlaybackMetrics {
     String? lastEvent,
     String? trackTitle,
     String? trackUrl,
+    String? currentTrackId,
+    String? currentTrackUrl,
+    String? currentTrackTitle,
+    String? currentTrackArtist,
+    String? currentTrackAlbum,
+    String? currentTrackSource,
+    String? notificationMetadataTitle,
+    String? notificationSource,
+    int? notificationQueueSnapshotCount,
+    bool? notificationPreviousAvailable,
+    bool? notificationNextAvailable,
+    String? lastNotificationAction,
+    String? lastNotificationActionResult,
+    String? lastNotificationActionTrackId,
+    String? notificationArtworkStatus,
+    String? mediaSessionStatus,
   }) {
     return PlaybackMetrics(
       appScreenReadyMs: clearAppScreenReadyMs
@@ -271,6 +319,22 @@ class PlaybackMetrics {
       lastEvent: lastEvent ?? this.lastEvent,
       trackTitle: trackTitle ?? this.trackTitle,
       trackUrl: trackUrl ?? this.trackUrl,
+      currentTrackId: currentTrackId ?? this.currentTrackId,
+      currentTrackUrl: currentTrackUrl ?? this.currentTrackUrl,
+      currentTrackTitle: currentTrackTitle ?? this.currentTrackTitle,
+      currentTrackArtist: currentTrackArtist ?? this.currentTrackArtist,
+      currentTrackAlbum: currentTrackAlbum ?? this.currentTrackAlbum,
+      currentTrackSource: currentTrackSource ?? this.currentTrackSource,
+      notificationMetadataTitle: notificationMetadataTitle ?? this.notificationMetadataTitle,
+      notificationSource: notificationSource ?? this.notificationSource,
+      notificationQueueSnapshotCount: notificationQueueSnapshotCount ?? this.notificationQueueSnapshotCount,
+      notificationPreviousAvailable: notificationPreviousAvailable ?? this.notificationPreviousAvailable,
+      notificationNextAvailable: notificationNextAvailable ?? this.notificationNextAvailable,
+      lastNotificationAction: lastNotificationAction ?? this.lastNotificationAction,
+      lastNotificationActionResult: lastNotificationActionResult ?? this.lastNotificationActionResult,
+      lastNotificationActionTrackId: lastNotificationActionTrackId ?? this.lastNotificationActionTrackId,
+      notificationArtworkStatus: notificationArtworkStatus ?? this.notificationArtworkStatus,
+      mediaSessionStatus: mediaSessionStatus ?? this.mediaSessionStatus,
     );
   }
 
@@ -326,6 +390,22 @@ class PlaybackMetrics {
       'lastEvent': lastEvent,
       'trackTitle': trackTitle,
       'trackUrl': trackUrl,
+      'currentTrackId': currentTrackId,
+      'currentTrackUrl': currentTrackUrl,
+      'currentTrackTitle': currentTrackTitle,
+      'currentTrackArtist': currentTrackArtist,
+      'currentTrackAlbum': currentTrackAlbum,
+      'currentTrackSource': currentTrackSource,
+      'notificationMetadataTitle': notificationMetadataTitle,
+      'notificationSource': notificationSource,
+      'notificationQueueSnapshotCount': notificationQueueSnapshotCount,
+      'notificationPreviousAvailable': notificationPreviousAvailable,
+      'notificationNextAvailable': notificationNextAvailable,
+      'lastNotificationAction': lastNotificationAction,
+      'lastNotificationActionResult': lastNotificationActionResult,
+      'lastNotificationActionTrackId': lastNotificationActionTrackId,
+      'notificationArtworkStatus': notificationArtworkStatus,
+      'mediaSessionStatus': mediaSessionStatus,
     };
   }
 
@@ -398,6 +478,22 @@ class PlaybackMetrics {
       lastEvent: json['lastEvent'] as String?,
       trackTitle: json['trackTitle'] as String?,
       trackUrl: json['trackUrl'] as String?,
+      currentTrackId: json['currentTrackId'] as String?,
+      currentTrackUrl: json['currentTrackUrl'] as String?,
+      currentTrackTitle: json['currentTrackTitle'] as String?,
+      currentTrackArtist: json['currentTrackArtist'] as String?,
+      currentTrackAlbum: json['currentTrackAlbum'] as String?,
+      currentTrackSource: json['currentTrackSource'] as String?,
+      notificationMetadataTitle: json['notificationMetadataTitle'] as String?,
+      notificationSource: json['notificationSource'] as String?,
+      notificationQueueSnapshotCount: _readInt(json['notificationQueueSnapshotCount']) ?? 0,
+      notificationPreviousAvailable: json['notificationPreviousAvailable'] == true,
+      notificationNextAvailable: json['notificationNextAvailable'] == true,
+      lastNotificationAction: json['lastNotificationAction'] as String?,
+      lastNotificationActionResult: json['lastNotificationActionResult'] as String?,
+      lastNotificationActionTrackId: json['lastNotificationActionTrackId'] as String?,
+      notificationArtworkStatus: json['notificationArtworkStatus'] as String?,
+      mediaSessionStatus: json['mediaSessionStatus'] as String?,
     );
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../audio/audio_effects.dart';
+import '../catalog/catalog_track_manifest.dart';
 import 'playback_metrics.dart';
 
 abstract class PlaybackBridge {
@@ -49,6 +50,14 @@ abstract class PlaybackBridge {
   Future<void> seekTo(int positionMs);
 
   Future<void> resetMetrics();
+
+  Future<void> updateMediaNotificationMetadata(NotificationTrackSnapshot snapshot);
+
+  Future<void> updateNotificationQueueSnapshot(List<NotificationTrackSnapshot> queue);
+
+  Future<void> showMediaControls();
+
+  Future<void> dismissMediaControls();
 
   Future<AudioEffectApplyResult> setAudioEffectProfile(AudioEffectProfile profile);
 
@@ -183,6 +192,24 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
 
   @override
   Future<void> resetMetrics() => _invokeVoid('resetMetrics');
+
+  @override
+  Future<void> updateMediaNotificationMetadata(NotificationTrackSnapshot snapshot) => _invokeVoid(
+        'updateMediaNotificationMetadata',
+        snapshot.toJson(),
+      );
+
+  @override
+  Future<void> updateNotificationQueueSnapshot(List<NotificationTrackSnapshot> queue) => _invokeVoid(
+        'updateNotificationQueueSnapshot',
+        <String, Object?>{'queue': queue.map((track) => track.toJson()).toList(growable: false)},
+      );
+
+  @override
+  Future<void> showMediaControls() => _invokeVoid('showMediaControls');
+
+  @override
+  Future<void> dismissMediaControls() => _invokeVoid('dismissMediaControls');
 
   @override
   Future<AudioEffectApplyResult> setAudioEffectProfile(AudioEffectProfile profile) async {
@@ -504,6 +531,38 @@ class MockPlaybackBridge implements PlaybackBridge {
   }
 
   @override
+  Future<void> updateMediaNotificationMetadata(NotificationTrackSnapshot snapshot) async {
+    _metrics = _metrics.copyWith(
+      currentTrackId: snapshot.trackId,
+      currentTrackUrl: snapshot.url,
+      currentTrackTitle: snapshot.title,
+      currentTrackArtist: snapshot.artistName,
+      currentTrackAlbum: snapshot.albumName,
+      currentTrackSource: snapshot.source,
+      notificationMetadataTitle: snapshot.title,
+      notificationSource: snapshot.source,
+      notificationArtworkStatus: snapshot.artworkUrl == null ? 'none' : 'uri_set',
+      mediaSessionStatus: 'mock',
+    );
+  }
+
+  @override
+  Future<void> updateNotificationQueueSnapshot(List<NotificationTrackSnapshot> queue) async {
+    _metrics = _metrics.copyWith(
+      notificationQueueSnapshotCount: queue.length,
+      notificationPreviousAvailable: false,
+      notificationNextAvailable: queue.length > 1,
+      lastNotificationActionResult: 'queue_updated',
+    );
+  }
+
+  @override
+  Future<void> showMediaControls() async {}
+
+  @override
+  Future<void> dismissMediaControls() async {}
+
+  @override
   Future<void> resetMetrics() async {
     _metrics = PlaybackMetrics(
       appScreenReadyMs: _metrics.appScreenReadyMs,
@@ -527,4 +586,76 @@ class MockPlaybackBridge implements PlaybackBridge {
 
   @override
   Future<PlaybackMetrics> metricsSnapshot() async => _metrics;
+}
+
+class NotificationTrackSnapshot {
+  const NotificationTrackSnapshot({
+    this.trackId,
+    required this.title,
+    this.artistName,
+    this.albumName,
+    required this.url,
+    this.artworkUrl,
+    this.durationMs,
+    this.source = 'unknown',
+    this.qualityLabel,
+    this.codec,
+  });
+
+  final String? trackId;
+  final String title;
+  final String? artistName;
+  final String? albumName;
+  final String url;
+  final String? artworkUrl;
+  final int? durationMs;
+  final String source;
+  final String? qualityLabel;
+  final String? codec;
+
+  factory NotificationTrackSnapshot.fromManifest(
+    CatalogTrackManifest manifest, {
+    required String url,
+    String source = 'api',
+  }) {
+    return NotificationTrackSnapshot(
+      trackId: manifest.trackId,
+      title: manifest.title,
+      artistName: manifest.artistName,
+      url: url,
+      artworkUrl: manifest.artworkUrl,
+      durationMs: manifest.durationMs,
+      source: source,
+      qualityLabel: manifest.qualityLabel,
+      codec: manifest.codec,
+    );
+  }
+
+  factory NotificationTrackSnapshot.fromSummary(CatalogTrackSummary track) {
+    return NotificationTrackSnapshot(
+      trackId: track.trackId,
+      title: track.title,
+      artistName: track.artistName,
+      albumName: track.albumName,
+      url: track.primaryAsset?.manifestUrl ?? '',
+      artworkUrl: track.artworkUrl,
+      durationMs: track.durationMs,
+      source: track.source,
+      qualityLabel: track.primaryAsset?.qualityLabel,
+      codec: track.primaryAsset?.codec,
+    );
+  }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'trackId': trackId,
+        'title': title,
+        'artistName': artistName,
+        'albumName': albumName,
+        'url': url,
+        'artworkUrl': artworkUrl,
+        'durationMs': durationMs,
+        'source': source,
+        'qualityLabel': qualityLabel,
+        'codec': codec,
+      };
 }
