@@ -1352,6 +1352,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _deleteCachedTrack(CachedTrackMetadata track) async {
     if (_operation != PlayerOperation.idle) return;
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _operation = PlayerOperation.loadingCatalog);
     try {
       final ok = await _cacheService.deleteCachedTrack(track.trackId);
