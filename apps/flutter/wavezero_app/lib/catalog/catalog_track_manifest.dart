@@ -25,6 +25,9 @@ class CatalogTrackSummary {
     this.artistName,
     this.durationMs,
     this.artworkUrl,
+    this.albumName,
+    this.displayName,
+    this.source = 'api',
     this.primaryAsset,
     this.assets = const [],
   });
@@ -35,6 +38,9 @@ class CatalogTrackSummary {
   final String? artistName;
   final int? durationMs;
   final String? artworkUrl;
+  final String? albumName;
+  final String? displayName;
+  final String source;
   final CatalogTrackAssetSummary? primaryAsset;
   final List<CatalogTrackAssetSummary> assets;
 
@@ -66,6 +72,9 @@ class CatalogTrackSummary {
       artistName: _readString(json['artist_name']),
       durationMs: _readInt(json['duration_ms']),
       artworkUrl: _readString(json['artwork_url']),
+      albumName: _readString(json['album_name']),
+      displayName: _readString(json['display_name']),
+      source: _readString(json['source']) ?? 'api',
       primaryAsset: primaryAsset,
       assets: assets.isEmpty && primaryAsset != null ? [primaryAsset] : assets,
     );
@@ -74,7 +83,9 @@ class CatalogTrackSummary {
   String get subtitle {
     final artist = artistName;
     if (artist != null && artist.trim().isNotEmpty) return artist;
-    return 'WaveZero catalog track';
+    final album = albumName;
+    if (album != null && album.trim().isNotEmpty) return album;
+    return source == 'device' ? 'Device music' : 'WaveZero catalog track';
   }
 
   bool matchesQuery(String query) {
@@ -86,6 +97,9 @@ class CatalogTrackSummary {
       subtitle,
       trackId,
       artistId ?? '',
+      albumName ?? '',
+      displayName ?? '',
+      source,
       primaryAsset?.codec ?? '',
       primaryAsset?.qualityLabel ?? '',
     ].join(' '));

@@ -386,3 +386,60 @@ This is the first real design-system and product-shell foundation, not the final
 8. Confirm Engine diagnostics are still visible.
 9. Confirm Audio Quality and Audio Effects panels still work.
 10. Confirm no playback behavior changed.
+
+## WaveZero #69 — Device Local Music Import Foundation
+
+WaveZero #69 adds the first Android device-local music import foundation so the Flutter app can discover and play audio that already lives on the phone, separately from the Rust API catalog, Local Folder Auto Catalog, and Downloads cache.
+
+### Android MediaStore behavior
+
+- Uses Android `MediaStore.Audio.Media` to scan audio/music entries from the device media library.
+- Requests the minimal audio-only runtime permission:
+  - Android 13+ (`API 33+`): `android.permission.READ_MEDIA_AUDIO`
+  - Older Android versions: `android.permission.READ_EXTERNAL_STORAGE` with `maxSdkVersion="32"`
+- Does **not** request `MANAGE_EXTERNAL_STORAGE`.
+- Does **not** request image/video media permissions.
+- Does **not** scan arbitrary raw file paths.
+- The initial scan is intentionally bounded to 500 tracks and ignores clips shorter than 30 seconds to avoid notification/ringtone-like audio in this foundation PR.
+- Metadata is read safely from MediaStore only: title, artist, album, duration, size, MIME type, display name, date fields, content URI, and best-effort codec/quality labels.
+- No heavy metadata parsing, background worker, cloud sync, database migration, upload, DRM, or AI recommendation logic is included.
+
+### Playback and cache behavior
+
+- Device tracks play directly from their `content://` MediaStore URI through the existing native Media3/ExoPlayer playback bridge.
+- WaveZero does **not** copy device music into app cache or Downloads storage.
+- Device Music is a separate local source from:
+  - API Catalog tracks
+  - Local Folder Auto Catalog served by the Rust API
+  - Downloads Manager remote/API cached tracks
+  - Smart Downloads cached tracks
+- Smart Downloads must skip device `content://` tracks because they are already local.
+- Downloads Manager behavior for remote/API cached tracks is unchanged.
+
+### Flutter app behavior
+
+- Library now has a source filter for **API Catalog**, **Device Music**, and **All**.
+- Device Music import is user-initiated through the Library screen.
+- Device tracks can be searched by title, artist, album, and display name.
+- Device tracks can be selected for playback and added to Queue Engine v2.
+- Now Playing shows device playback as a device/local source and avoids presenting it as a remote track that is merely “not cached.”
+- Engine diagnostics report device permission status, import count, scan status, last error, last import time, and platform support.
+
+### Manual checklist
+
+1. Install/run app on an Android device.
+2. Open Library.
+3. Tap **Import Device Music**.
+4. Grant audio permission.
+5. Confirm device music count appears.
+6. Confirm device tracks show title/artist/duration/source.
+7. Search for a device song.
+8. Play a device song.
+9. Confirm Now Playing shows the device track and a Device source.
+10. Add device tracks to Queue.
+11. Confirm Queue play-next/move/remove still work.
+12. Confirm Smart Downloads does not try to cache `content://` device tracks.
+13. Deny permission on a fresh install/device and confirm app does not crash.
+14. Confirm API Catalog still works.
+
+This is a focused foundation PR, not the final full Library v2 experience.
