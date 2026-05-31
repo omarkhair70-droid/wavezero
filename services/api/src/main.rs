@@ -6,7 +6,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, env, net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use wavezero_core::{AudioCodec, NetworkType, PlaybackMetric, Track, TrackAsset};
 
@@ -252,6 +252,10 @@ impl CatalogStore {
     fn from_dev_fixture() -> Self {
         let fixture: CatalogFixture = serde_json::from_str(DEV_CATALOG_JSON)
             .expect("parse services/api/fixtures/dev_catalog.json");
+
+        let audio_base_url = env::var("WAVEZERO_AUDIO_BASE_URL").ok();
+        let fixture = rewrite_dev_catalog_audio_base(fixture, audio_base_url);
+
         Self {
             artists: fixture.artists,
             tracks: fixture.tracks,
@@ -298,6 +302,32 @@ impl CatalogStore {
             assets: track.assets.iter().map(TrackAssetResponse::from).collect(),
         }
     }
+}
+
+fn rewrite_dev_catalog_audio_base(
+    mut catalog: CatalogFixture,
+    audio_base_url: Option<String>,
+) -> CatalogFixture {
+    let audio_base_url = match audio_base_url {
+        Some(value) => value.trim_end_matches('/').to_string(),
+        None => return catalog,
+    };
+
+    if audio_base_url.is_empty() {
+        return catalog;
+    }
+
+    for track in &mut catalog.tracks {
+        for asset in &mut track.assets {
+            if let Some(path) = asset.manifest_url.splitn(4, '/').nth(3) {
+                if !path.is_empty() {
+                    asset.manifest_url = format!("{}/{}", audio_base_url, path);
+                }
+            }
+        }
+    }
+
+    catalog
 }
 
 impl CatalogTrack {
@@ -406,6 +436,26 @@ mod tests {
         });
 
         let _ = router;
+    }
+
+    #[test]
+    fn dev_catalog_audio_base_url_rewrites_fixture_manifest_urls() {
+        let fixture: CatalogFixture = serde_json::from_str(DEV_CATALOG_JSON)
+            .expect("parse services/api/fixtures/dev_catalog.json");
+
+        let rewritten = rewrite_dev_catalog_audio_base(
+            fixture,
+            Some("http://10.172.208.216:8090".to_string()),
+        );
+
+        for track in rewritten.tracks.iter() {
+            for asset in track.assets.iter() {
+                assert!(
+                    asset.manifest_url.starts_with("http://10.172.208.216:8090/"),
+                    "asset manifest URL should use base URL"
+                );
+            }
+        }
     }
 
     #[test]

@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.wavezero.flutter"
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.wavezero.flutter"
