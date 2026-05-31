@@ -1140,57 +1140,10 @@ class _StatusStrip extends StatelessWidget {
   final String detail;
   final String operation;
   final bool refreshingMetrics;
+
   @override
   Widget build(BuildContext context) => _Panel(
-    required this.onCache,
-  });
-
-  final List<CatalogTrackSummary> tracks;
-  final int totalTrackCount;
-  final String? selectedTrackId;
-  final String status;
-  final bool loading;
-  final bool refreshDisabled;
-  final bool addToQueueDisabled;
-  final TextEditingController searchController;
-  final VoidCallback onClearSearch;
-  final VoidCallback onRefresh;
-  final ValueChanged<CatalogTrackSummary> onSelectTrack;
-  final ValueChanged<CatalogTrackSummary> onAddToQueue;
-  final ValueChanged<CatalogTrackSummary> onCache;
-
-  @override
-  Widget build(BuildContext context) {
-    final hasQuery = searchController.text.trim().isNotEmpty;
-    return _Panel(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          const Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Catalog', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              SizedBox(height: 4),
-              Text('Search stays usable while playback is running.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
-            ]),
-          ),
-          IconButton.outlined(onPressed: refreshDisabled ? null : onRefresh, icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh))
-        ]),
-        const SizedBox(height: 12),
-        TextField(controller: searchController, decoration: InputDecoration(labelText: 'Search catalog', prefixIcon: const Icon(Icons.search), suffixIcon: hasQuery ? IconButton(onPressed: onClearSearch, icon: const Icon(Icons.close)) : null)),
-        const SizedBox(height: 10),
-        Text(hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
-        const SizedBox(height: 10),
-        ...tracks.map((track) => _CatalogRow(
-              track: track,
-              selected: track.trackId == selectedTrackId,
-              addDisabled: addToQueueDisabled,
-              onTap: () => onSelectTrack(track),
-              onAdd: () => onAddToQueue(track),
-              onCache: () => onCache(track),
-            )),
-      ]),
-    );
-  }
-}
+        padding: const EdgeInsets.symmetric(horizontal: _WzTokens.space4, vertical: 14),
         child: Row(
           children: [
             Icon(
@@ -1654,8 +1607,92 @@ class _QueueCard extends StatelessWidget { const _QueueCard({required this.queue
 
 class _QueueRow extends StatelessWidget { const _QueueRow({required this.track, required this.index, required this.current, required this.upNext, required this.disabled, required this.onPlay, required this.onRemove}); final CatalogTrackSummary track; final int index; final bool current; final bool upNext; final bool disabled; final VoidCallback onPlay; final VoidCallback onRemove; @override Widget build(BuildContext context) { final label = current ? 'Now' : upNext ? 'Up next' : '#${index + 1}'; return Container(margin: const EdgeInsets.only(bottom: 10), padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: current ? const Color(0x227C5CFF) : const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: current ? const Color(0xFF8D7CFF) : const Color(0xFF20273A))), child: Row(children: [Icon(current ? Icons.equalizer : Icons.queue_music, color: const Color(0xFF8D7CFF)), const SizedBox(width: 12), Expanded(child: Text('${track.title}  $label', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800))), IconButton(onPressed: disabled ? null : onPlay, icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF))), IconButton(onPressed: disabled ? null : onRemove, icon: const Icon(Icons.close, color: Color(0xFF98A1B8)))])); }}
 
-class _CatalogListCard extends StatelessWidget { const _CatalogListCard({required this.tracks, required this.totalTrackCount, required this.selectedTrackId, required this.status, required this.loading, required this.refreshDisabled, required this.addToQueueDisabled, required this.searchController, required this.onClearSearch, required this.onRefresh, required this.onSelectTrack, required this.onAddToQueue}); final List<CatalogTrackSummary> tracks; final int totalTrackCount; final String? selectedTrackId; final String status; final bool loading; final bool refreshDisabled; final bool addToQueueDisabled; final TextEditingController searchController; final VoidCallback onClearSearch; final VoidCallback onRefresh; final ValueChanged<CatalogTrackSummary> onSelectTrack; final ValueChanged<CatalogTrackSummary> onAddToQueue; @override Widget build(BuildContext context) { final hasQuery = searchController.text.trim().isNotEmpty; return _Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Catalog', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)), SizedBox(height: 4), Text('Search stays usable while playback is running.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13))])), IconButton.outlined(onPressed: refreshDisabled ? null : onRefresh, icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh))]), const SizedBox(height: 12), TextField(controller: searchController, decoration: InputDecoration(labelText: 'Search catalog', prefixIcon: const Icon(Icons.search), suffixIcon: hasQuery ? IconButton(onPressed: onClearSearch, icon: const Icon(Icons.close)) : null)), const SizedBox(height: 10), Text(hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)), const SizedBox(height: 12), if (totalTrackCount == 0) const _EmptyCatalogMessage(message: 'No catalog tracks loaded yet.') else if (tracks.isEmpty) const _EmptyCatalogMessage(message: 'No tracks match this search.') else ...tracks.map((track) => _CatalogRow(track: track, selected: track.trackId == selectedTrackId, addDisabled: addToQueueDisabled, onTap: () => onSelectTrack(track), onAdd: () => onAddToQueue(track)))])); }}
+class _CatalogListCard extends StatelessWidget {
+  const _CatalogListCard({
+    required this.tracks,
+    required this.totalTrackCount,
+    required this.selectedTrackId,
+    required this.status,
+    required this.loading,
+    required this.refreshDisabled,
+    required this.addToQueueDisabled,
+    required this.searchController,
+    required this.onClearSearch,
+    required this.onRefresh,
+    required this.onSelectTrack,
+    required this.onAddToQueue,
+    required this.onCache,
+  });
 
+  final List<CatalogTrackSummary> tracks;
+  final int totalTrackCount;
+  final String? selectedTrackId;
+  final String status;
+  final bool loading;
+  final bool refreshDisabled;
+  final bool addToQueueDisabled;
+  final TextEditingController searchController;
+  final VoidCallback onClearSearch;
+  final VoidCallback onRefresh;
+  final ValueChanged<CatalogTrackSummary> onSelectTrack;
+  final ValueChanged<CatalogTrackSummary> onAddToQueue;
+  final ValueChanged<CatalogTrackSummary> onCache;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasQuery = searchController.text.trim().isNotEmpty;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Catalog', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    SizedBox(height: 4),
+                    Text('Search stays usable while playback is running.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                  ],
+                ),
+              ),
+              IconButton.outlined(
+                onPressed: refreshDisabled ? null : onRefresh,
+                icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              labelText: 'Search catalog',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: hasQuery ? IconButton(onPressed: onClearSearch, icon: const Icon(Icons.close)) : null,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status,
+            style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          if (totalTrackCount == 0) const _EmptyCatalogMessage(message: 'No catalog tracks loaded yet.')
+          else if (tracks.isEmpty) const _EmptyCatalogMessage(message: 'No tracks match this search.')
+          else ...tracks.map((track) => _CatalogRow(
+                track: track,
+                selected: track.trackId == selectedTrackId,
+                addDisabled: addToQueueDisabled,
+                onTap: () => onSelectTrack(track),
+                onAdd: () => onAddToQueue(track),
+                onCache: () => onCache(track),
+              )),
+        ],
+      ),
+    );
+  }
+}
 class _CatalogRow extends StatelessWidget {
   const _CatalogRow({
     required this.track,
