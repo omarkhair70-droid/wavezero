@@ -18,13 +18,14 @@ import '../cache/cache_service.dart';
 import '../design/wavezero_design_system.dart';
 import '../device_music/device_music_service.dart';
 import '../device_music/device_music_track.dart';
+import 'collections_service.dart';
 import 'player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
 
 enum _AppMode { consumer, developer }
 
-enum _AppTab { home, library, now, queue, downloads, storage, settings, engine }
+enum _AppTab { home, library, now, queue, collections, collectionDetail, downloads, storage, settings, engine }
 
 class _ShellDestination {
   const _ShellDestination({required this.tab, required this.label, required this.icon});
@@ -374,6 +375,42 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   String _queueStatus = 'Queue is ready.';
   String _sessionStatus = 'Session recovery pending.';
 
+  final CollectionsService _collectionsService = CollectionsService();
+  List<WzCollection> _collections = <WzCollection>[WzCollection.liked()];
+  String? _selectedCollectionId = likedTracksCollectionId;
+
+  WzCollection get _likedCollection => _collections.firstWhere(
+        (collection) => collection.type == WzCollectionType.liked,
+        orElse: () => WzCollection.liked(),
+      );
+
+  List<WzCollection> get _userCollections => _collections.where((collection) => collection.type == WzCollectionType.user).toList(growable: false);
+
+  WzCollection? get _selectedCollection {
+    final id = _selectedCollectionId;
+    if (id == null) return null;
+    for (final collection in _collections) {
+      if (collection.id == id) return collection;
+    }
+    return null;
+  }
+
+  CatalogTrackSummary? get _currentKnownTrack {
+    final id = _manifest?.trackId ?? _metrics.currentTrackId ?? _queueCurrentTrackId ?? _selectedTrackId;
+    if (id == null) return null;
+    final snapshot = WzCollectionTrackSnapshot(
+      trackId: id,
+      title: _manifest?.title ?? _metrics.trackTitle ?? 'Current track',
+      subtitle: _manifest?.subtitle ?? 'WaveZero track',
+      source: WzCollectionTrackSource.unknown,
+      qualityLabel: _manifest?.qualityLabel,
+      codec: _manifest?.codec,
+      license: _manifest?.license ?? LicenseMetadata.unknown,
+      addedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    return _resolveCollectionTrack(snapshot);
+  }
+
   List<CatalogTrackSummary> get _deviceCatalogTracks =>
       _deviceMusicTracks.map(_catalogSummaryFromDeviceTrack).toList(growable: false);
 
@@ -468,6 +505,274 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_initAudioEffects());
     unawaited(_refreshDeviceMusicPermissionStatus());
     unawaited(_loadAppMode());
+    unawaited(_loadCollections());
+  }
+
+  Future<void> _loadCollections() async {
+    final collections = await _collectionsService.load();
+    if (!mounted) return;
+    setState(() {
+      _collections = collections;
+      _selectedCollectionId ??= _likedCollection.id;
+    });
+  }
+
+  Future<void> _persistCollections(List<WzCollection> collections) async {
+    setState(() => _collections = collections);
+    await _collectionsService.save(collections);
+  }
+
+  Future<void> _saveCollections() => _collectionsService.save(_collections);
+
+  bool _isLiked(String trackId) => _likedCollection.tracks.any((track) => track.trackId == trackId);
+
+  WzCollectionTrackSnapshot _snapshotForTrack(CatalogTrackSummary track) {
+    final source = _isDeviceCatalogTrack(track)
+        ? WzCollectionTrackSource.device
+        : _isCachedCatalogTrack(track)
+            ? WzCollectionTrackSource.cached
+            : track.source == 'api'
+                ? WzCollectionTrackSource.api
+                : WzCollectionTrackSource.unknown;
+    return WzCollectionTrackSnapshot(
+      trackId: track.trackId,
+      title: track.title,
+      subtitle: track.subtitle,
+      albumName: track.albumName,
+      artworkUrl: track.artworkUrl,
+      source: source,
+      primaryUrl: track.primaryAsset?.manifestUrl,
+      qualityLabel: track.primaryAsset?.qualityLabel,
+      codec: track.primaryAsset?.codec,
+      license: _isDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
+      addedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  CatalogTrackSummary _summaryFromSnapshot(WzCollectionTrackSnapshot snapshot) => CatalogTrackSummary(
+        trackId: snapshot.trackId,
+        title: snapshot.title,
+        artistName: snapshot.subtitle,
+        albumName: snapshot.albumName,
+        artworkUrl: snapshot.artworkUrl,
+        source: snapshot.source.name,
+        license: snapshot.source == WzCollectionTrackSource.device ? LicenseMetadata.userDevice : snapshot.license,
+        primaryAsset: snapshot.primaryUrl == null
+            ? null
+            : CatalogTrackAssetSummary(
+                assetId: '${snapshot.source.name}-${snapshot.trackId}',
+                manifestUrl: snapshot.primaryUrl!,
+                qualityLabel: snapshot.qualityLabel,
+                codec: snapshot.codec,
+              ),
+      );
+
+  CatalogTrackSummary? _resolveCollectionTrack(WzCollectionTrackSnapshot snapshot) {
+    for (final track in _libraryTracks) {
+      if (track.trackId == snapshot.trackId) return track;
+    }
+    return null;
+  }
+
+  Future<void> _toggleLikedTrack(CatalogTrackSummary track) async {
+    final liked = _likedCollection;
+    final exists = liked.tracks.any((entry) => entry.trackId == track.trackId);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final nextTracks = exists
+        ? liked.tracks.where((entry) => entry.trackId != track.trackId).toList(growable: false)
+        : [...liked.tracks.where((entry) => entry.trackId != track.trackId), _snapshotForTrack(track)];
+    final nextCollections = _collections
+        .map((collection) => collection.id == liked.id ? collection.copyWith(updatedAtMs: now, tracks: nextTracks) : collection)
+        .toList(growable: false);
+    await _persistCollections(nextCollections);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(exists ? 'Removed from Liked Tracks' : 'Added to Liked Tracks')));
+  }
+
+  Future<WzCollection> _createCollection({String name = 'New Collection'}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final collection = WzCollection(
+      id: 'collection-$now',
+      name: name.trim().isEmpty ? 'New Collection' : name.trim(),
+      type: WzCollectionType.user,
+      createdAtMs: now,
+      updatedAtMs: now,
+    );
+    await _persistCollections([..._collections, collection]);
+    return collection;
+  }
+
+  Future<void> _addTrackToCollection(WzCollection collection, CatalogTrackSummary track) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final snapshot = _snapshotForTrack(track);
+    final next = collection.tracks.where((entry) => entry.trackId != track.trackId).toList(growable: true)..add(snapshot);
+    final nextCollections = _collections
+        .map((item) => item.id == collection.id ? item.copyWith(updatedAtMs: now, tracks: next) : item)
+        .toList(growable: false);
+    await _persistCollections(nextCollections);
+  }
+
+  Future<void> _removeTrackFromCollection(WzCollection collection, WzCollectionTrackSnapshot track) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final nextCollections = _collections
+        .map((item) => item.id == collection.id ? item.copyWith(updatedAtMs: now, tracks: item.tracks.where((entry) => entry.trackId != track.trackId).toList(growable: false)) : item)
+        .toList(growable: false);
+    await _persistCollections(nextCollections);
+  }
+
+  Future<void> _renameCollection(WzCollection collection, String name) async {
+    if (collection.type == WzCollectionType.liked) return;
+    final trimmed = name.trim().isEmpty ? 'My Collection' : name.trim();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _persistCollections(_collections.map((item) => item.id == collection.id ? item.copyWith(name: trimmed, updatedAtMs: now) : item).toList(growable: false));
+  }
+
+  Future<void> _deleteCollection(WzCollection collection) async {
+    if (collection.type == WzCollectionType.liked) return;
+    await _persistCollections(_collections.where((item) => item.id != collection.id).toList(growable: false));
+    if (!mounted) return;
+    setState(() => _selectedCollectionId = likedTracksCollectionId);
+  }
+
+  Future<void> _showRenameCollectionDialog(WzCollection collection) async {
+    final controller = TextEditingController(text: collection.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename collection'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Collection name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(controller.text), child: const Text('Save')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name != null) await _renameCollection(collection, name);
+  }
+
+  Future<void> _showDeleteCollectionDialog(WzCollection collection) async {
+    if (collection.type == WzCollectionType.liked) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${collection.name}?'),
+        content: const Text('This removes the collection only. Downloads, cache files, and device music stay on this device.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton.tonal(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) await _deleteCollection(collection);
+  }
+
+  Future<void> _showAddToCollectionSheet(CatalogTrackSummary track) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Add to collection', style: WzText.title),
+              const SizedBox(height: WzSpacing.xs),
+              Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
+              const SizedBox(height: WzSpacing.md),
+              ..._collections.map((collection) => ListTile(
+                    leading: Icon(collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play),
+                    title: Text(collection.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${collection.trackCount} tracks'),
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      await _addTrackToCollection(collection, track);
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added to ${collection.name}')));
+                    },
+                  )),
+              ListTile(
+                leading: const Icon(Icons.add),
+                title: const Text('Create New Collection'),
+                subtitle: const Text('Creates “New Collection” and adds this track.'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  final collection = await _createCollection();
+                  await _addTrackToCollection(collection, track);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to New Collection')));
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createCollectionFromPage() async {
+    final collection = await _createCollection(name: _userCollections.isEmpty ? 'My Collection' : 'New Collection');
+    if (!mounted) return;
+    setState(() {
+      _selectedCollectionId = collection.id;
+      _selectedTab = _AppTab.collectionDetail;
+    });
+  }
+
+  void _openCollection(WzCollection collection) {
+    setState(() {
+      _selectedCollectionId = collection.id;
+      _selectedTab = _AppTab.collectionDetail;
+    });
+  }
+
+  Future<void> _playCollectionSnapshot(WzCollectionTrackSnapshot snapshot, {bool autoPlay = true}) async {
+    final resolved = _resolveCollectionTrack(snapshot);
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    await _loadCatalogTrack(trackId: resolved.trackId, autoPlay: autoPlay, status: 'Loaded from collection: ${resolved.title}');
+  }
+
+  Future<void> _addCollectionSnapshotToQueue(WzCollectionTrackSnapshot snapshot) async {
+    final resolved = _resolveCollectionTrack(snapshot);
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    _addToQueue(resolved);
+  }
+
+  Future<void> _addCollectionToQueue(WzCollection collection) async {
+    var added = 0;
+    var unavailable = 0;
+    for (final snapshot in collection.tracks) {
+      final resolved = _resolveCollectionTrack(snapshot);
+      if (resolved == null) {
+        unavailable += 1;
+      } else {
+        final exists = _queue.any((item) => item.trackId == resolved.trackId);
+        if (!exists) {
+          _queue = [..._queue, resolved];
+          added += 1;
+        }
+      }
+    }
+    if (added > 0) {
+      setState(() {
+        _queueCurrentTrackId ??= (_queue.isEmpty ? null : _queue.first.trackId);
+        _queueStatus = 'Added $added tracks. $unavailable unavailable.';
+        _sessionStatus = 'Session saved.';
+      });
+      unawaited(_saveSession());
+      unawaited(_pushNotificationQueueSnapshot());
+      unawaited(_updatePredictivePreloadCandidate());
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added $added tracks. $unavailable unavailable.')));
   }
 
   Future<void> _loadAppMode() async {
@@ -1920,6 +2225,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     setState(() => _dragPositionMs = null);
                     await _seekTo(target);
                   },
+            canSaveTrack: _currentKnownTrack != null,
+            liked: _currentKnownTrack == null ? false : _isLiked(_currentKnownTrack!.trackId),
+            onToggleLike: _currentKnownTrack == null ? null : () => _toggleLikedTrack(_currentKnownTrack!),
+            onAddToCollection: _currentKnownTrack == null ? null : () => _showAddToCollectionSheet(_currentKnownTrack!),
           ),
           const SizedBox(height: WzSpacing.md),
           _NowContextPanel(
@@ -2050,6 +2359,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onImportDeviceMusic: _importDeviceMusic,
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
             onAddToQueue: _addToQueue,
+            onToggleLike: _toggleLikedTrack,
+            onAddToCollection: _showAddToCollectionSheet,
+            isLiked: (track) => _isLiked(track.trackId),
+            onOpenCollections: () => _navigateTo(_AppTab.collections),
             onCache: (track) => _toggleCache(track),
             onDeleteCachedTrack: (track) {
               final cached = _cachedMetadataForTrack(track);
@@ -2062,6 +2375,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
           ],
         ],
+      ),
+      _CollectionsPage(
+        collections: _collections,
+        onOpen: _openCollection,
+        onCreate: _createCollectionFromPage,
+        onRename: _showRenameCollectionDialog,
+        onDelete: _showDeleteCollectionDialog,
+      ),
+      _CollectionDetailPage(
+        collection: _selectedCollection ?? _likedCollection,
+        onBack: () => _navigateTo(_AppTab.collections),
+        onPlayFirst: (collection) {
+          if (collection.tracks.isNotEmpty) unawaited(_playCollectionSnapshot(collection.tracks.first));
+        },
+        onAddAllToQueue: (collection) => unawaited(_addCollectionToQueue(collection)),
+        onRename: _showRenameCollectionDialog,
+        onDelete: _showDeleteCollectionDialog,
+        onPlayTrack: (snapshot) => unawaited(_playCollectionSnapshot(snapshot)),
+        onAddTrackToQueue: (snapshot) => unawaited(_addCollectionSnapshotToQueue(snapshot)),
+        onRemoveTrack: (collection, snapshot) => unawaited(_removeTrackFromCollection(collection, snapshot)),
+        resolver: _resolveCollectionTrack,
       ),
       WzPageScaffold(
         children: [
@@ -2262,6 +2596,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final selectedTabLabel = switch (_selectedTab) {
       _AppTab.settings => 'Settings',
       _AppTab.storage => 'Storage Manager',
+      _AppTab.collections => 'Collections',
+      _AppTab.collectionDetail => _selectedCollection?.name ?? 'Collection',
       _ => selectedDestination.label,
     };
     final currentPage = switch (currentTab) {
@@ -2269,10 +2605,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _AppTab.now => pages[1],
       _AppTab.queue => pages[2],
       _AppTab.library => pages[3],
-      _AppTab.downloads => pages[4],
-      _AppTab.storage => pages[5],
+      _AppTab.collections => pages[4],
+      _AppTab.collectionDetail => pages[5],
+      _AppTab.downloads => pages[6],
+      _AppTab.storage => pages[7],
       _AppTab.settings => settingsPage,
-      _AppTab.engine => pages[6],
+      _AppTab.engine => pages[8],
     };
 
     return Scaffold(
@@ -3056,6 +3394,7 @@ class _HomeQuickActions extends StatelessWidget {
               runSpacing: WzSpacing.sm,
               children: [
                 WzPrimaryAction(label: 'Go to Library', icon: Icons.library_music, onPressed: () => onNavigate(_AppTab.library)),
+                WzPrimaryAction(label: 'Collections', icon: Icons.playlist_play, onPressed: () => onNavigate(_AppTab.collections)),
                 WzPrimaryAction(label: 'Go to Now', icon: Icons.play_circle_fill, onPressed: () => onNavigate(_AppTab.now)),
                 WzPrimaryAction(label: 'Go to Queue', icon: Icons.queue_music, onPressed: () => onNavigate(_AppTab.queue)),
                 WzPrimaryAction(label: 'Go to Downloads', icon: Icons.download_done, onPressed: () => onNavigate(_AppTab.downloads)),
@@ -3376,6 +3715,10 @@ class _NowPlayingCard extends StatelessWidget {
     required this.onNext,
     required this.onSeekChanged,
     required this.onSeekEnd,
+    required this.canSaveTrack,
+    required this.liked,
+    required this.onToggleLike,
+    required this.onAddToCollection,
   });
 
   final PlaybackMetrics metrics;
@@ -3397,6 +3740,10 @@ class _NowPlayingCard extends StatelessWidget {
   final VoidCallback onNext;
   final ValueChanged<double>? onSeekChanged;
   final ValueChanged<double>? onSeekEnd;
+  final bool canSaveTrack;
+  final bool liked;
+  final VoidCallback? onToggleLike;
+  final VoidCallback? onAddToCollection;
 
   @override
   Widget build(BuildContext context) {
@@ -3427,6 +3774,16 @@ class _NowPlayingCard extends StatelessWidget {
           _NowProgressSection(progressValue: progressValue, displayedPositionMs: displayedPositionMs, durationMs: durationMs, onSeekChanged: onSeekChanged, onSeekEnd: onSeekEnd),
           const SizedBox(height: WzSpacing.xl),
           _NowActionRow(isPlaying: metrics.isPlaying, controlsDisabled: controlsDisabled, canPlayPrevious: canPlayPrevious, canPlayNext: canPlayNext, onPlayPause: onPlayPause, onStop: onStop, onRetry: onRetry, onPrevious: onPrevious, onNext: onNext),
+          const SizedBox(height: WzSpacing.sm),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: WzSpacing.sm,
+            runSpacing: WzSpacing.sm,
+            children: [
+              OutlinedButton.icon(onPressed: canSaveTrack ? onToggleLike : null, icon: Icon(liked ? Icons.favorite : Icons.favorite_border), label: Text(liked ? 'Liked' : 'Like')),
+              OutlinedButton.icon(onPressed: canSaveTrack ? onAddToCollection : null, icon: const Icon(Icons.playlist_add), label: const Text('Add to collection')),
+            ],
+          ),
           const SizedBox(height: WzSpacing.lg),
           _UpNextPreviewCard(nextTrack: nextTrack),
         ],
@@ -4692,6 +5049,230 @@ class _LibrarySourceSummaryCard extends StatelessWidget {
       );
 }
 
+class _CollectionsPage extends StatelessWidget {
+  const _CollectionsPage({
+    required this.collections,
+    required this.onOpen,
+    required this.onCreate,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final List<WzCollection> collections;
+  final ValueChanged<WzCollection> onOpen;
+  final VoidCallback onCreate;
+  final ValueChanged<WzCollection> onRename;
+  final ValueChanged<WzCollection> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final liked = collections.firstWhere((collection) => collection.type == WzCollectionType.liked, orElse: () => WzCollection.liked());
+    final userCollections = collections.where((collection) => collection.type == WzCollectionType.user).toList(growable: false);
+    return WzPageScaffold(
+      children: [
+        WzPageHeader(
+          icon: Icons.playlist_play,
+          title: 'Collections',
+          subtitle: 'Save tracks into playlists and liked music on this device.',
+          trailing: WzPrimaryAction(label: 'Create', icon: Icons.add, onPressed: onCreate),
+        ),
+        const SizedBox(height: WzSpacing.md),
+        _CollectionCard(collection: liked, onOpen: () => onOpen(liked), onRename: null, onDelete: null),
+        const SizedBox(height: WzSpacing.md),
+        const WzSectionHeader(title: 'Your collections', subtitle: 'Local playlists stored on this device.', icon: Icons.queue_music),
+        if (userCollections.isEmpty)
+          const WzPanel(
+            child: Text('No collections yet. Save tracks from Library or Now Playing.', style: WzText.body),
+          )
+        else
+          ...userCollections.map((collection) => Padding(
+                padding: const EdgeInsets.only(bottom: WzSpacing.sm),
+                child: _CollectionCard(
+                  collection: collection,
+                  onOpen: () => onOpen(collection),
+                  onRename: () => onRename(collection),
+                  onDelete: () => onDelete(collection),
+                ),
+              )),
+        const SizedBox(height: WzSpacing.md),
+        const WzPanel(
+          child: Text('Collections only store lightweight metadata. Removing tracks or deleting a collection does not delete downloads, cache files, or device music.', style: WzText.caption),
+        ),
+      ],
+    );
+  }
+}
+
+class _CollectionCard extends StatelessWidget {
+  const _CollectionCard({required this.collection, required this.onOpen, required this.onRename, required this.onDelete});
+
+  final WzCollection collection;
+  final VoidCallback onOpen;
+  final VoidCallback? onRename;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = collection.tracks.isEmpty ? 'No tracks yet' : collection.tracks.first.title;
+    return WzPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _Artwork(artworkUrl: collection.tracks.isEmpty ? null : collection.tracks.first.artworkUrl, size: 54),
+              const SizedBox(width: WzSpacing.sm),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(collection.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                  const SizedBox(height: WzSpacing.xxs),
+                  Text('${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'} • Updated ${_friendlyUpdated(collection.updatedAtMs)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                  Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
+                ]),
+              ),
+            ],
+          ),
+          const SizedBox(height: WzSpacing.sm),
+          Wrap(
+            spacing: WzSpacing.sm,
+            runSpacing: WzSpacing.xs,
+            children: [
+              FilledButton.tonalIcon(onPressed: onOpen, icon: const Icon(Icons.open_in_new), label: const Text('Open')),
+              if (onRename != null) OutlinedButton.icon(onPressed: onRename, icon: const Icon(Icons.edit), label: const Text('Rename')),
+              if (onDelete != null) OutlinedButton.icon(onPressed: onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Delete')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollectionDetailPage extends StatelessWidget {
+  const _CollectionDetailPage({
+    required this.collection,
+    required this.onBack,
+    required this.onPlayFirst,
+    required this.onAddAllToQueue,
+    required this.onRename,
+    required this.onDelete,
+    required this.onPlayTrack,
+    required this.onAddTrackToQueue,
+    required this.onRemoveTrack,
+    required this.resolver,
+  });
+
+  final WzCollection collection;
+  final VoidCallback onBack;
+  final ValueChanged<WzCollection> onPlayFirst;
+  final ValueChanged<WzCollection> onAddAllToQueue;
+  final ValueChanged<WzCollection> onRename;
+  final ValueChanged<WzCollection> onDelete;
+  final ValueChanged<WzCollectionTrackSnapshot> onPlayTrack;
+  final ValueChanged<WzCollectionTrackSnapshot> onAddTrackToQueue;
+  final void Function(WzCollection collection, WzCollectionTrackSnapshot track) onRemoveTrack;
+  final CatalogTrackSummary? Function(WzCollectionTrackSnapshot track) resolver;
+
+  @override
+  Widget build(BuildContext context) => WzPageScaffold(
+        children: [
+          WzPageHeader(
+            icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play,
+            title: collection.name,
+            subtitle: '${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'} saved locally on this device.',
+            trailing: IconButton.outlined(onPressed: onBack, icon: const Icon(Icons.arrow_back)),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          WzPanel(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
+                WzStatusPill(label: collection.type == WzCollectionType.liked ? 'Liked' : 'Collection', active: true, icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play),
+                WzStatusPill(label: '${collection.trackCount} tracks', icon: Icons.music_note),
+                WzStatusPill(label: 'Local only', icon: Icons.phone_android),
+              ]),
+              const SizedBox(height: WzSpacing.md),
+              Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
+                FilledButton.tonalIcon(onPressed: collection.tracks.isEmpty ? null : () => onPlayFirst(collection), icon: const Icon(Icons.play_arrow), label: const Text('Play first')),
+                OutlinedButton.icon(onPressed: collection.tracks.isEmpty ? null : () => onAddAllToQueue(collection), icon: const Icon(Icons.queue_music), label: const Text('Add all to Queue')),
+                if (collection.type == WzCollectionType.user) OutlinedButton.icon(onPressed: () => onRename(collection), icon: const Icon(Icons.edit), label: const Text('Rename')),
+                if (collection.type == WzCollectionType.user) OutlinedButton.icon(onPressed: () => onDelete(collection), icon: const Icon(Icons.delete_outline), label: const Text('Delete')),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          if (collection.tracks.isEmpty)
+            const WzPanel(child: Text('This collection is empty. Save tracks from Library or Now Playing.', style: WzText.body))
+          else
+            ...collection.tracks.map((track) => Padding(
+                  padding: const EdgeInsets.only(bottom: WzSpacing.sm),
+                  child: _CollectionTrackRow(
+                    track: track,
+                    available: resolver(track) != null,
+                    onPlay: () => onPlayTrack(track),
+                    onAddToQueue: () => onAddTrackToQueue(track),
+                    onRemove: () => onRemoveTrack(collection, track),
+                  ),
+                )),
+        ],
+      );
+}
+
+class _CollectionTrackRow extends StatelessWidget {
+  const _CollectionTrackRow({required this.track, required this.available, required this.onPlay, required this.onAddToQueue, required this.onRemove});
+
+  final WzCollectionTrackSnapshot track;
+  final bool available;
+  final VoidCallback onPlay;
+  final VoidCallback onAddToQueue;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        padding: const EdgeInsets.all(WzSpacing.sm),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            _Artwork(artworkUrl: track.artworkUrl, size: 48),
+            const SizedBox(width: WzSpacing.sm),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+              Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            ])),
+          ]),
+          const SizedBox(height: WzSpacing.xs),
+          Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
+            WzStatusPill(label: _collectionSourceLabel(track.source), active: track.source == WzCollectionTrackSource.device || track.source == WzCollectionTrackSource.cached, icon: Icons.source),
+            if (track.qualityLabel != null) WzStatusPill(label: _productQualityLabel(track.qualityLabel!), icon: Icons.high_quality),
+            WzStatusPill(label: track.source == WzCollectionTrackSource.device ? 'Your device' : track.license.badgeLabel, active: track.source == WzCollectionTrackSource.device || !track.license.needsRightsWarning, warning: track.license.needsRightsWarning && track.source != WzCollectionTrackSource.device, icon: Icons.policy),
+            if (!available) const WzStatusPill(label: 'Unavailable now', warning: true, icon: Icons.cloud_off),
+          ]),
+          const SizedBox(height: WzSpacing.xs),
+          Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
+            OutlinedButton.icon(onPressed: available ? onPlay : onPlay, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
+            OutlinedButton.icon(onPressed: available ? onAddToQueue : onAddToQueue, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
+            OutlinedButton.icon(onPressed: onRemove, icon: const Icon(Icons.remove_circle_outline), label: const Text('Remove')),
+          ]),
+        ]),
+      );
+}
+
+String _collectionSourceLabel(WzCollectionTrackSource source) => switch (source) {
+      WzCollectionTrackSource.api => 'API',
+      WzCollectionTrackSource.device => 'Device',
+      WzCollectionTrackSource.cached => 'Downloaded',
+      WzCollectionTrackSource.unknown => 'Unknown',
+    };
+
+String _friendlyUpdated(int updatedAtMs) {
+  final age = DateTime.now().millisecondsSinceEpoch - updatedAtMs;
+  if (age < 60000) return 'just now';
+  final minutes = age ~/ 60000;
+  if (minutes < 60) return '${minutes}m ago';
+  final hours = minutes ~/ 60;
+  if (hours < 24) return '${hours}h ago';
+  final days = hours ~/ 24;
+  return '${days}d ago';
+}
+
 class _CatalogListCard extends StatelessWidget {
   const _CatalogListCard({
     required this.tracks,
@@ -4719,6 +5300,10 @@ class _CatalogListCard extends StatelessWidget {
     required this.onImportDeviceMusic,
     required this.onSelectTrack,
     required this.onAddToQueue,
+    required this.onToggleLike,
+    required this.onAddToCollection,
+    required this.isLiked,
+    required this.onOpenCollections,
     required this.onCache,
     required this.onDeleteCachedTrack,
     this.offlineMode = false,
@@ -4749,6 +5334,10 @@ class _CatalogListCard extends StatelessWidget {
   final VoidCallback onImportDeviceMusic;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
   final ValueChanged<CatalogTrackSummary> onAddToQueue;
+  final ValueChanged<CatalogTrackSummary> onToggleLike;
+  final ValueChanged<CatalogTrackSummary> onAddToCollection;
+  final bool Function(CatalogTrackSummary track) isLiked;
+  final VoidCallback onOpenCollections;
   final ValueChanged<CatalogTrackSummary> onCache;
   final ValueChanged<CatalogTrackSummary> onDeleteCachedTrack;
   final bool offlineMode;
@@ -4820,6 +5409,11 @@ class _CatalogListCard extends StatelessWidget {
                 icon: const Icon(Icons.perm_media),
                 label: Text(deviceTrackCount == 0 ? 'Import Device Music' : 'Rescan Device Music'),
               ),
+              OutlinedButton.icon(
+                onPressed: onOpenCollections,
+                icon: const Icon(Icons.playlist_play),
+                label: const Text('Collections / Playlists'),
+              ),
               Text('Permission: $devicePermissionStatus', style: _WzTokens.caption),
               Text('Device scan: $deviceScanStatus • $deviceTrackCount tracks', style: _WzTokens.caption),
             ],
@@ -4868,6 +5462,9 @@ class _CatalogListCard extends StatelessWidget {
                 addDisabled: addToQueueDisabled,
                 onTap: () => onSelectTrack(track),
                 onAdd: () => onAddToQueue(track),
+                onToggleLike: () => onToggleLike(track),
+                onAddToCollection: () => onAddToCollection(track),
+                liked: isLiked(track),
                 onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) ? null : () => onCache(track),
                 onDeleteCached: _isCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
               )),
@@ -5060,6 +5657,9 @@ class _CatalogRow extends StatelessWidget {
     required this.addDisabled,
     required this.onTap,
     required this.onAdd,
+    required this.onToggleLike,
+    required this.onAddToCollection,
+    required this.liked,
     required this.onCache,
     required this.onDeleteCached,
   });
@@ -5069,6 +5669,9 @@ class _CatalogRow extends StatelessWidget {
   final bool addDisabled;
   final VoidCallback onTap;
   final VoidCallback onAdd;
+  final VoidCallback onToggleLike;
+  final VoidCallback onAddToCollection;
+  final bool liked;
   final VoidCallback? onCache;
   final VoidCallback? onDeleteCached;
 
@@ -5147,7 +5750,9 @@ class _CatalogRow extends StatelessWidget {
                     decoration: BoxDecoration(color: const Color(0xFF173626), borderRadius: BorderRadius.circular(10)),
                     child: const Text('Cached', style: TextStyle(color: Color(0xFF38D996), fontSize: 10, fontWeight: FontWeight.w800)),
                   ),
-                IconButton(onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
+                IconButton(tooltip: liked ? 'Unlike' : 'Like', onPressed: onToggleLike, icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? Color(0xFFFF6B8A) : Color(0xFF8D7CFF))),
+                IconButton(tooltip: 'Add to queue', onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
+                IconButton(tooltip: 'Add to collection', onPressed: onAddToCollection, icon: const Icon(Icons.library_add, color: Color(0xFF8D7CFF))),
                 if (onCache != null) IconButton(tooltip: 'Cache/download', onPressed: onCache, icon: cacheIcon),
                 if (onDeleteCached != null) IconButton(tooltip: 'Delete cached file', onPressed: onDeleteCached, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
                 if (onCache == null && onDeleteCached == null) const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.phone_android, color: Color(0xFF38D996))),
