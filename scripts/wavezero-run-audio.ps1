@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Output "WaveZero audio base URL: http://$ip:8090"
+Write-Output "WaveZero audio base URL: http://$($ip):8090"
 
 if (-not (Test-Path $AudioDir)) {
     Write-Error "Audio directory not found: $AudioDir"
