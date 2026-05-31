@@ -16,6 +16,7 @@ class CacheService {
 
   late Directory _baseDir;
   late SharedPreferences _prefs;
+  Future<void>? _initFuture;
 
   // key -> local file path
   final Map<String, String> _index = {};
@@ -23,7 +24,13 @@ class CacheService {
 
   String? lastCacheResult;
 
-  Future<void> init() async {
+  Future<void> init() {
+    if (_initFuture != null) return _initFuture!;
+    _initFuture = _doInit();
+    return _initFuture!;
+  }
+
+  Future<void> _doInit() async {
     _prefs = await SharedPreferences.getInstance();
     _baseDir = await getApplicationDocumentsDirectory();
     final raw = _prefs.getString('wz_cache_index');
@@ -44,9 +51,17 @@ class CacheService {
     }
   }
 
+  Future<void> ensureInitialized() async {
+    if (_initFuture == null) {
+      _initFuture = _doInit();
+    }
+    return _initFuture!;
+  }
+
   TrackCacheStatus statusForTrack(String trackId) => _status[trackId] ?? TrackCacheStatus.notCached;
 
   Future<String> cachedOrRemoteUrl(String trackId, String remoteUrl) async {
+    await ensureInitialized();
     final local = _index[trackId];
     if (local != null) {
       final f = File(local);
@@ -58,6 +73,7 @@ class CacheService {
   }
 
   Future<bool> downloadAndCache(String trackId, String url) async {
+    await ensureInitialized();
     _status[trackId] = TrackCacheStatus.caching;
     lastCacheResult = null;
     try {
@@ -80,6 +96,7 @@ class CacheService {
   }
 
   Future<void> clearCache() async {
+    await ensureInitialized();
     for (final path in _index.values) {
       try {
         final f = File(path);
@@ -97,6 +114,7 @@ class CacheService {
   }
 
   Future<int> cacheBytes() async {
+    await ensureInitialized();
     var total = 0;
     for (final path in _index.values) {
       try {

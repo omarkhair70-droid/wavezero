@@ -1142,7 +1142,55 @@ class _StatusStrip extends StatelessWidget {
   final bool refreshingMetrics;
   @override
   Widget build(BuildContext context) => _Panel(
-        padding: const EdgeInsets.symmetric(horizontal: _WzTokens.space4, vertical: 14),
+    required this.onCache,
+  });
+
+  final List<CatalogTrackSummary> tracks;
+  final int totalTrackCount;
+  final String? selectedTrackId;
+  final String status;
+  final bool loading;
+  final bool refreshDisabled;
+  final bool addToQueueDisabled;
+  final TextEditingController searchController;
+  final VoidCallback onClearSearch;
+  final VoidCallback onRefresh;
+  final ValueChanged<CatalogTrackSummary> onSelectTrack;
+  final ValueChanged<CatalogTrackSummary> onAddToQueue;
+  final ValueChanged<CatalogTrackSummary> onCache;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasQuery = searchController.text.trim().isNotEmpty;
+    return _Panel(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          const Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Catalog', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              SizedBox(height: 4),
+              Text('Search stays usable while playback is running.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+            ]),
+          ),
+          IconButton.outlined(onPressed: refreshDisabled ? null : onRefresh, icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh))
+        ]),
+        const SizedBox(height: 12),
+        TextField(controller: searchController, decoration: InputDecoration(labelText: 'Search catalog', prefixIcon: const Icon(Icons.search), suffixIcon: hasQuery ? IconButton(onPressed: onClearSearch, icon: const Icon(Icons.close)) : null)),
+        const SizedBox(height: 10),
+        Text(hasQuery ? '$status Showing ${tracks.length} of $totalTrackCount.' : status, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
+        const SizedBox(height: 10),
+        ...tracks.map((track) => _CatalogRow(
+              track: track,
+              selected: track.trackId == selectedTrackId,
+              addDisabled: addToQueueDisabled,
+              onTap: () => onSelectTrack(track),
+              onAdd: () => onAddToQueue(track),
+              onCache: () => onCache(track),
+            )),
+      ]),
+    );
+  }
+}
         child: Row(
           children: [
             Icon(
