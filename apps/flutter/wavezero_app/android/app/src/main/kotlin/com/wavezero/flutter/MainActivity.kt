@@ -195,6 +195,26 @@ class PlaybackMethodChannelHandler(
                     result.success(null)
                 }
 
+                "setAudioEffectProfile" -> {
+                    val profileId = call.argument<String>("id").orEmpty()
+                    if (profileId == "off") {
+                        result.success(
+                            mapOf(
+                                "status" to "off",
+                                "message" to "Audio effects are off; native playback remains original/no-effect.",
+                            ),
+                        )
+                        return
+                    }
+
+                    result.success(
+                        mapOf(
+                            "status" to "unsupported",
+                            "message" to "Native Android DSP is not enabled in this safe foundation build; profile ${profileId.ifBlank { "unknown" }} is stored for diagnostics only.",
+                        ),
+                    )
+                }
+
                 "metricsSnapshot" -> result.success(audioPlayerManager.metricsSnapshotMap())
 
                 else -> result.notImplemented()

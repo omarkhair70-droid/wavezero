@@ -259,3 +259,48 @@ Developer notes
 - Catalog search and track selection still work from Library.
 - Smart Preload and raw metrics remain available from Engine.
 - `playbackError` remains `none` during normal local playback.
+
+## WaveZero #66 — Audio Effects Foundation
+
+WaveZero #66 adds the first safe foundation for user-selectable audio effect profiles without changing the Rust API, Queue Engine v2, Downloads Manager, Local Folder Auto Catalog, or preferred audio quality selection behavior.
+
+### Profiles
+
+The Flutter app models these profiles in `AudioEffectProfile`:
+
+- **Off / Original** — no intentional effect; preserves the original playback path.
+- **Bass Boost** — subtle low-end lift with negative preamp metadata to avoid aggressive boost.
+- **Vocal Clarity** — slight mid/high presence metadata for clearer vocals.
+- **Warm** — gentle low-mid warmth metadata with mild treble softening.
+- **Bright** — light treble lift metadata.
+- **Night / Soft** — low-intensity listening profile foundation. This does not claim compression or normalization unless a native bridge reports that real DSP is applied.
+
+The EQ-style bass/mid/treble/preamp values are intentionally subtle and are shown as diagnostics/profile intent. They must not be interpreted as active DSP unless the native status is `applied`.
+
+### Off / Original mode and quality safety
+
+Off / Original is the default and returns the app to no-effect mode. When preferred audio quality is **Original**, WaveZero does not automatically enable any effect. Effects may alter original audio, so any non-off profile must come from explicit user selection and diagnostics call this out.
+
+### Native status meanings
+
+The Engine → Audio Effects panel reports the native effect status returned by the playback bridge:
+
+- `off` — effects are disabled and original/no-effect playback is intended.
+- `pending` — Flutter has selected/restored a profile and is waiting for the native bridge result.
+- `applied` — native playback reports that the requested effect is actually active.
+- `unsupported` — the profile is represented in app state/diagnostics, but native DSP is not available or not enabled.
+- `failed` — the bridge call failed; playback should continue without crashing.
+
+For the current safe foundation, Android accepts the method channel call and returns `off` for Off / Original or `unsupported` for non-off profiles. This deliberately avoids claiming Equalizer, BassBoost, compressor, normalizer, or mastering DSP is active before a stable native audio-session implementation is added.
+
+### Manual checklist
+
+1. Start app.
+2. Play a cached or catalog track.
+3. Open Engine → Audio Effects.
+4. Switch between Off / Bass Boost / Vocal Clarity / Warm / Bright / Night.
+5. Confirm playback does not stop/crash.
+6. Confirm diagnostics update.
+7. Confirm Off returns to original/no-effect mode.
+8. Restart app and confirm selected profile persists.
+9. Play an original/high-quality track and confirm effects are only applied by explicit user selection.
