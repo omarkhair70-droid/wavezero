@@ -37,8 +37,16 @@ class AudioPlayerManager(
     private val scope = CoroutineScope(managerJob + Dispatchers.Main.immediate)
     private val metricsTracker = PlaybackMetricsTracker(nowMs = SystemClock::elapsedRealtime)
     private var positionJob: Job? = null
-    private var currentTrackTitle: String = DemoTrack.title
-    private var currentHlsUrl: String = hlsUrl
+    private var currentTrack = NotificationTrackSnapshot.manual(DemoTrack.title, hlsUrl)
+    private var currentTrackTitle: String = currentTrack.title
+    private var currentHlsUrl: String = currentTrack.url
+    private var notificationQueueSnapshot: List<NotificationTrackSnapshot> = emptyList()
+    private var currentTrackLoaded = false
+    private var mediaNotificationShown = false
+    private var lastNotificationAction: String = "none"
+    private var lastNotificationActionResult: String = "none"
+    private var lastNotificationActionTrackId: String? = null
+    private var artworkStatus: String = if (currentTrack.artworkUrl.isNullOrBlank()) "none" else "uri_set"
     private var playCommandInFlight = false
     private var softStopped = false
     private var nativePrebufferTrackId: String? = null
@@ -186,7 +194,7 @@ class AudioPlayerManager(
     }
 
     init {
-        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
+        player.setMediaItem(mediaItemFor(currentTrack))
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         player.addListener(playerListener)
         player.addAnalyticsListener(analyticsListener)
@@ -198,21 +206,50 @@ class AudioPlayerManager(
     }
 
     fun loadTrack(title: String, hlsUrl: String) {
+        loadTrack(NotificationTrackSnapshot.manual(title, hlsUrl))
+    }
+
+    fun loadTrack(track: NotificationTrackSnapshot) {
         clearNativePrebuffer(NativePrebufferClearReason.TrackLoaded)
-        currentTrackTitle = title.ifBlank { DemoTrack.title }
-        currentHlsUrl = hlsUrl
+        applyCurrentTrack(track)
+        currentTrackLoaded = true
         playCommandInFlight = false
         softStopped = false
         positionJob?.cancel()
         player.stop()
         player.clearMediaItems()
-        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
+        player.setMediaItem(mediaItemFor(currentTrack))
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         mutablePlaybackState.value = PlaybackState(
             status = PlaybackStatus.Buffering,
             trackTitle = currentTrackTitle,
         )
         player.prepare()
+    }
+
+    fun updateMediaNotificationMetadata(track: NotificationTrackSnapshot) {
+        applyCurrentTrack(track)
+        currentTrackLoaded = true
+        if (player.mediaItemCount > 0) {
+            player.replaceMediaItem(player.currentMediaItemIndex.coerceAtLeast(0), mediaItemFor(currentTrack))
+        } else {
+            player.setMediaItem(mediaItemFor(currentTrack))
+        }
+    }
+
+    fun updateNotificationQueueSnapshot(queue: List<NotificationTrackSnapshot>) {
+        notificationQueueSnapshot = queue.filter { it.hasPlayableUrl() }
+        lastNotificationActionResult = "queue_updated"
+    }
+
+    fun shouldRefreshMediaControlsForQueueSnapshotUpdate(): Boolean = currentTrackLoaded || mediaNotificationShown
+
+    fun markMediaNotificationShown() {
+        mediaNotificationShown = true
+    }
+
+    fun markMediaNotificationDismissed() {
+        mediaNotificationShown = false
     }
 
     fun prepareNextTrack(trackId: String, title: String, hlsUrl: String) {
@@ -237,7 +274,7 @@ class AudioPlayerManager(
         prebufferPlayer.playWhenReady = false
         prebufferPlayer.stop()
         prebufferPlayer.clearMediaItems()
-        prebufferPlayer.setMediaItem(mediaItemFor(safeTitle, hlsUrl))
+        prebufferPlayer.setMediaItem(mediaItemFor(NotificationTrackSnapshot(trackId = safeTrackId, title = safeTitle, url = hlsUrl)))
         publish(metricsTracker.markNativePrebufferStarted(safeTrackId, safeTitle))
         prebufferPlayer.prepare()
     }
@@ -324,6 +361,10 @@ class AudioPlayerManager(
         }
     }
 
+    fun playPreviousFromNotification(): Boolean = playQueueOffsetFromNotification(-1, "previous")
+
+    fun playNextFromNotification(): Boolean = playQueueOffsetFromNotification(1, "next")
+
     fun stop() {
         softStopped = true
         playCommandInFlight = false
@@ -345,7 +386,7 @@ class AudioPlayerManager(
         clearNativePrebuffer(NativePrebufferClearReason.Retry)
         player.stop()
         player.clearMediaItems()
-        player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
+        player.setMediaItem(mediaItemFor(currentTrack))
         playCommandInFlight = false
         positionJob?.cancel()
         publish(metricsTracker.resetTransientMetrics())
@@ -376,8 +417,28 @@ class AudioPlayerManager(
     }
 
     fun metricsSnapshotMap(): Map<String, Any?> {
-        val durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
-        return metricsTracker.snapshot().toMap() + mapOf("durationMs" to durationMs)
+        val durationMs = currentTrack.durationMs ?: player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+        return metricsTracker.snapshot().toMap() + mapOf(
+            "durationMs" to durationMs,
+            "currentTrackId" to currentTrack.trackId,
+            "currentTrackUrl" to currentTrack.url,
+            "currentTrackTitle" to currentTrack.title,
+            "currentTrackArtist" to currentTrack.artistName,
+            "currentTrackAlbum" to currentTrack.albumName,
+            "currentTrackSource" to currentTrack.source,
+            "notificationMetadataTitle" to currentTrack.title,
+            "notificationSource" to currentTrack.source,
+            "notificationQueueSnapshotCount" to notificationQueueSnapshot.size,
+            "notificationPreviousAvailable" to queueOffsetTarget(-1) != null,
+            "notificationNextAvailable" to queueOffsetTarget(1) != null,
+            "lastNotificationAction" to lastNotificationAction,
+            "lastNotificationActionResult" to lastNotificationActionResult,
+            "lastNotificationActionTrackId" to lastNotificationActionTrackId,
+            "notificationArtworkStatus" to artworkStatus,
+            "mediaSessionStatus" to if (mediaSession == null) "disabled" else "active",
+            "mediaNotificationShown" to mediaNotificationShown,
+            "currentTrackLoaded" to currentTrackLoaded,
+        )
     }
 
     fun release() {
@@ -417,8 +478,8 @@ class AudioPlayerManager(
         positionJob?.cancel()
         softStopped = false
         playCommandInFlight = true
-        currentTrackTitle = safeTitle
-        currentHlsUrl = hlsUrl
+        applyCurrentTrack(NotificationTrackSnapshot(trackId = safeTrackId, title = safeTitle, url = hlsUrl))
+        currentTrackLoaded = true
 
         previousPrimaryPlayer.playWhenReady = false
         previousPrimaryPlayer.pause()
@@ -487,7 +548,7 @@ class AudioPlayerManager(
 
     private fun ensureCurrentMediaItemLoaded() {
         if (player.mediaItemCount == 0 || player.currentMediaItem == null) {
-            player.setMediaItem(mediaItemFor(currentTrackTitle, currentHlsUrl))
+            player.setMediaItem(mediaItemFor(currentTrack))
         }
     }
 
@@ -530,15 +591,66 @@ class AudioPlayerManager(
         exoPlayer.volume = 0f
     }
 
-    private fun mediaItemFor(title: String, hlsUrl: String): MediaItem = MediaItem.Builder()
-        .setUri(hlsUrl)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(DemoTrack.artist)
-                .build(),
+    private fun mediaItemFor(track: NotificationTrackSnapshot): MediaItem {
+        val metadata = MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setArtist(track.artistName ?: DemoTrack.artist)
+            .setAlbumTitle(track.albumName)
+            .setArtworkUri(track.artworkUri)
+            .build()
+        return MediaItem.Builder()
+            .setMediaId(track.trackId ?: track.url)
+            .setUri(track.url)
+            .setMediaMetadata(metadata)
+            .build()
+    }
+
+    private fun applyCurrentTrack(track: NotificationTrackSnapshot) {
+        currentTrack = track.copy(
+            title = track.title.ifBlank { DemoTrack.title },
+            artistName = track.artistName?.takeIf { it.isNotBlank() } ?: DemoTrack.artist,
+            source = normalizeSource(track.source),
         )
-        .build()
+        currentTrackTitle = currentTrack.title
+        currentHlsUrl = currentTrack.url
+        artworkStatus = if (currentTrack.artworkUrl.isNullOrBlank()) "none" else if (currentTrack.artworkUri == null) "failed" else "uri_set"
+    }
+
+    private fun normalizeSource(source: String): String {
+        return when (source) {
+            NotificationTrackSnapshot.SOURCE_API,
+            NotificationTrackSnapshot.SOURCE_DEVICE,
+            NotificationTrackSnapshot.SOURCE_CACHED,
+            NotificationTrackSnapshot.SOURCE_MANUAL -> source
+            else -> NotificationTrackSnapshot.SOURCE_UNKNOWN
+        }
+    }
+
+    private fun queueOffsetTarget(offset: Int): NotificationTrackSnapshot? {
+        if (notificationQueueSnapshot.isEmpty()) return null
+        val currentId = currentTrack.trackId
+        val currentUrl = currentTrack.url
+        val currentIndex = notificationQueueSnapshot.indexOfFirst {
+            (!currentId.isNullOrBlank() && it.trackId == currentId) || it.url == currentUrl
+        }
+        if (currentIndex < 0) return null
+        val targetIndex = currentIndex + offset
+        return notificationQueueSnapshot.getOrNull(targetIndex)?.takeIf { it.hasPlayableUrl() }
+    }
+
+    private fun playQueueOffsetFromNotification(offset: Int, action: String): Boolean {
+        lastNotificationAction = action
+        val target = queueOffsetTarget(offset)
+        lastNotificationActionTrackId = target?.trackId
+        if (target == null) {
+            lastNotificationActionResult = "no_target"
+            return false
+        }
+        loadTrack(target)
+        play()
+        lastNotificationActionResult = "played"
+        return true
+    }
 
     private fun publish(nextMetrics: PlaybackMetrics) {
         mutableMetrics.value = nextMetrics
