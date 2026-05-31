@@ -26,7 +26,7 @@ import 'smart_queue_policy.dart';
 
 enum _AppMode { consumer, developer }
 
-enum _AppTab { home, library, now, queue, collections, collectionDetail, downloads, storage, history, settings, engine }
+enum _AppTab { home, library, now, queue, search, collections, collectionDetail, downloads, storage, history, settings, engine }
 
 class _ShellDestination {
   const _ShellDestination({required this.tab, required this.label, required this.icon});
@@ -279,11 +279,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _autoAdvanceThresholdMs = 1200;
   static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
   static const _appModePreferenceKey = 'wavezero.app_mode';
+  static const _recentSearchesPreferenceKey = 'wavezero.recent_searches.v1';
 
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
   late final TextEditingController _apiBaseUrlController;
   late final TextEditingController _searchController;
+  late final TextEditingController _fullSearchController;
 
   Timer? _poller;
   PlaybackMetrics _metrics = const PlaybackMetrics();
@@ -373,6 +375,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   CatalogTrackManifest? _prefetchedManifest;
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
+  _SearchFilter _searchFilter = _SearchFilter.all;
+  List<String> _recentSearches = const <String>[];
   String _queueStatus = 'Queue is ready.';
   String _sessionStatus = 'Session recovery pending.';
 
@@ -448,6 +452,130 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<CatalogTrackSummary> get _filteredCatalog =>
       _sortLibraryTracks(_libraryTracks.where((track) => track.matchesQuery(_catalogQuery)).toList(growable: false));
 
+  List<WzSearchResult> get _allSearchResults {
+    final results = <WzSearchResult>[];
+    WzSearchResult resultForTrack(CatalogTrackSummary track, WzSearchResultType type, WzSearchSource source, String secondary) {
+      final asset = track.primaryAsset;
+      final label = _searchSourceLabel(source);
+      return WzSearchResult(
+        id: '${source.name}:${track.trackId}',
+        title: track.title,
+        subtitle: track.subtitle,
+        type: type,
+        source: source,
+        artworkUrl: track.artworkUrl,
+        trackId: track.trackId,
+        qualityLabel: asset?.qualityLabel,
+        codec: asset?.codec,
+        license: _isDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
+        available: asset?.manifestUrl.trim().isNotEmpty == true,
+        secondaryLabel: secondary,
+        searchText: _normalizeWzSearch([
+          track.title,
+          track.subtitle,
+          track.artistName ?? '',
+          track.albumName ?? '',
+          track.displayName ?? '',
+          label,
+          secondary,
+          asset?.qualityLabel ?? '',
+          asset?.codec ?? '',
+          track.license.badgeLabel,
+          track.license.sourceName ?? '',
+          track.license.usageNotes ?? '',
+        ].join(' ')),
+        track: track,
+      );
+    }
+
+    for (final track in _catalog) {
+      final source = track.license.needsRightsWarning || track.license.sourceName?.toLowerCase().contains('demo') == true
+          ? WzSearchSource.legalDemo
+          : WzSearchSource.apiCatalog;
+      results.add(resultForTrack(track, WzSearchResultType.track, source, source == WzSearchSource.legalDemo ? 'Legal Demo / Dev Catalog' : 'API Catalog'));
+    }
+    for (final track in _deviceCatalogTracks) {
+      results.add(resultForTrack(track, WzSearchResultType.deviceTrack, WzSearchSource.deviceMusic, 'Your device music'));
+    }
+    for (final track in _cachedCatalogTracks) {
+      results.add(resultForTrack(track, WzSearchResultType.downloadedTrack, WzSearchSource.downloads, 'Offline Ready download'));
+    }
+
+    for (final collection in _collections) {
+      results.add(WzSearchResult(
+        id: 'collection:${collection.id}',
+        title: collection.name,
+        subtitle: collection.type == WzCollectionType.liked ? '${collection.trackCount} liked tracks' : '${collection.trackCount} collection tracks',
+        type: WzSearchResultType.collection,
+        source: WzSearchSource.collections,
+        collectionId: collection.id,
+        available: true,
+        secondaryLabel: collection.type == WzCollectionType.liked ? 'Liked Tracks' : 'Collection',
+        searchText: _normalizeWzSearch([
+          collection.name,
+          collection.description ?? '',
+          'Collections',
+          collection.type == WzCollectionType.liked ? 'Liked Tracks' : 'Playlist',
+          ...collection.tracks.expand((track) => [track.title, track.subtitle, track.albumName ?? '', track.license.badgeLabel, track.license.sourceName ?? '']),
+        ].join(' ')),
+        collection: collection,
+      ));
+    }
+
+    for (final entry in _listeningHistory) {
+      final resolved = _resolveHistoryEntry(entry);
+      results.add(WzSearchResult(
+        id: 'history:${entry.trackId}',
+        title: entry.title,
+        subtitle: entry.subtitle,
+        type: WzSearchResultType.historyEntry,
+        source: WzSearchSource.history,
+        artworkUrl: entry.artworkUrl,
+        trackId: resolved?.trackId,
+        historyTrackId: entry.trackId,
+        qualityLabel: entry.qualityLabel,
+        codec: entry.codec,
+        license: entry.license,
+        available: resolved != null,
+        secondaryLabel: 'Recently played • ${entry.playCount} play${entry.playCount == 1 ? '' : 's'}',
+        searchText: _normalizeWzSearch([
+          entry.title,
+          entry.subtitle,
+          entry.albumName ?? '',
+          'History Recently Played Continue Listening',
+          _historySourceLabel(entry.source),
+          entry.qualityLabel ?? '',
+          entry.codec ?? '',
+          entry.license.badgeLabel,
+          entry.license.sourceName ?? '',
+        ].join(' ')),
+        track: resolved,
+        historyEntry: entry,
+      ));
+    }
+
+    return results;
+  }
+
+  List<WzSearchResult> get _filteredSearchResults {
+    final query = _fullSearchController.text;
+    final normalized = _normalizeWzSearch(query);
+    if (normalized.isEmpty) return const <WzSearchResult>[];
+    final matches = _allSearchResults
+        .where((result) => _searchFilterAllows(_searchFilter, result) && result.searchText.contains(normalized))
+        .toList(growable: false);
+    final indexed = matches.indexed.toList(growable: false);
+    indexed.sort((a, b) {
+      final rank = _searchRank(a.$2, query).compareTo(_searchRank(b.$2, query));
+      if (rank != 0) return rank;
+      final title = _normalizeWzSearch(a.$2.title).compareTo(_normalizeWzSearch(b.$2.title));
+      if (title != 0) return title;
+      return a.$1.compareTo(b.$1);
+    });
+    return indexed.map((item) => item.$2).toList(growable: false);
+  }
+
+
   int get _queueIndex {
     final id = _queueCurrentTrackId ?? _selectedTrackId;
     if (id == null) return -1;
@@ -511,8 +639,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _urlController = TextEditingController(text: waveZeroTestTrack.url);
     _apiBaseUrlController = TextEditingController(text: CatalogClient.defaultBaseUrl);
     _searchController = TextEditingController();
+    _fullSearchController = TextEditingController();
     _searchController.addListener(() {
       if (mounted) setState(() => _catalogQuery = _searchController.text);
+    });
+    _fullSearchController.addListener(() {
+      if (mounted) setState(() {});
     });
     _poller = Timer.periodic(_refreshInterval, (_) => _refreshMetrics());
     _loadCatalog(fallbackToDemo: true);
@@ -522,12 +654,40 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_loadAppMode());
     unawaited(_loadCollections());
     unawaited(_loadListeningHistory());
+    unawaited(_loadRecentSearches());
   }
 
   Future<void> _loadListeningHistory() async {
     final entries = await _listeningHistoryService.load();
     if (!mounted) return;
     setState(() => _listeningHistory = entries);
+  }
+
+  Future<void> _loadRecentSearches() async {
+    final prefs = await SharedPreferences.getInstance();
+    final searches = prefs.getStringList(_recentSearchesPreferenceKey) ?? const <String>[];
+    if (!mounted) return;
+    setState(() => _recentSearches = searches.take(10).toList(growable: false));
+  }
+
+  Future<void> _rememberSearchQuery(String query) async {
+    final normalized = query.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty) return;
+    final next = <String>[normalized, ..._recentSearches.where((item) => _normalizeWzSearch(item) != _normalizeWzSearch(normalized))].take(10).toList(growable: false);
+    setState(() => _recentSearches = next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_recentSearchesPreferenceKey, next);
+  }
+
+  Future<void> _clearRecentSearches() async {
+    setState(() => _recentSearches = const <String>[]);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_recentSearchesPreferenceKey);
+  }
+
+  void _openSearch({String? query}) {
+    if (query != null) _fullSearchController.text = query;
+    setState(() => _selectedTab = _AppTab.search);
   }
 
   Future<void> _loadCollections() async {
@@ -662,6 +822,56 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       return;
     }
     _addToQueue(resolved);
+  }
+
+  CatalogTrackSummary? _trackForSearchResult(WzSearchResult result) => result.track ?? (result.historyEntry == null ? null : _resolveHistoryEntry(result.historyEntry!));
+
+  Future<void> _playSearchResult(WzSearchResult result) async {
+    await _rememberSearchQuery(_fullSearchController.text);
+    if (result.historyEntry != null) {
+      await _playHistoryEntry(result.historyEntry!);
+      return;
+    }
+    final track = _trackForSearchResult(result);
+    if (track == null || !result.available) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    await _loadCatalogTrack(trackId: track.trackId, autoPlay: true, status: 'Loaded from search: ${track.title}');
+  }
+
+  Future<void> _queueSearchResult(WzSearchResult result) async {
+    await _rememberSearchQuery(_fullSearchController.text);
+    if (result.historyEntry != null) {
+      await _addHistoryEntryToQueue(result.historyEntry!);
+      return;
+    }
+    final track = _trackForSearchResult(result);
+    if (track == null || !result.available) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    _addToQueue(track);
+  }
+
+  Future<void> _collectSearchResult(WzSearchResult result) async {
+    await _rememberSearchQuery(_fullSearchController.text);
+    if (result.historyEntry != null) {
+      await _addHistoryEntryToCollection(result.historyEntry!);
+      return;
+    }
+    final track = _trackForSearchResult(result);
+    if (track == null || !result.available) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    await _showAddToCollectionSheet(track);
+  }
+
+  Future<void> _openSearchCollection(WzSearchResult result) async {
+    await _rememberSearchQuery(_fullSearchController.text);
+    final collection = result.collection;
+    if (collection != null) _openCollection(collection);
   }
 
   Future<void> _addHistoryEntryToCollection(WzListeningHistoryEntry entry) async {
@@ -1053,6 +1263,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _urlController.dispose();
     _apiBaseUrlController.dispose();
     _searchController.dispose();
+    _fullSearchController.dispose();
     super.dispose();
   }
 
@@ -2508,6 +2719,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onSourceFilterChanged: (filter) => setState(() => _librarySourceFilter = filter),
             onSortModeChanged: (mode) => setState(() => _librarySortMode = mode),
             onClearSearch: () => _searchController.clear(),
+            onOpenFullSearch: () => _openSearch(query: _searchController.text),
             onRefresh: () => _loadCatalog(),
             onImportDeviceMusic: _importDeviceMusic,
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
@@ -2582,6 +2794,28 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onPlay: (track) => _loadCatalogTrack(trackId: track.trackId, autoPlay: true),
         onDelete: _deleteCachedTrack,
         onClearAll: _clearCache,
+      ),
+      _SearchPage(
+        controller: _fullSearchController,
+        filter: _searchFilter,
+        results: _filteredSearchResults,
+        allResultCount: _allSearchResults.length,
+        recentSearches: _recentSearches,
+        history: _listeningHistory,
+        cachedTracks: _cachedCatalogTracks,
+        collections: _collections,
+        catalogTracks: _catalog,
+        onFilterChanged: (filter) => setState(() => _searchFilter = filter),
+        onClearQuery: () => _fullSearchController.clear(),
+        onRecentSearch: (query) => _fullSearchController.text = query,
+        onClearRecentSearches: _recentSearches.isEmpty ? null : () => unawaited(_clearRecentSearches()),
+        onSubmitted: (query) => unawaited(_rememberSearchQuery(query)),
+        onPlay: (result) => unawaited(_playSearchResult(result)),
+        onAddToQueue: (result) => unawaited(_queueSearchResult(result)),
+        onAddToCollection: (result) => unawaited(_collectSearchResult(result)),
+        onOpenCollection: (result) => unawaited(_openSearchCollection(result)),
+        onImportDeviceMusic: _importDeviceMusic,
+        onLoadCatalog: () => _loadCatalog(),
       ),
       _ListeningHistoryPage(
         entries: _listeningHistory,
@@ -2752,6 +2986,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       listeningHistoryCount: _listeningHistory.length,
       mostPlayedHistoryTitle: _mostPlayedHistoryEntry?.title,
       onOpenHistory: () => _navigateTo(_AppTab.history),
+      onOpenSearch: () => _openSearch(),
+      onClearRecentSearches: _recentSearches.isEmpty ? null : () => unawaited(_clearRecentSearches()),
       onClearListeningHistory: _listeningHistory.isEmpty ? null : () => unawaited(_clearListeningHistory()),
       legalTracks: _libraryTracks,
     );
@@ -2764,6 +3000,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _AppTab.settings => 'Settings',
       _AppTab.storage => 'Storage Manager',
       _AppTab.history => 'Listening History',
+      _AppTab.search => 'Search',
       _AppTab.collections => 'Collections',
       _AppTab.collectionDetail => _selectedCollection?.name ?? 'Collection',
       _ => selectedDestination.label,
@@ -2775,11 +3012,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _AppTab.library => pages[3],
       _AppTab.collections => pages[4],
       _AppTab.collectionDetail => pages[5],
+      _AppTab.search => pages[8],
       _AppTab.downloads => pages[6],
       _AppTab.storage => pages[7],
-      _AppTab.history => pages[8],
+      _AppTab.history => pages[9],
       _AppTab.settings => settingsPage,
-      _AppTab.engine => pages[9],
+      _AppTab.engine => pages[10],
     };
 
     return Scaffold(
@@ -2848,6 +3086,132 @@ extension _LibrarySourceFilterLabel on _LibrarySourceFilter {
         _LibrarySourceFilter.device => 'Device Music',
         _LibrarySourceFilter.downloads => 'Downloads / Cached',
       };
+}
+
+
+enum WzSearchResultType { track, deviceTrack, downloadedTrack, collection, historyEntry, artistLike, unknown }
+
+enum WzSearchSource { apiCatalog, deviceMusic, downloads, collections, history, legalDemo }
+
+enum _SearchFilter { all, songs, device, downloads, collections, history, legalDemo }
+
+extension _SearchFilterLabel on _SearchFilter {
+  String get label => switch (this) {
+        _SearchFilter.all => 'All',
+        _SearchFilter.songs => 'Songs',
+        _SearchFilter.device => 'Device',
+        _SearchFilter.downloads => 'Downloads',
+        _SearchFilter.collections => 'Collections',
+        _SearchFilter.history => 'History',
+        _SearchFilter.legalDemo => 'Legal / Demo',
+      };
+}
+
+class WzSearchResult {
+  const WzSearchResult({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.type,
+    required this.source,
+    this.artworkUrl,
+    this.trackId,
+    this.collectionId,
+    this.historyTrackId,
+    this.qualityLabel,
+    this.codec,
+    this.license,
+    this.available = true,
+    required this.secondaryLabel,
+    required this.searchText,
+    this.track,
+    this.collection,
+    this.historyEntry,
+  });
+
+  final String id;
+  final String title;
+  final String subtitle;
+  final WzSearchResultType type;
+  final WzSearchSource source;
+  final String? artworkUrl;
+  final String? trackId;
+  final String? collectionId;
+  final String? historyTrackId;
+  final String? qualityLabel;
+  final String? codec;
+  final LicenseMetadata? license;
+  final bool available;
+  final String secondaryLabel;
+  final String searchText;
+  final CatalogTrackSummary? track;
+  final WzCollection? collection;
+  final WzListeningHistoryEntry? historyEntry;
+
+  bool get isTrackLike => track != null || historyEntry != null;
+}
+
+String _normalizeWzSearch(String value) {
+  final withoutDiacritics = value
+      .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '')
+      .replaceAll(RegExp('[إأآا]'), 'ا')
+      .replaceAll('ى', 'ي')
+      .replaceAll('ة', 'ه');
+  return withoutDiacritics.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
+}
+
+String _searchSourceLabel(WzSearchSource source) => switch (source) {
+      WzSearchSource.apiCatalog => 'API Catalog',
+      WzSearchSource.deviceMusic => 'Device Music',
+      WzSearchSource.downloads => 'Downloads',
+      WzSearchSource.collections => 'Collections',
+      WzSearchSource.history => 'History',
+      WzSearchSource.legalDemo => 'Legal Demo / Dev Catalog',
+    };
+
+String _searchTypeLabel(WzSearchResultType type) => switch (type) {
+      WzSearchResultType.track => 'Song',
+      WzSearchResultType.deviceTrack => 'Device song',
+      WzSearchResultType.downloadedTrack => 'Offline song',
+      WzSearchResultType.collection => 'Collection',
+      WzSearchResultType.historyEntry => 'Recent play',
+      WzSearchResultType.artistLike => 'Artist',
+      WzSearchResultType.unknown => 'Result',
+    };
+
+IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
+      WzSearchResultType.deviceTrack => Icons.phone_android,
+      WzSearchResultType.downloadedTrack => Icons.download_done,
+      WzSearchResultType.collection => Icons.playlist_play,
+      WzSearchResultType.historyEntry => Icons.history,
+      WzSearchResultType.artistLike => Icons.person,
+      WzSearchResultType.track || WzSearchResultType.unknown => Icons.music_note,
+    };
+
+bool _searchFilterAllows(_SearchFilter filter, WzSearchResult result) => switch (filter) {
+      _SearchFilter.all => true,
+      _SearchFilter.songs => result.type == WzSearchResultType.track || result.type == WzSearchResultType.deviceTrack || result.type == WzSearchResultType.downloadedTrack,
+      _SearchFilter.device => result.source == WzSearchSource.deviceMusic,
+      _SearchFilter.downloads => result.source == WzSearchSource.downloads,
+      _SearchFilter.collections => result.type == WzSearchResultType.collection || result.source == WzSearchSource.collections,
+      _SearchFilter.history => result.source == WzSearchSource.history,
+      _SearchFilter.legalDemo => result.source == WzSearchSource.legalDemo || result.license?.needsRightsWarning == true,
+    };
+
+int _searchRank(WzSearchResult result, String query) {
+  final q = _normalizeWzSearch(query);
+  final title = _normalizeWzSearch(result.title);
+  final subtitle = _normalizeWzSearch(result.subtitle);
+  final source = _normalizeWzSearch(_searchSourceLabel(result.source));
+  final license = _normalizeWzSearch(result.license?.badgeLabel ?? '');
+  if (title == q) return 0;
+  if (title.startsWith(q)) return 10;
+  if (title.contains(q)) return 20;
+  if (subtitle.contains(q)) return 30;
+  if (result.type == WzSearchResultType.collection && result.searchText.contains(q)) return 40;
+  if (result.source == WzSearchSource.history || result.source == WzSearchSource.downloads || result.source == WzSearchSource.deviceMusic) return 50;
+  if (source.contains(q) || license.contains(q)) return 60;
+  return 80;
 }
 
 enum _LibrarySortMode { recentlyAdded, titleAz, artistAz, longestDuration, shortestDuration, quality }
@@ -3067,6 +3431,252 @@ class _ContinueListeningCard extends StatelessWidget {
       );
 }
 
+
+class _SearchPage extends StatelessWidget {
+  const _SearchPage({
+    required this.controller,
+    required this.filter,
+    required this.results,
+    required this.allResultCount,
+    required this.recentSearches,
+    required this.history,
+    required this.cachedTracks,
+    required this.collections,
+    required this.catalogTracks,
+    required this.onFilterChanged,
+    required this.onClearQuery,
+    required this.onRecentSearch,
+    required this.onClearRecentSearches,
+    required this.onSubmitted,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onAddToCollection,
+    required this.onOpenCollection,
+    required this.onImportDeviceMusic,
+    required this.onLoadCatalog,
+  });
+
+  final TextEditingController controller;
+  final _SearchFilter filter;
+  final List<WzSearchResult> results;
+  final int allResultCount;
+  final List<String> recentSearches;
+  final List<WzListeningHistoryEntry> history;
+  final List<CatalogTrackSummary> cachedTracks;
+  final List<WzCollection> collections;
+  final List<CatalogTrackSummary> catalogTracks;
+  final ValueChanged<_SearchFilter> onFilterChanged;
+  final VoidCallback onClearQuery;
+  final ValueChanged<String> onRecentSearch;
+  final VoidCallback? onClearRecentSearches;
+  final ValueChanged<String> onSubmitted;
+  final ValueChanged<WzSearchResult> onPlay;
+  final ValueChanged<WzSearchResult> onAddToQueue;
+  final ValueChanged<WzSearchResult> onAddToCollection;
+  final ValueChanged<WzSearchResult> onOpenCollection;
+  final VoidCallback onImportDeviceMusic;
+  final VoidCallback onLoadCatalog;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = controller.text.trim();
+    final hasQuery = query.isNotEmpty;
+    return WzPageScaffold(
+      children: [
+        const WzPageHeader(
+          icon: Icons.search,
+          title: 'Search',
+          subtitle: 'Find tracks, downloads, collections, and recent plays on this device.',
+        ),
+        const SizedBox(height: WzSpacing.md),
+        WzPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: false,
+                textInputAction: TextInputAction.search,
+                onSubmitted: onSubmitted,
+                decoration: InputDecoration(
+                  labelText: 'Search music',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: hasQuery ? IconButton(onPressed: onClearQuery, icon: const Icon(Icons.close)) : null,
+                ),
+              ),
+              const SizedBox(height: WzSpacing.sm),
+              Wrap(
+                spacing: WzSpacing.xs,
+                runSpacing: WzSpacing.xs,
+                children: _SearchFilter.values
+                    .map((item) => ChoiceChip(
+                          label: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          selected: filter == item,
+                          onSelected: (_) => onFilterChanged(item),
+                        ))
+                    .toList(growable: false),
+              ),
+              const SizedBox(height: WzSpacing.sm),
+              Text(
+                hasQuery ? '$query • ${filter.label} • ${results.length} result${results.length == 1 ? '' : 's'}' : 'Search is local-only across $allResultCount available items.',
+                style: WzText.caption,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: WzSpacing.md),
+        if (!hasQuery) ...[
+          if (recentSearches.isNotEmpty) ...[
+            const WzSectionHeader(title: 'Recent searches', subtitle: 'Stored on this device only.', icon: Icons.manage_search),
+            Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: onClearRecentSearches, child: const Text('Clear'))),
+            WzPanel(child: Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: recentSearches.map((query) => ActionChip(label: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis), onPressed: () => onRecentSearch(query))).toList(growable: false))),
+            const SizedBox(height: WzSpacing.md),
+          ],
+          _SearchDiscoverySections(
+            history: history,
+            cachedTracks: cachedTracks,
+            collections: collections,
+            catalogTracks: catalogTracks,
+            onRecent: (entry) => onRecentSearch(entry.title),
+            onTrack: (track) => onRecentSearch(track.title),
+            onCollection: (collection) => onRecentSearch(collection.name),
+          ),
+        ] else if (results.isEmpty) ...[
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('No results found on this device.', style: WzText.title),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('Import Device Music or load catalog to search more.', style: WzText.body),
+                const SizedBox(height: WzSpacing.md),
+                Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
+                  WzPrimaryAction(label: 'Import Device Music', icon: Icons.perm_media, onPressed: onImportDeviceMusic),
+                  OutlinedButton.icon(onPressed: onLoadCatalog, icon: const Icon(Icons.refresh), label: const Text('Load catalog')),
+                ]),
+              ],
+            ),
+          ),
+        ] else ...[
+          ...results.map((result) => Padding(
+                padding: const EdgeInsets.only(bottom: WzSpacing.sm),
+                child: _SearchResultCard(
+                  result: result,
+                  onPlay: () => onPlay(result),
+                  onAddToQueue: () => onAddToQueue(result),
+                  onAddToCollection: () => onAddToCollection(result),
+                  onOpenCollection: result.type == WzSearchResultType.collection ? () => onOpenCollection(result) : null,
+                ),
+              )),
+        ],
+      ],
+    );
+  }
+}
+
+class _SearchResultCard extends StatelessWidget {
+  const _SearchResultCard({required this.result, required this.onPlay, required this.onAddToQueue, required this.onAddToCollection, required this.onOpenCollection});
+
+  final WzSearchResult result;
+  final VoidCallback onPlay;
+  final VoidCallback onAddToQueue;
+  final VoidCallback onAddToCollection;
+  final VoidCallback? onOpenCollection;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(backgroundColor: const Color(0xFF20283A), child: Icon(_searchResultIcon(result), color: WzColors.textPrimary)),
+                const SizedBox(width: WzSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(result.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
+                      const SizedBox(height: WzSpacing.xxs),
+                      Text(result.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: WzSpacing.sm),
+            Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
+              WzStatusPill(label: _searchSourceLabel(result.source), active: true, icon: Icons.label_outline),
+              WzStatusPill(label: _searchTypeLabel(result.type), icon: _searchResultIcon(result)),
+              if (result.qualityLabel != null) WzStatusPill(label: _productQualityLabel(result.qualityLabel!), icon: Icons.high_quality),
+              if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component),
+              if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy),
+              if (!result.available) const WzStatusPill(label: 'Unavailable', warning: true, icon: Icons.block),
+            ]),
+            const SizedBox(height: WzSpacing.xs),
+            Text(result.secondaryLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            const SizedBox(height: WzSpacing.sm),
+            Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
+              if (onOpenCollection != null)
+                WzPrimaryAction(label: 'Open Collection', icon: Icons.open_in_full, onPressed: onOpenCollection)
+              else ...[
+                WzPrimaryAction(label: 'Play', icon: Icons.play_arrow, onPressed: result.available ? onPlay : null),
+                OutlinedButton.icon(onPressed: result.available ? onAddToQueue : null, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
+                OutlinedButton.icon(onPressed: result.available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add), label: const Text('Add to Collection')),
+              ],
+            ]),
+          ],
+        ),
+      );
+}
+
+class _SearchDiscoverySections extends StatelessWidget {
+  const _SearchDiscoverySections({required this.history, required this.cachedTracks, required this.collections, required this.catalogTracks, required this.onRecent, required this.onTrack, required this.onCollection});
+
+  final List<WzListeningHistoryEntry> history;
+  final List<CatalogTrackSummary> cachedTracks;
+  final List<WzCollection> collections;
+  final List<CatalogTrackSummary> catalogTracks;
+  final ValueChanged<WzListeningHistoryEntry> onRecent;
+  final ValueChanged<CatalogTrackSummary> onTrack;
+  final ValueChanged<WzCollection> onCollection;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleCollections = collections.where((collection) => collection.trackCount > 0 || collection.type == WzCollectionType.liked).take(5).toList(growable: false);
+    final sections = <Widget>[];
+    if (history.isNotEmpty) {
+      sections.add(_DiscoveryPanel(title: 'Continue Listening', subtitle: 'Latest saved play.', icon: Icons.play_circle, children: [_DiscoveryButton(label: history.first.title, detail: history.first.subtitle, icon: Icons.history, onTap: () => onRecent(history.first))]));
+      sections.add(_DiscoveryPanel(title: 'Recently Played', subtitle: 'Local listening history.', icon: Icons.schedule, children: history.take(5).map((entry) => _DiscoveryButton(label: entry.title, detail: entry.subtitle, icon: Icons.history, onTap: () => onRecent(entry))).toList(growable: false)));
+    }
+    if (cachedTracks.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Downloaded / Offline Ready', subtitle: 'Cached tracks available locally.', icon: Icons.download_done, children: cachedTracks.take(5).map((track) => _DiscoveryButton(label: track.title, detail: track.subtitle, icon: Icons.download_done, onTap: () => onTrack(track))).toList(growable: false)));
+    if (visibleCollections.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Collections', subtitle: 'Liked Tracks and local playlists.', icon: Icons.playlist_play, children: visibleCollections.map((collection) => _DiscoveryButton(label: collection.name, detail: '${collection.trackCount} tracks', icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play, onTap: () => onCollection(collection))).toList(growable: false)));
+    if (catalogTracks.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Legal Demo / API Catalog', subtitle: 'Loaded catalog tracks with source labels.', icon: Icons.cloud_queue, children: catalogTracks.take(5).map((track) => _DiscoveryButton(label: track.title, detail: '${track.subtitle} • ${track.license.badgeLabel}', icon: Icons.music_note, onTap: () => onTrack(track))).toList(growable: false)));
+    if (sections.isEmpty) return const WzPanel(child: Text('Import Device Music or load catalog to search more.', style: WzText.body));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: sections.expand((section) => [section, const SizedBox(height: WzSpacing.md)]).toList(growable: false));
+  }
+}
+
+class _DiscoveryPanel extends StatelessWidget {
+  const _DiscoveryPanel({required this.title, required this.subtitle, required this.icon, required this.children});
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [WzSectionHeader(title: title, subtitle: subtitle, icon: icon), WzPanel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children))]);
+}
+
+class _DiscoveryButton extends StatelessWidget {
+  const _DiscoveryButton({required this.label, required this.detail, required this.icon, required this.onTap});
+  final String label;
+  final String detail;
+  final IconData icon;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => ListTile(leading: Icon(icon), title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis), subtitle: Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: onTap);
+}
+
 class _ListeningHistoryPage extends StatelessWidget {
   const _ListeningHistoryPage({
     required this.entries,
@@ -3239,6 +3849,8 @@ class _SettingsPage extends StatelessWidget {
     required this.listeningHistoryCount,
     required this.mostPlayedHistoryTitle,
     required this.onOpenHistory,
+    required this.onOpenSearch,
+    required this.onClearRecentSearches,
     required this.onClearListeningHistory,
     required this.legalTracks,
   });
@@ -3274,6 +3886,8 @@ class _SettingsPage extends StatelessWidget {
   final int listeningHistoryCount;
   final String? mostPlayedHistoryTitle;
   final VoidCallback onOpenHistory;
+  final VoidCallback onOpenSearch;
+  final VoidCallback? onClearRecentSearches;
   final VoidCallback? onClearListeningHistory;
   final List<CatalogTrackSummary> legalTracks;
 
@@ -3284,6 +3898,18 @@ class _SettingsPage extends StatelessWidget {
             icon: Icons.settings,
             title: 'Settings',
             subtitle: 'Customize WaveZero and manage user-facing playback, storage, device music, and app mode preferences.',
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Search & Discovery', subtitle: 'Local-only search across tracks, collections, downloads, and history.', icon: Icons.search),
+          WzPanel(
+            child: Wrap(
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: [
+                WzPrimaryAction(label: 'View search', icon: Icons.search, onPressed: onOpenSearch),
+                OutlinedButton.icon(onPressed: onClearRecentSearches, icon: const Icon(Icons.clear_all), label: const Text('Clear recent searches')),
+              ],
+            ),
           ),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Appearance', subtitle: 'Theme choices are persisted on this device.', icon: Icons.palette),
@@ -3893,6 +4519,7 @@ class _HomeQuickActions extends StatelessWidget {
               spacing: WzSpacing.sm,
               runSpacing: WzSpacing.sm,
               children: [
+                WzPrimaryAction(label: 'Search music', icon: Icons.search, onPressed: () => onNavigate(_AppTab.search)),
                 WzPrimaryAction(label: 'Go to Library', icon: Icons.library_music, onPressed: () => onNavigate(_AppTab.library)),
                 WzPrimaryAction(label: 'Collections', icon: Icons.playlist_play, onPressed: () => onNavigate(_AppTab.collections)),
                 WzPrimaryAction(label: 'Go to Now', icon: Icons.play_circle_fill, onPressed: () => onNavigate(_AppTab.now)),
@@ -5796,6 +6423,7 @@ class _CatalogListCard extends StatelessWidget {
     required this.onSourceFilterChanged,
     required this.onSortModeChanged,
     required this.onClearSearch,
+    required this.onOpenFullSearch,
     required this.onRefresh,
     required this.onImportDeviceMusic,
     required this.onSelectTrack,
@@ -5830,6 +6458,7 @@ class _CatalogListCard extends StatelessWidget {
   final ValueChanged<_LibrarySourceFilter> onSourceFilterChanged;
   final ValueChanged<_LibrarySortMode> onSortModeChanged;
   final VoidCallback onClearSearch;
+  final VoidCallback onOpenFullSearch;
   final VoidCallback onRefresh;
   final VoidCallback onImportDeviceMusic;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
@@ -5913,6 +6542,11 @@ class _CatalogListCard extends StatelessWidget {
                 onPressed: onOpenCollections,
                 icon: const Icon(Icons.playlist_play),
                 label: const Text('Collections / Playlists'),
+              ),
+              OutlinedButton.icon(
+                onPressed: onOpenFullSearch,
+                icon: const Icon(Icons.search),
+                label: const Text('Open full search'),
               ),
               Text('Permission: $devicePermissionStatus', style: _WzTokens.caption),
               Text('Device scan: $deviceScanStatus • $deviceTrackCount tracks', style: _WzTokens.caption),
