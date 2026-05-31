@@ -1339,7 +1339,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             downloads: _cachedLibrary,
             cacheBytes: _cacheBytes,
             controlsDisabled: _queueDisabled,
-            onPlay: (track) => _loadCatalogTrack(trackId: track.trackId, autoPlay: _metrics.isPlaying),
+            onPlay: (track) => _loadCatalogTrack(trackId: track.trackId, autoPlay: true),
             onDelete: _deleteCachedTrack,
             onClearAll: _clearCache,
           ),
