@@ -7172,9 +7172,6 @@ class _DownloadsCard extends StatelessWidget {
     required this.onDelete,
     required this.onClearAll,
     required this.onManageStorage,
-    required this.cloudVaultCount,
-    required this.onOpenCloudVault,
-    required this.onClearCloudVault,
   });
 
   final List<CachedTrackMetadata> downloads;
@@ -7184,9 +7181,6 @@ class _DownloadsCard extends StatelessWidget {
   final ValueChanged<CachedTrackMetadata> onDelete;
   final VoidCallback onClearAll;
   final VoidCallback onManageStorage;
-  final int cloudVaultCount;
-  final VoidCallback onOpenCloudVault;
-  final VoidCallback? onClearCloudVault;
 
   @override
   Widget build(BuildContext context) => _Panel(
