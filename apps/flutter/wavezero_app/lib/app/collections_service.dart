@@ -192,7 +192,7 @@ class CollectionsService {
 
   final SharedPreferences? _prefsOverride;
 
-  Future<SharedPreferences> get _prefs async => _prefsOverride ?? SharedPreferences.getInstance();
+  Future<SharedPreferences> get _prefs async => _prefsOverride ?? await SharedPreferences.getInstance();
 
   Future<List<WzCollection>> load() async {
     final prefs = await _prefs;
@@ -238,3 +238,4 @@ class CollectionsService {
     return normalized;
   }
 }
+
