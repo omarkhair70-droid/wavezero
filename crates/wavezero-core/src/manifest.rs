@@ -73,4 +73,5 @@ pub enum AudioCodec {
     Opus,
     Flac,
     Mp3,
+    Wav,
 }

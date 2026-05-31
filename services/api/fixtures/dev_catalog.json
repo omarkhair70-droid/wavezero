@@ -21,7 +21,11 @@
           "codec": "mp3",
           "bitrate_kbps": 128,
           "segment_count": 1,
-          "is_primary": true
+          "is_primary": true,
+          "quality_label": "standard",
+          "sample_rate_hz": 44100,
+          "bit_depth": null,
+          "file_size_bytes": null
         }
       ]
     },
@@ -39,7 +43,11 @@
           "codec": "mp3",
           "bitrate_kbps": 128,
           "segment_count": 1,
-          "is_primary": true
+          "is_primary": true,
+          "quality_label": "standard",
+          "sample_rate_hz": 44100,
+          "bit_depth": null,
+          "file_size_bytes": null
         }
       ]
     },
@@ -57,7 +65,11 @@
           "codec": "mp3",
           "bitrate_kbps": 128,
           "segment_count": 1,
-          "is_primary": true
+          "is_primary": true,
+          "quality_label": "standard",
+          "sample_rate_hz": 44100,
+          "bit_depth": null,
+          "file_size_bytes": null
         }
       ]
     },
@@ -75,7 +87,11 @@
           "codec": "mp3",
           "bitrate_kbps": 128,
           "segment_count": 1,
-          "is_primary": true
+          "is_primary": true,
+          "quality_label": "standard",
+          "sample_rate_hz": 44100,
+          "bit_depth": null,
+          "file_size_bytes": null
         }
       ]
     }

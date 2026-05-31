@@ -105,3 +105,45 @@ WaveZero #64 manual checklist
 11. Confirm it is removed from Downloads and Library cached badge updates.
 12. Stop audio/API and confirm remaining cached tracks still play.
 13. Clear all cache and confirm Downloads becomes empty.
+
+## Audio Quality Pipeline Foundation
+
+WaveZero now treats a playable track as a set of quality-aware audio assets instead of a single opaque URL. The local development catalog and Flutter catalog models carry asset diagnostics including:
+
+- `quality_label`: `standard`, `high`, or `original`
+- `codec`
+- `bitrate_kbps`
+- optional `sample_rate_hz`, `bit_depth`, and `file_size_bytes`
+
+Existing `dev_catalog.json` entries remain compatible. When explicit quality metadata is missing, the API infers a safe quality label from codec, bitrate, filename, and extension:
+
+- MP3 assets at or below 192 kbps fall back to `standard`.
+- MP3/AAC/M4A assets at or above 256 kbps are treated as `high`.
+- WAV/FLAC or lossless/original-looking filenames are treated as `original`.
+
+The local folder auto catalog supports direct development audio files with these extensions: `.mp3`, `.m4a`, `.aac`, `.wav`, and `.flac`. It intentionally avoids heavy audio probing dependencies; bitrate and quality are inferred from filename hints where possible, otherwise extension-based fallbacks are used.
+
+### Preferred quality and fallback
+
+The Flutter engine has an internal preferred audio quality control under the Engine tab. The default preference is `high`, with available values `standard`, `high`, and `original`.
+
+Playback, manual caching, Smart Downloads for the current track, Smart Downloads for the up-next track, and download metadata now use the same asset selection helper. Selection never blocks playback just because a preferred tier is unavailable:
+
+- `original` preference tries `original`, then `high`, then `standard`, then the primary/first playable asset.
+- `high` preference tries `high`, then `standard`, then `original`, then the primary/first playable asset.
+- `standard` preference tries `standard`, then `high`, then `original`, then the primary/first playable asset.
+
+The Engine diagnostics panel shows the preferred quality, current selected quality, codec, bitrate, asset URL, fallback reason, and cached quality when playback resolves to an offline file. Cached metadata also remembers the selected quality, codec, bitrate, and original remote URL; older cached metadata loads as `unknown` quality.
+
+### Manual checklist
+
+1. Add MP3/M4A/WAV/FLAC files to the local audio folder.
+2. Start the audio server, API server, and Flutter app.
+3. Confirm the catalog exposes quality and codec info.
+4. Set preferred quality to `high` in the Engine tab.
+5. Play a track and confirm the selected asset quality in Audio Quality diagnostics.
+6. Set preferred quality to `original`.
+7. Confirm an original/lossless-like asset is preferred when available.
+8. Confirm fallback works when the preferred quality is unavailable.
+9. Cache a track and confirm Downloads shows the remembered quality.
+10. Stop the audio/API servers and confirm a cached high/original track still plays offline.

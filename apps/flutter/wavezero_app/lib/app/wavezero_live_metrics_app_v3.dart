@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../catalog/audio_quality.dart';
 import '../catalog/catalog_client.dart';
 import '../catalog/catalog_track_manifest.dart';
 import '../playback/playback_bridge.dart';
@@ -111,6 +112,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   // Smart downloads (predictive auto-cache) state
   bool _smartDownloadsEnabled = true;
+  AudioQualityTier _preferredAudioQuality = AudioQualityTier.high;
+  String _lastQualityFallbackReason = 'No catalog asset selected yet.';
+  String? _currentAssetUrl;
+  String? _currentCachedQuality;
   final Set<String> _autoCacheInFlight = <String>{};
   String? _lastSmartDownloadTrackId;
   String? _lastSmartDownloadTitle;
@@ -362,7 +367,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return true;
   }
 
-  Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto', String downloadSource = 'unknown'}) async {
+  Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto', String downloadSource = 'unknown', String qualityLabel = 'unknown', String? codec, int? bitrateKbps}) async {
     // Gatekeeper checks: do not early-return before updating diagnostics.
     if (!_smartDownloadsEnabled) {
       _lastSmartDownloadReason = 'smart downloads disabled';
@@ -417,6 +422,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           originalRemoteUrl: url,
           cachedAt: DateTime.now().millisecondsSinceEpoch,
           downloadSource: downloadSource,
+          qualityLabel: qualityLabel,
+          codec: codec,
+          bitrateKbps: bitrateKbps,
         ),
       );
       _lastSmartDownloadResult = ok ? 'cached' : 'error';
@@ -444,6 +452,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       artistName: manifest.artistName,
       durationMs: manifest.durationMs,
       artworkUrl: manifest.artworkUrl,
+      qualityLabel: manifest.qualityLabel ?? 'unknown',
+      codec: manifest.codec,
+      bitrateKbps: manifest.bitrateKbps,
       reason: 'current_played',
       downloadSource: 'smart_current',
     ));
@@ -452,9 +463,23 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _maybeAutoCacheNextQueuedTrack() async {
     final next = _upNextQueueTrack;
     if (next == null) return;
-    final assetUrl = next.primaryAsset?.manifestUrl;
+    final selection = choosePreferredAsset(next, _preferredAudioQuality);
+    final selectedAsset = selection?.asset;
+    final assetUrl = selectedAsset?.manifestUrl;
     if (assetUrl != null && assetUrl.isNotEmpty) {
-      unawaited(_autoCacheTrack(trackId: next.trackId, url: assetUrl, title: next.title, artistName: next.artistName, durationMs: next.durationMs, artworkUrl: next.artworkUrl, reason: 'up_next', downloadSource: 'smart_up_next'));
+      unawaited(_autoCacheTrack(
+        trackId: next.trackId,
+        url: assetUrl,
+        title: next.title,
+        artistName: next.artistName,
+        durationMs: next.durationMs,
+        artworkUrl: next.artworkUrl,
+        reason: 'up_next: ${selection?.fallbackReason ?? 'quality unknown'}',
+        downloadSource: 'smart_up_next',
+        qualityLabel: selectedAsset?.qualityLabel ?? 'unknown',
+        codec: selectedAsset?.codec,
+        bitrateKbps: selectedAsset?.bitrateKbps,
+      ));
       return;
     }
     // fallback: try to fetch manifest to find a streamUrl
@@ -463,7 +488,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       final manifest = await client.fetchTrackManifest(trackId: next.trackId);
       final url2 = manifest.streamUrl;
       if (url2 != null && url2.isNotEmpty) {
-        unawaited(_autoCacheTrack(trackId: manifest.trackId, url: url2, title: manifest.title, artistName: manifest.artistName, durationMs: manifest.durationMs, artworkUrl: manifest.artworkUrl, reason: 'up_next_fetched', downloadSource: 'smart_up_next'));
+        unawaited(_autoCacheTrack(trackId: manifest.trackId, url: url2, title: manifest.title, artistName: manifest.artistName, durationMs: manifest.durationMs, artworkUrl: manifest.artworkUrl, reason: 'up_next_fetched', downloadSource: 'smart_up_next', qualityLabel: manifest.qualityLabel ?? 'unknown', codec: manifest.codec, bitrateKbps: manifest.bitrateKbps));
       }
     } catch (_) {
       // manifest fetch failed — mark skip reason once
@@ -472,6 +497,30 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     } finally {
       client.close();
     }
+  }
+
+  CatalogTrackManifest? _qualityAwareManifestForTrack(String trackId, String fallbackReasonPrefix) {
+    final track = _findTrack(_catalog, trackId);
+    if (track == null) return null;
+    final selection = choosePreferredAsset(track, _preferredAudioQuality);
+    if (selection == null) return null;
+    _lastQualityFallbackReason = '$fallbackReasonPrefix: ${selection.fallbackReason}';
+    return CatalogTrackManifest(
+      trackId: track.trackId,
+      title: track.title,
+      streamUrl: selection.asset.manifestUrl,
+      artistId: track.artistId,
+      artistName: track.artistName,
+      durationMs: track.durationMs,
+      artworkUrl: track.artworkUrl,
+      assetId: selection.asset.assetId,
+      qualityLabel: selection.asset.qualityLabel,
+      codec: selection.asset.codec,
+      bitrateKbps: selection.asset.bitrateKbps,
+      sampleRateHz: selection.asset.sampleRateHz,
+      bitDepth: selection.asset.bitDepth,
+      fileSizeBytes: selection.asset.fileSizeBytes,
+    );
   }
 
   Future<void> _loadCatalog({bool fallbackToDemo = false}) {
@@ -513,7 +562,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     artistName: entry.artistName,
                     durationMs: entry.durationMs,
                     artworkUrl: entry.artworkUrl,
-                    primaryAsset: null,
+                    primaryAsset: CatalogTrackAssetSummary(
+                      assetId: 'cached-${entry.trackId}',
+                      manifestUrl: entry.originalRemoteUrl,
+                      qualityLabel: entry.qualityLabel,
+                      codec: entry.codec,
+                      bitrateKbps: entry.bitrateKbps,
+                    ),
                   ))
               .toList(growable: false);
           setState(() {
@@ -612,8 +667,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _lastAutoAdvanceTrackId = trackId;
     });
     CatalogTrackManifest manifest;
+    final qualityAwareManifest = _qualityAwareManifestForTrack(trackId, 'playback');
     if (prefetchedManifest?.trackId == trackId) {
       manifest = prefetchedManifest!;
+      _lastQualityFallbackReason = 'playback: using prefetched ${manifest.qualityLabel ?? 'unknown'} asset';
+    } else if (qualityAwareManifest != null) {
+      manifest = qualityAwareManifest;
     } else {
       final cachedMetadata = await _cacheService.cachedTrackById(trackId);
       if (_isOfflineLibraryMode && cachedMetadata != null) {
@@ -625,7 +684,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           artistName: cachedMetadata.artistName,
           durationMs: cachedMetadata.durationMs,
           artworkUrl: cachedMetadata.artworkUrl,
+          qualityLabel: cachedMetadata.qualityLabel,
+          codec: cachedMetadata.codec,
+          bitrateKbps: cachedMetadata.bitrateKbps,
         );
+        _lastQualityFallbackReason = 'offline cache: using remembered ${cachedMetadata.qualityLabel} quality';
         if (mounted) {
           setState(() {
             _catalogStatus = 'Loaded offline cached track: ${manifest.title}';
@@ -634,6 +697,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       } else {
         try {
           manifest = await client.fetchTrackManifest(trackId: trackId);
+          _lastQualityFallbackReason = 'catalog manifest: API primary asset used';
         } catch (error) {
           if (cachedMetadata != null) {
             manifest = CatalogTrackManifest(
@@ -644,7 +708,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               artistName: cachedMetadata.artistName,
               durationMs: cachedMetadata.durationMs,
               artworkUrl: cachedMetadata.artworkUrl,
+              qualityLabel: cachedMetadata.qualityLabel,
+              codec: cachedMetadata.codec,
+              bitrateKbps: cachedMetadata.bitrateKbps,
             );
+            _lastQualityFallbackReason = 'offline cache fallback: using remembered ${cachedMetadata.qualityLabel} quality';
             if (mounted) {
               setState(() {
                 _catalogStatus = 'Loaded offline cached track: ${manifest.title}';
@@ -663,9 +731,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _manifest = manifest;
       _selectedTrackId = manifest.trackId;
       _queueCurrentTrackId = manifest.trackId;
+      _currentAssetUrl = manifest.streamUrl;
+      _currentCachedQuality = null;
       _catalogStatus = status ?? (_catalogStatus.startsWith('Loaded offline') ? _catalogStatus : 'Loaded from catalog API: ${manifest.title}');
     });
-    final resolvedUrl = await _cacheService.cachedOrRemoteUrl(manifest.trackId, manifest.streamUrl);
+    final cachedMetadata = await _cacheService.cachedTrackById(manifest.trackId);
+    final resolvedUrl = await _cacheService.cachedOrRemoteUrlForAsset(
+      trackId: manifest.trackId,
+      remoteUrl: manifest.streamUrl,
+      qualityLabel: manifest.qualityLabel,
+    );
+    if (mounted && resolvedUrl.startsWith('file://')) {
+      setState(() => _currentCachedQuality = cachedMetadata?.qualityLabel ?? 'unknown');
+    }
     await widget.playbackBridge.loadTrack(title: manifest.title, url: resolvedUrl);
     unawaited(_refreshCacheStats());
     if (autoPlay) await widget.playbackBridge.play();
@@ -775,7 +853,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
     final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
     try {
-      final manifest = await client.fetchTrackManifest(trackId: candidate.trackId);
+      final manifest = _qualityAwareManifestForTrack(candidate.trackId, 'preload') ?? await client.fetchTrackManifest(trackId: candidate.trackId);
       final latestDecision = _smartQueueDecision();
       if (!mounted || generation != _prefetchGeneration || !latestDecision.hasCandidate || latestDecision.candidateTrackId != candidate.trackId) return;
       setState(() {
@@ -868,7 +946,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _toggleCache(CatalogTrackSummary track) async {
     if (_operation != PlayerOperation.idle) return;
-    final assetUrl = track.primaryAsset?.manifestUrl;
+    final selection = choosePreferredAsset(track, _preferredAudioQuality);
+    final selectedAsset = selection?.asset;
+    final assetUrl = selectedAsset?.manifestUrl;
     if (assetUrl == null || assetUrl.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No downloadable asset URL available for this track')));
@@ -889,11 +969,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           originalRemoteUrl: assetUrl,
           cachedAt: DateTime.now().millisecondsSinceEpoch,
           downloadSource: 'manual',
+          qualityLabel: selectedAsset?.qualityLabel ?? 'unknown',
+          codec: selectedAsset?.codec,
+          bitrateKbps: selectedAsset?.bitrateKbps,
         ),
       );
       await _refreshCacheStats();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Cached ${track.title}' : 'Cache failed for ${track.title}')));
+      _lastQualityFallbackReason = 'manual cache: ${selection?.fallbackReason ?? 'quality unknown'}';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Cached ${track.title} (${selectedAsset?.qualityLabel ?? 'unknown'})' : 'Cache failed for ${track.title}')));
     } finally {
       if (mounted) setState(() => _operation = PlayerOperation.idle);
     }
@@ -926,7 +1010,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               artistName: entry.artistName,
               durationMs: entry.durationMs,
               artworkUrl: entry.artworkUrl,
-              primaryAsset: null,
+              primaryAsset: CatalogTrackAssetSummary(
+                assetId: 'cached-${entry.trackId}',
+                manifestUrl: entry.originalRemoteUrl,
+                qualityLabel: entry.qualityLabel,
+                codec: entry.codec,
+                bitrateKbps: entry.bitrateKbps,
+              ),
             ))
         .toList(growable: false);
     if (!mounted) return;
@@ -1378,6 +1468,35 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             sessionRecoveryMs: _sessionRecoveryMs,
             audioPreparedBeforeNext: _audioPreparedBeforeNext,
             nextPreparedBeforePlay: _nextPreparedBeforePlay,
+          ),
+          const SizedBox(height: 12),
+          _Panel(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('Audio Quality', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              SegmentedButton<AudioQualityTier>(
+                segments: const [
+                  ButtonSegment(value: AudioQualityTier.standard, label: Text('Standard')),
+                  ButtonSegment(value: AudioQualityTier.high, label: Text('High')),
+                  ButtonSegment(value: AudioQualityTier.original, label: Text('Original')),
+                ],
+                selected: {_preferredAudioQuality},
+                onSelectionChanged: _queueDisabled
+                    ? null
+                    : (values) => setState(() {
+                          _preferredAudioQuality = values.first;
+                          _lastQualityFallbackReason = 'preferred quality set to ${values.first.label}';
+                        }),
+              ),
+              const SizedBox(height: 10),
+              Text('Preferred quality: ${_preferredAudioQuality.label}', style: _WzTokens.caption),
+              Text('Current track quality: ${_manifest?.qualityLabel ?? 'unknown'}', style: _WzTokens.caption),
+              Text('Current codec: ${_manifest?.codec ?? 'unknown'}', style: _WzTokens.caption),
+              Text('Current bitrate: ${_manifest?.bitrateKbps == null ? 'unknown' : '${_manifest!.bitrateKbps} kbps'}', style: _WzTokens.caption),
+              Text('Current asset URL: ${_currentAssetUrl ?? _manifest?.streamUrl ?? 'none'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+              Text('Quality fallback reason: $_lastQualityFallbackReason', style: _WzTokens.caption),
+              Text('Cached quality: ${_currentCachedQuality ?? 'not playing from cache'}', style: _WzTokens.caption),
+            ]),
           ),
           const SizedBox(height: 12),
           _Panel(
@@ -2358,7 +2477,7 @@ class _DownloadRow extends StatelessWidget {
                 children: [
                   Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
-                  Text('${track.subtitle} • source: ${_downloadSourceLabel(track.downloadSource)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                  Text('${track.subtitle} • ${track.qualityLabel}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • source: ${_downloadSourceLabel(track.downloadSource)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
                 ],
               ),
             ),
@@ -2713,7 +2832,7 @@ class _EmptyCatalogMessage extends StatelessWidget {
 }
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
-String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); return parts.join(' • '); }
+String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); return parts.join(' • '); }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
