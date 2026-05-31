@@ -1321,15 +1321,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final displayedPositionMs = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
     final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
 
+    final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
     final qualityLabel = _manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label;
+    final nowQualityLabel = hasPlayerTrack ? qualityLabel : 'unknown';
     final isPlayingFromCache = _currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false);
-    final effectsSummary = _nativeAudioEffectStatus == NativeAudioEffectStatus.applied
-        ? 'Applied'
-        : _nativeAudioEffectStatus == NativeAudioEffectStatus.unsupported
-            ? 'Unsupported'
-            : _selectedAudioEffectProfile == AudioEffectProfile.off
-                ? 'Off'
-                : _nativeAudioEffectStatus.name;
+    final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : _effectStatusLabel(_nativeAudioEffectStatus);
     final engineSummary = '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
         '${_prefetchEnabled ? 'Instant Next on' : 'Instant Next off'} • '
         '${_offlineLibraryAvailable ? 'Offline Ready' : 'Offline empty'}';
@@ -1371,13 +1367,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           const WzPageHeader(
             icon: Icons.play_circle_fill,
             title: 'Now Playing',
-            subtitle: 'Focused playback controls with current quality and effects context.',
+            subtitle: 'A premium playback screen powered only by live engine state.',
           ),
           const SizedBox(height: WzSpacing.md),
           _NowPlayingCard(
             metrics: _metrics,
             manifest: _manifest,
             nextTrack: _upNextQueueTrack,
+            qualityLabel: nowQualityLabel,
+            effectsSummary: effectsSummary,
+            sourceLabel: _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
             progressValue: progress,
             displayedPositionMs: displayedPositionMs,
             durationMs: durationMs,
@@ -1400,11 +1399,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
           const SizedBox(height: WzSpacing.md),
           _NowContextPanel(
-            qualityLabel: qualityLabel,
+            qualityLabel: nowQualityLabel,
             effectsSummary: effectsSummary,
             playingFromCache: isPlayingFromCache,
             offlineReady: _offlineLibraryAvailable,
             nextTrack: _upNextQueueTrack,
+            manifest: _manifest,
+            selectedEffectProfile: _selectedAudioEffectProfile,
+            nativeAudioEffectStatus: _nativeAudioEffectStatus,
+            queueIndex: _queueIndex,
+            queueLength: _queue.length,
           ),
           const SizedBox(height: WzSpacing.md),
           _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
@@ -1973,6 +1977,11 @@ class _NowContextPanel extends StatelessWidget {
     required this.playingFromCache,
     required this.offlineReady,
     required this.nextTrack,
+    required this.manifest,
+    required this.selectedEffectProfile,
+    required this.nativeAudioEffectStatus,
+    required this.queueIndex,
+    required this.queueLength,
   });
 
   final String qualityLabel;
@@ -1980,26 +1989,37 @@ class _NowContextPanel extends StatelessWidget {
   final bool playingFromCache;
   final bool offlineReady;
   final CatalogTrackSummary? nextTrack;
+  final CatalogTrackManifest? manifest;
+  final AudioEffectProfile selectedEffectProfile;
+  final NativeAudioEffectStatus nativeAudioEffectStatus;
+  final int queueIndex;
+  final int queueLength;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const WzSectionHeader(title: 'Listening context', subtitle: 'Quality, effects, cache, and up-next state.', icon: Icons.tune),
-            Wrap(
-              spacing: WzSpacing.sm,
-              runSpacing: WzSpacing.sm,
-              children: [
-                WzMiniMetric(label: 'Quality', value: _productQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
-                WzMiniMetric(label: 'Effects', value: effectsSummary, active: effectsSummary == 'Applied', icon: Icons.tune),
-                WzMiniMetric(label: 'Cache', value: playingFromCache ? 'Playing from cache' : offlineReady ? 'Offline Ready' : 'Streaming / ready', active: playingFromCache || offlineReady, icon: Icons.offline_pin),
-                WzMiniMetric(label: 'Up next', value: nextTrack?.title ?? 'Queue empty', active: nextTrack != null, icon: Icons.skip_next),
-              ],
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final currentPosition = queueIndex >= 0 && queueLength > 0 ? '${queueIndex + 1} of $queueLength' : 'No active queue item';
+    final bitrate = manifest?.bitrateKbps == null ? 'Unknown bitrate' : '${manifest!.bitrateKbps} kbps';
+    final codec = manifest?.codec ?? 'Unknown codec';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const WzSectionHeader(title: 'Player context', subtitle: 'Live quality, effects, cache, and queue state.', icon: Icons.dashboard_customize),
+        _PlayerSourceCard(icon: Icons.high_quality, title: 'Audio Quality', primary: _productQualityLabel(qualityLabel), detail: '$codec • $bitrate', active: qualityLabel != 'unknown'),
+        const SizedBox(height: WzSpacing.sm),
+        _PlayerSourceCard(icon: Icons.tune, title: 'Audio Effects', primary: selectedEffectProfile.label, detail: 'Native status: ${_effectStatusLabel(nativeAudioEffectStatus)} • Badge: $effectsSummary', active: nativeAudioEffectStatus == NativeAudioEffectStatus.applied),
+        const SizedBox(height: WzSpacing.sm),
+        _PlayerSourceCard(
+          icon: Icons.offline_pin,
+          title: 'Cache / Offline',
+          primary: playingFromCache ? 'Playing from cache' : offlineReady ? 'Offline Ready' : 'Not cached',
+          detail: playingFromCache ? 'The active asset is a local cached file.' : offlineReady ? 'Cached library exists; current playback is not marked as cache.' : 'No cached library state is active for this player context.',
+          active: playingFromCache || offlineReady,
         ),
-      );
+        const SizedBox(height: WzSpacing.sm),
+        _PlayerSourceCard(icon: Icons.queue_music, title: 'Queue', primary: currentPosition, detail: nextTrack == null ? 'No up-next track from Queue Engine v2.' : 'Up next: ${nextTrack!.title}', active: nextTrack != null),
+      ],
+    );
+  }
 }
 
 class _AudioQualityPanel extends StatelessWidget {
@@ -2172,6 +2192,9 @@ class _NowPlayingCard extends StatelessWidget {
     required this.metrics,
     required this.manifest,
     required this.nextTrack,
+    required this.qualityLabel,
+    required this.effectsSummary,
+    required this.sourceLabel,
     required this.progressValue,
     required this.displayedPositionMs,
     required this.durationMs,
@@ -2190,6 +2213,9 @@ class _NowPlayingCard extends StatelessWidget {
   final PlaybackMetrics metrics;
   final CatalogTrackManifest? manifest;
   final CatalogTrackSummary? nextTrack;
+  final String qualityLabel;
+  final String effectsSummary;
+  final String sourceLabel;
   final double progressValue;
   final int displayedPositionMs;
   final int? durationMs;
@@ -2206,96 +2232,201 @@ class _NowPlayingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = metrics.trackTitle ?? manifest?.title ?? waveZeroTestTrack.title;
-    final subtitle = manifest?.subtitle ?? 'WaveZero playback proof';
+    final title = metrics.trackTitle ?? manifest?.title ?? 'No track loaded';
+    final subtitle = manifest?.subtitle ?? 'Choose a track from Library to begin playback.';
     final status = metrics.isPlaying ? 'Playing' : _statusFromEvent(metrics.lastEvent);
-    return _Panel(
-      padding: const EdgeInsets.all(_WzTokens.space6),
+    return WzPanel(
+      padding: const EdgeInsets.all(WzSpacing.xl),
+      gradient: WzColors.heroGradient,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Artwork(artworkUrl: manifest?.artworkUrl),
-              const SizedBox(width: _WzTokens.space5),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(status.toUpperCase(), style: _WzTokens.eyebrow),
-                    const SizedBox(height: _WzTokens.space2),
-                    Text(
-                      title,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -0.5),
-                    ),
-                    const SizedBox(height: _WzTokens.space2),
-                    Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.body),
-                  ],
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final stacked = constraints.maxWidth < 620;
+              final art = _NowHeroArtwork(artworkUrl: manifest?.artworkUrl, size: stacked ? 240 : 280);
+              final identity = _NowTrackIdentity(title: title, subtitle: subtitle, status: status);
+              if (stacked) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Center(child: art), const SizedBox(height: WzSpacing.xl), identity]);
+              }
+              return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [art, const SizedBox(width: WzSpacing.xxl), Expanded(child: identity)]);
+            },
           ),
-          const SizedBox(height: _WzTokens.space6),
-          Slider(value: progressValue, onChanged: onSeekChanged, onChangeEnd: onSeekEnd),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [Text(_formatTime(displayedPositionMs), style: _timeStyle), Text(_formatTime(durationMs), style: _timeStyle)],
-          ),
-          if (nextTrack != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Up next: ${nextTrack!.title}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: _WzTokens.caption,
-            ),
-          ],
-          const SizedBox(height: _WzTokens.space6),
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: _WzTokens.space3,
-            runSpacing: _WzTokens.space3,
-            children: [
-              IconButton.filledTonal(
-                tooltip: 'Previous',
-                onPressed: controlsDisabled || !canPlayPrevious ? null : onPrevious,
-                icon: const Icon(Icons.skip_previous),
-              ),
-              IconButton.filledTonal(
-                tooltip: 'Retry',
-                onPressed: controlsDisabled ? null : onRetry,
-                icon: const Icon(Icons.replay),
-              ),
-              SizedBox(
-                width: 70,
-                height: 70,
-                child: FilledButton(
-                  onPressed: controlsDisabled ? null : onPlayPause,
-                  style: FilledButton.styleFrom(shape: const CircleBorder()),
-                  child: Icon(metrics.isPlaying ? Icons.pause : Icons.play_arrow, size: 36),
-                ),
-              ),
-              IconButton.filledTonal(
-                tooltip: 'Stop',
-                onPressed: controlsDisabled ? null : onStop,
-                icon: const Icon(Icons.stop),
-              ),
-              IconButton.filledTonal(
-                tooltip: 'Next',
-                onPressed: controlsDisabled || !canPlayNext ? null : onNext,
-                icon: const Icon(Icons.skip_next),
-              ),
-            ],
-          ),
+          const SizedBox(height: WzSpacing.lg),
+          _NowPlaybackBadges(qualityLabel: qualityLabel, effectsSummary: effectsSummary, sourceLabel: sourceLabel, upNextTitle: nextTrack?.title),
+          const SizedBox(height: WzSpacing.xl),
+          _NowProgressSection(progressValue: progressValue, displayedPositionMs: displayedPositionMs, durationMs: durationMs, onSeekChanged: onSeekChanged, onSeekEnd: onSeekEnd),
+          const SizedBox(height: WzSpacing.xl),
+          _NowActionRow(isPlaying: metrics.isPlaying, controlsDisabled: controlsDisabled, canPlayPrevious: canPlayPrevious, canPlayNext: canPlayNext, onPlayPause: onPlayPause, onStop: onStop, onRetry: onRetry, onPrevious: onPrevious, onNext: onNext),
+          const SizedBox(height: WzSpacing.lg),
+          _UpNextPreviewCard(nextTrack: nextTrack),
         ],
       ),
     );
   }
+}
+
+class _NowHeroArtwork extends StatelessWidget {
+  const _NowHeroArtwork({this.artworkUrl, required this.size});
+
+  final String? artworkUrl;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = artworkUrl;
+    return Container(
+      width: size,
+      height: size,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(WzRadius.xl), gradient: WzColors.accentGradient, border: Border.all(color: WzColors.border), boxShadow: const [BoxShadow(color: Color(0xAA000000), blurRadius: 36, offset: Offset(0, 24))]),
+      child: url == null || url.trim().isEmpty
+          ? Stack(
+              fit: StackFit.expand,
+              children: [
+                DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [WzColors.accent.withOpacity(0.9), WzColors.surfaceMuted, WzColors.accentAlt.withOpacity(0.55)]))),
+                Positioned(top: -28, right: -20, child: Icon(Icons.graphic_eq, size: size * 0.42, color: Colors.white.withOpacity(0.08))),
+                Center(child: Icon(Icons.album_rounded, size: size * 0.34, color: WzColors.textPrimary.withOpacity(0.9))),
+              ],
+            )
+          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Center(child: Icon(Icons.album_rounded, size: size * 0.34, color: WzColors.textPrimary))),
+    );
+  }
+}
+
+class _NowTrackIdentity extends StatelessWidget {
+  const _NowTrackIdentity({required this.title, required this.subtitle, required this.status});
+
+  final String title;
+  final String subtitle;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          WzStatusPill(label: status, active: status == 'Playing', icon: status == 'Playing' ? Icons.play_arrow : Icons.pause),
+          const SizedBox(height: WzSpacing.md),
+          Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.display.copyWith(fontSize: 34)),
+          const SizedBox(height: WzSpacing.sm),
+          Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body.copyWith(fontSize: 15)),
+        ],
+      );
+}
+
+class _NowPlaybackBadges extends StatelessWidget {
+  const _NowPlaybackBadges({required this.qualityLabel, required this.effectsSummary, required this.sourceLabel, required this.upNextTitle});
+
+  final String qualityLabel;
+  final String effectsSummary;
+  final String sourceLabel;
+  final String? upNextTitle;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        spacing: WzSpacing.sm,
+        runSpacing: WzSpacing.sm,
+        children: [
+          WzStatusPill(label: 'Quality: ${_productQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
+          WzStatusPill(label: 'Effects: $effectsSummary', active: effectsSummary == 'Applied', warning: effectsSummary == 'Pending' || effectsSummary == 'Failed', icon: Icons.tune),
+          WzStatusPill(label: 'Source: $sourceLabel', active: sourceLabel == 'Cache' || sourceLabel == 'Offline Ready', icon: Icons.offline_pin),
+          WzStatusPill(label: upNextTitle == null ? 'Up next: none' : 'Up next: $upNextTitle', active: upNextTitle != null, icon: Icons.skip_next),
+        ],
+      );
+}
+
+class _NowProgressSection extends StatelessWidget {
+  const _NowProgressSection({required this.progressValue, required this.displayedPositionMs, required this.durationMs, required this.onSeekChanged, required this.onSeekEnd});
+
+  final double progressValue;
+  final int displayedPositionMs;
+  final int? durationMs;
+  final ValueChanged<double>? onSeekChanged;
+  final ValueChanged<double>? onSeekEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final remainingMs = durationMs == null ? null : (durationMs! - displayedPositionMs).clamp(0, durationMs!).toInt();
+    final percent = (progressValue * 100).round();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SliderTheme(data: SliderTheme.of(context).copyWith(trackHeight: 7, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9)), child: Slider(value: progressValue, onChanged: onSeekChanged, onChangeEnd: onSeekEnd)),
+        const SizedBox(height: WzSpacing.xs),
+        Row(children: [Text(_formatTime(displayedPositionMs), style: WzText.caption.copyWith(color: WzColors.textPrimary)), Expanded(child: Text(durationMs == null ? 'Duration unknown' : '$percent% • -${_formatTime(remainingMs)}', textAlign: TextAlign.center, style: WzText.caption)), Text(_formatTime(durationMs), style: WzText.caption.copyWith(color: WzColors.textPrimary))]),
+      ],
+    );
+  }
+}
+
+class _NowActionRow extends StatelessWidget {
+  const _NowActionRow({required this.isPlaying, required this.controlsDisabled, required this.canPlayPrevious, required this.canPlayNext, required this.onPlayPause, required this.onStop, required this.onRetry, required this.onPrevious, required this.onNext});
+
+  final bool isPlaying;
+  final bool controlsDisabled;
+  final bool canPlayPrevious;
+  final bool canPlayNext;
+  final VoidCallback onPlayPause;
+  final VoidCallback onStop;
+  final VoidCallback onRetry;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: WzSpacing.md,
+        runSpacing: WzSpacing.sm,
+        children: [
+          IconButton.outlined(tooltip: 'Retry', onPressed: controlsDisabled ? null : onRetry, icon: const Icon(Icons.replay)),
+          IconButton.filledTonal(tooltip: 'Previous', onPressed: controlsDisabled || !canPlayPrevious ? null : onPrevious, icon: const Icon(Icons.skip_previous), iconSize: 30),
+          SizedBox(width: 84, height: 84, child: FilledButton(onPressed: controlsDisabled ? null : onPlayPause, style: FilledButton.styleFrom(shape: const CircleBorder(), backgroundColor: WzColors.accent), child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 44))),
+          IconButton.filledTonal(tooltip: 'Next', onPressed: controlsDisabled || !canPlayNext ? null : onNext, icon: const Icon(Icons.skip_next), iconSize: 30),
+          IconButton.outlined(tooltip: 'Stop', onPressed: controlsDisabled ? null : onStop, icon: const Icon(Icons.stop)),
+        ],
+      );
+}
+
+class _UpNextPreviewCard extends StatelessWidget {
+  const _UpNextPreviewCard({required this.nextTrack});
+
+  final CatalogTrackSummary? nextTrack;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(WzSpacing.md),
+        decoration: BoxDecoration(color: WzColors.surfaceMuted.withOpacity(0.72), borderRadius: BorderRadius.circular(WzRadius.lg), border: Border.all(color: WzColors.borderSoft)),
+        child: Row(
+          children: [
+            Icon(Icons.queue_music, color: nextTrack == null ? WzColors.textSubtle : WzColors.accentAlt),
+            const SizedBox(width: WzSpacing.sm),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Up next', style: WzText.eyebrow), const SizedBox(height: WzSpacing.xxs), Text(nextTrack?.title ?? 'Add more tracks to Queue for continuous playback.', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle), if (nextTrack != null) Text(nextTrack!.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption)])),
+          ],
+        ),
+      );
+}
+
+class _PlayerSourceCard extends StatelessWidget {
+  const _PlayerSourceCard({required this.icon, required this.title, required this.primary, required this.detail, required this.active});
+
+  final IconData icon;
+  final String title;
+  final String primary;
+  final String detail;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        padding: const EdgeInsets.all(WzSpacing.md),
+        child: Row(
+          children: [
+            Container(width: 42, height: 42, decoration: BoxDecoration(color: active ? WzColors.successSoft : WzColors.accentSoft, borderRadius: BorderRadius.circular(WzRadius.md)), child: Icon(icon, color: active ? WzColors.success : WzColors.accent)),
+            const SizedBox(width: WzSpacing.md),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: WzText.caption), const SizedBox(height: WzSpacing.xxs), Text(primary, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle), Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption)])),
+          ],
+        ),
+      );
 }
 
 class _Artwork extends StatelessWidget {
@@ -2703,6 +2834,28 @@ class _MetricCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+String _effectStatusLabel(NativeAudioEffectStatus status) {
+  switch (status) {
+    case NativeAudioEffectStatus.applied:
+      return 'Applied';
+    case NativeAudioEffectStatus.unsupported:
+      return 'Unsupported';
+    case NativeAudioEffectStatus.pending:
+      return 'Pending';
+    case NativeAudioEffectStatus.failed:
+      return 'Failed';
+    case NativeAudioEffectStatus.off:
+      return 'Off';
+  }
+}
+
+String _playerSourceLabel({required bool isPlayingFromCache, required bool offlineReady, required bool hasTrack}) {
+  if (isPlayingFromCache) return 'Cache';
+  if (hasTrack) return 'Remote';
+  if (offlineReady) return 'Offline Ready';
+  return 'Not cached';
 }
 
 String _productQualityLabel(String? value) {
