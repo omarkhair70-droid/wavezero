@@ -222,12 +222,11 @@ extension WzAccentPresetLabel on WzAccentPreset {
 
 
 String _catalogModeLabel(String? contentMode, int trackCount) {
-  return switch (contentMode) {
-    'demo' => 'Demo catalog',
-    'production' => 'Catalog ready',
-    'dev' => 'Catalog ready',
-    _ => trackCount > 0 ? 'Catalog ready' : 'Catalog unavailable',
-  };
+  final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
+  if (normalized == 'demo' || normalized == 'demo_catalog' || normalized == 'legal_demo') return 'Demo catalog';
+  if (normalized == 'production' || normalized == 'prod' || normalized == 'catalog_ready') return 'Catalog ready';
+  if (trackCount > 0) return 'Catalog ready';
+  return 'Catalog unavailable';
 }
 
 String _friendlyLoadError(String error) {
@@ -250,24 +249,11 @@ String _consumerCatalogStatus(String status) {
       normalized.contains('exception') ||
       normalized.contains('failed')) {
     return '${WaveZeroReleaseCopy.catalogUnavailable} ${WaveZeroReleaseCopy.catalogTryAgain} ${WaveZeroReleaseCopy.catalogLocalFallback}';
-  if (normalized.contains('demo catalog')) return 'Demo catalog';
-  if (normalized.contains('catalog ready')) return 'Catalog ready';
-  if (normalized.contains('catalog unavailable')) return 'Catalog unavailable';
-  if (normalized.contains('error') || normalized.contains('exception') || normalized.contains('failed')) {
-    return 'Couldn’t load music right now. Check your connection and try again.';
   }
   if (normalized.contains('permission')) return WaveZeroReleaseCopy.deviceMusicPermission;
   if (normalized.contains('loaded') || normalized.contains('imported')) return status;
   if (normalized.contains('offline')) return status;
   return 'Choose music from your library.';
-}
-
-String _catalogModeLabel(String? contentMode, int trackCount) {
-  final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
-  if (normalized == 'demo' || normalized == 'demo_catalog' || normalized == 'legal_demo') return 'Demo catalog';
-  if (normalized == 'production' || normalized == 'prod' || normalized == 'catalog_ready') return 'Catalog ready';
-  if (trackCount > 0) return 'Catalog ready';
-  return 'Catalog unavailable';
 }
 
 String? _consumerDeviceError(String? error) {
@@ -1856,12 +1842,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           contentStatus = null;
         }
         final catalog = await client.fetchCatalog();
-        ContentStatus? contentStatus;
-        try {
-          contentStatus = await client.fetchContentStatus();
-        } catch (_) {
-          contentStatus = null;
-        }
         final restored = await _restoreSession(catalog.tracks);
         final preferred = _findTrack(catalog.tracks, restored?.currentTrackId) ??
             _findTrack(catalog.tracks, restored?.selectedTrackId) ??
@@ -1878,7 +1858,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _contentStatus = contentStatus;
           _catalogStatus = catalog.tracks.isEmpty
               ? 'Catalog is empty.'
-              ? 'Catalog unavailable'
               : contentStatus?.friendlyLabel ?? _catalogModeLabel(catalog.contentMode, catalog.tracks.length);
           _queueStatus = restored == null ? 'Queue synced with catalog.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
@@ -1922,19 +1901,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _offlineLibraryAvailable = true;
             _offlineLibraryMode = true;
             _lastOfflineLibraryStatus = 'Offline cached library loaded.';
-            _contentStatus = null;
           });
         } else {
           setState(() {
             _lastError = error.toString();
             _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track.' : WaveZeroReleaseCopy.catalogUnavailable;
             _contentStatus = null;
-            _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track. $error' : 'Catalog load failed. $error';
             _offlineCachedTrackCount = 0;
             _offlineLibraryAvailable = false;
             _offlineLibraryMode = false;
             _lastOfflineLibraryStatus = 'Offline library empty.';
-            _contentStatus = null;
           });
           if (fallbackToDemo) {
             await widget.playbackBridge.loadTrack(title: waveZeroTestTrack.title, url: waveZeroTestTrack.url);
