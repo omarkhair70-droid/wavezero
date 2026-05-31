@@ -243,22 +243,33 @@ class WzStatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = warning ? WzColors.warning : active ? WzColors.success : WzColors.accent;
     final fill = warning ? WzColors.warningSoft : active ? WzColors.successSoft : WzColors.accentSoft;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(WzRadius.sm),
-        border: Border.all(color: color.withOpacity(0.45)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, color: color, size: 14),
-            const SizedBox(width: 6),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 260),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: BorderRadius.circular(WzRadius.sm),
+          border: Border.all(color: color.withOpacity(0.45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: color, size: 14),
+              const SizedBox(width: 6),
+            ],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: WzText.caption.copyWith(color: WzColors.textPrimary),
+              ),
+            ),
           ],
-          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption.copyWith(color: WzColors.textPrimary)),
-        ],
+        ),
       ),
     );
   }
