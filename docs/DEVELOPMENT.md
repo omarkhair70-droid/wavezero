@@ -565,7 +565,7 @@ WaveZero #71 upgrades the Android foreground media notification from the earlier
 
 - The native Android playback layer now tracks a notification media snapshot with track id, title, artist, album, URL, artwork URI, duration, source, quality label, and codec when Flutter has real metadata available.
 - Flutter sends notification metadata over the existing `wavezero/playback` MethodChannel when catalog/API tracks, Android Device Music tracks, and cached/downloaded tracks are loaded.
-- Flutter also sends a safe queue snapshot whenever Queue Engine v2 state changes through add, reorder, Play Next, remove, clear, and current-track changes.
+- Flutter also sends a safe queue snapshot whenever Queue Engine v2 state changes through add, reorder, Play Next, remove, clear, and current-track changes. Queue-only edits update the native snapshot but do not force-start a foreground notification from a cold/no-track state.
 - The foreground notification now exposes Previous, Play/Pause, Next, and Stop actions. Compact media-style actions prioritize Previous / Play-Pause / Next.
 - Previous and Next are queue-aware on the native side. They use only the Flutter-provided snapshot and safely no-op when there is no previous/next playable item or the snapshot is missing/stale.
 - Native notification actions accept existing playable URLs, including Android MediaStore `content://` tracks, cached/downloaded `file://` tracks, and remote `http://`/`https://` tracks. Notification actions do not download or cache anything.

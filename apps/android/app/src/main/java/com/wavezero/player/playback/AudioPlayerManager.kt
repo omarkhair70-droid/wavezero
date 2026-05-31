@@ -41,6 +41,8 @@ class AudioPlayerManager(
     private var currentTrackTitle: String = currentTrack.title
     private var currentHlsUrl: String = currentTrack.url
     private var notificationQueueSnapshot: List<NotificationTrackSnapshot> = emptyList()
+    private var currentTrackLoaded = false
+    private var mediaNotificationShown = false
     private var lastNotificationAction: String = "none"
     private var lastNotificationActionResult: String = "none"
     private var lastNotificationActionTrackId: String? = null
@@ -210,6 +212,7 @@ class AudioPlayerManager(
     fun loadTrack(track: NotificationTrackSnapshot) {
         clearNativePrebuffer(NativePrebufferClearReason.TrackLoaded)
         applyCurrentTrack(track)
+        currentTrackLoaded = true
         playCommandInFlight = false
         softStopped = false
         positionJob?.cancel()
@@ -226,6 +229,7 @@ class AudioPlayerManager(
 
     fun updateMediaNotificationMetadata(track: NotificationTrackSnapshot) {
         applyCurrentTrack(track)
+        currentTrackLoaded = true
         if (player.mediaItemCount > 0) {
             player.replaceMediaItem(player.currentMediaItemIndex.coerceAtLeast(0), mediaItemFor(currentTrack))
         } else {
@@ -236,6 +240,16 @@ class AudioPlayerManager(
     fun updateNotificationQueueSnapshot(queue: List<NotificationTrackSnapshot>) {
         notificationQueueSnapshot = queue.filter { it.hasPlayableUrl() }
         lastNotificationActionResult = "queue_updated"
+    }
+
+    fun shouldRefreshMediaControlsForQueueSnapshotUpdate(): Boolean = currentTrackLoaded || mediaNotificationShown
+
+    fun markMediaNotificationShown() {
+        mediaNotificationShown = true
+    }
+
+    fun markMediaNotificationDismissed() {
+        mediaNotificationShown = false
     }
 
     fun prepareNextTrack(trackId: String, title: String, hlsUrl: String) {
@@ -422,6 +436,8 @@ class AudioPlayerManager(
             "lastNotificationActionTrackId" to lastNotificationActionTrackId,
             "notificationArtworkStatus" to artworkStatus,
             "mediaSessionStatus" to if (mediaSession == null) "disabled" else "active",
+            "mediaNotificationShown" to mediaNotificationShown,
+            "currentTrackLoaded" to currentTrackLoaded,
         )
     }
 
@@ -463,6 +479,7 @@ class AudioPlayerManager(
         softStopped = false
         playCommandInFlight = true
         applyCurrentTrack(NotificationTrackSnapshot(trackId = safeTrackId, title = safeTitle, url = hlsUrl))
+        currentTrackLoaded = true
 
         previousPrimaryPlayer.playWhenReady = false
         previousPrimaryPlayer.pause()

@@ -162,7 +162,9 @@ class PlaybackMethodChannelHandler(
 
                 "updateNotificationQueueSnapshot" -> {
                     audioPlayerManager.updateNotificationQueueSnapshot(notificationQueueFromCall(call))
-                    WaveZeroPlaybackSession.showMediaControls(context)
+                    if (audioPlayerManager.shouldRefreshMediaControlsForQueueSnapshotUpdate()) {
+                        WaveZeroPlaybackSession.showMediaControls(context)
+                    }
                     result.success(null)
                 }
 

@@ -31,6 +31,7 @@ class WaveZeroMediaSessionService : MediaSessionService() {
             ACTION_NEXT -> manager.playNextFromNotification()
             ACTION_STOP_AND_DISMISS -> {
                 manager.stop()
+                manager.markMediaNotificationDismissed()
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -92,6 +93,8 @@ class WaveZeroMediaSessionService : MediaSessionService() {
             )
             .setStyle(Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
             .build()
+
+        manager.markMediaNotificationShown()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
