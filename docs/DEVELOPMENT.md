@@ -191,3 +191,31 @@ Smart Preload telemetry is grouped into three visible sections:
 3. **Prepared Handoff** — explicit Next / auto-advance prepared handoff timing and readiness signals.
 
 Only the most important playback engine numbers are emphasized by default. The complete unchanged metrics payload remains available from the collapsed **Show raw metrics** control for developer inspection, copying, and reset workflows.
+
+## Premium product shell (Phase 57)
+
+Phase 57 introduces a UI-only reorganization that converts the single long "lab" screen into a premium product shell with five product sections while preserving all existing engine and playback behavior. This is a visual/layout change only — no native playback, ExoPlayer/Media3, queue policy, Smart Queue Policy, catalog API, or metrics names were changed.
+
+Sections and responsibilities
+
+- Home: WaveZero identity, current track summary, quick playback health. Reuses existing `_TopBar`, `_NowPlayingCard`, `_StatusStrip`, `_SessionStrip`, and `_HealthStrip` widgets for a focused first impression.
+- Now: Focused now-playing controls and timeline. Reuses existing `_NowPlayingCard`, `_MetricsToggle`, and `_MetricsPanel` for developer toggles when needed.
+- Queue: Queue list and Smart Queue reason/controls. Reuses existing `_QueueCard` and `_SmartPreloadCard` to show the predictive candidate and reason.
+- Library: Catalog list, search, and manual track setup. Reuses existing `_CatalogListCard` and `_TrackSetupCard` and keeps the same `CatalogClient` API usage (including demo fallback behavior).
+- Engine: Smart Preload, Performance Baseline, and Show raw metrics. Reuses `_SmartPreloadCard`, `_PerformanceBaselinePanel`, `_MetricsToggle`, and `_MetricsPanel` to surface developer telemetry; the raw metrics remain available under "Show raw metrics".
+
+Design and constraints
+
+- Visual direction: premium dark — calm, minimal, strong hierarchy; reuses `_WzTokens` color and typography tokens. No gradients or neon; no Spotify-like visuals.
+- Hard rules preserved:
+	- Native playback implementation is unchanged.
+	- ExoPlayer/Media3 logic and prepared / prebuffer handoff logic are unchanged.
+	- Queue behavior and Smart Queue Policy logic are unchanged.
+	- Catalog API usage is unchanged; manifest prefetch and manifest fetch flows are preserved.
+	- All metrics names, counters, and developer tools (copy/reset) are unchanged and still accessible.
+
+Developer notes
+
+ - This change is intentionally UI-only and keeps all existing widgets and behaviors to avoid any runtime or engine regressions.
+ - For local QA, use the manual visual/playback checklist in `docs/premium-product-shell.md` which lists the core screens and interactions to verify.
+
