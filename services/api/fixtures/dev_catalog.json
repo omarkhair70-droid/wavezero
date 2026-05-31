@@ -27,7 +27,19 @@
           "bit_depth": null,
           "file_size_bytes": null
         }
-      ]
+      ],
+      "licenseStatus": "dev_only",
+      "licenseName": "Local development audio - rights not verified",
+      "licenseUrl": null,
+      "sourceName": "Local Dev Audio",
+      "sourceUrl": null,
+      "artistUrl": null,
+      "attributionText": null,
+      "attributionRequired": false,
+      "commercialUseAllowed": false,
+      "redistributionAllowed": false,
+      "derivativesAllowed": false,
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
     },
     {
       "id": "track-local-song-3",
@@ -49,7 +61,19 @@
           "bit_depth": null,
           "file_size_bytes": null
         }
-      ]
+      ],
+      "licenseStatus": "dev_only",
+      "licenseName": "Local development audio - rights not verified",
+      "licenseUrl": null,
+      "sourceName": "Local Dev Audio",
+      "sourceUrl": null,
+      "artistUrl": null,
+      "attributionText": null,
+      "attributionRequired": false,
+      "commercialUseAllowed": false,
+      "redistributionAllowed": false,
+      "derivativesAllowed": false,
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
     },
     {
       "id": "track-local-song-4",
@@ -71,7 +95,19 @@
           "bit_depth": null,
           "file_size_bytes": null
         }
-      ]
+      ],
+      "licenseStatus": "dev_only",
+      "licenseName": "Local development audio - rights not verified",
+      "licenseUrl": null,
+      "sourceName": "Local Dev Audio",
+      "sourceUrl": null,
+      "artistUrl": null,
+      "attributionText": null,
+      "attributionRequired": false,
+      "commercialUseAllowed": false,
+      "redistributionAllowed": false,
+      "derivativesAllowed": false,
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
     },
     {
       "id": "track-local-song-5",
@@ -93,7 +129,19 @@
           "bit_depth": null,
           "file_size_bytes": null
         }
-      ]
+      ],
+      "licenseStatus": "dev_only",
+      "licenseName": "Local development audio - rights not verified",
+      "licenseUrl": null,
+      "sourceName": "Local Dev Audio",
+      "sourceUrl": null,
+      "artistUrl": null,
+      "attributionText": null,
+      "attributionRequired": false,
+      "commercialUseAllowed": false,
+      "redistributionAllowed": false,
+      "derivativesAllowed": false,
+      "usageNotes": "Local development audio only. Do not ship as production catalog unless rights are verified."
     }
   ]
 }

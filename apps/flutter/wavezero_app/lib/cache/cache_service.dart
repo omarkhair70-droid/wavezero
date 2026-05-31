@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../catalog/catalog_track_manifest.dart';
+
 enum TrackCacheStatus { notCached, caching, cached, failed }
 
 String? _readString(Object? value) {
@@ -32,6 +34,7 @@ class CachedTrackMetadata {
     this.qualityLabel = 'unknown',
     this.codec,
     this.bitrateKbps,
+    this.license = LicenseMetadata.unknown,
   });
 
   final String trackId;
@@ -46,6 +49,7 @@ class CachedTrackMetadata {
   final String qualityLabel;
   final String? codec;
   final int? bitrateKbps;
+  final LicenseMetadata license;
 
   String get localFileUrl => 'file://$localFilePath';
 
@@ -68,6 +72,7 @@ class CachedTrackMetadata {
     String? qualityLabel,
     String? codec,
     int? bitrateKbps,
+    LicenseMetadata? license,
   }) {
     return CachedTrackMetadata(
       trackId: trackId ?? this.trackId,
@@ -82,6 +87,7 @@ class CachedTrackMetadata {
       qualityLabel: qualityLabel ?? this.qualityLabel,
       codec: codec ?? this.codec,
       bitrateKbps: bitrateKbps ?? this.bitrateKbps,
+      license: license ?? this.license,
     );
   }
 
@@ -98,6 +104,7 @@ class CachedTrackMetadata {
         'qualityLabel': qualityLabel,
         'codec': codec,
         'bitrateKbps': bitrateKbps,
+        ...license.toJson(),
       };
 
   factory CachedTrackMetadata.fromJson(Map<String, Object?> json) {
@@ -121,6 +128,7 @@ class CachedTrackMetadata {
       qualityLabel: _readString(json['qualityLabel']) ?? _readString(json['quality_label']) ?? 'unknown',
       codec: _readString(json['codec']),
       bitrateKbps: _readInt(json['bitrateKbps']) ?? _readInt(json['bitrate_kbps']),
+      license: LicenseMetadata.fromJson(json),
     );
   }
 }

@@ -12,7 +12,7 @@ pub mod prefetch;
 pub mod queue;
 
 pub use cache::{CacheState, CachedTrackAsset};
-pub use manifest::{AudioCodec, Track, TrackAsset};
+pub use manifest::{AudioCodec, LicenseMetadata, LicenseStatus, Track, TrackAsset};
 pub use metrics::PlaybackMetric;
 pub use network::{NetworkScore, NetworkType};
 pub use prefetch::{PrefetchDecision, PrefetchReason};
