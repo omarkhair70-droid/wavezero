@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_effects.dart';
+import 'app_config.dart';
 import '../catalog/audio_quality.dart';
 import '../catalog/catalog_client.dart';
 import '../catalog/catalog_track_manifest.dart';
@@ -221,19 +222,19 @@ extension WzAccentPresetLabel on WzAccentPreset {
 
 String _friendlyLoadError(String error) {
   final normalized = error.toLowerCase();
-  if (normalized.contains('permission')) return 'Device music permission is needed to import local songs.';
+  if (normalized.contains('permission')) return WaveZeroReleaseCopy.deviceMusicPermission;
   if (normalized.contains('socketexception') || normalized.contains('connection') || normalized.contains('http')) {
-    return 'Couldn’t load music right now. Check your connection and try again.';
+    return '${WaveZeroReleaseCopy.catalogUnavailable} ${WaveZeroReleaseCopy.catalogTryAgain}';
   }
-  return 'Couldn’t load music right now.';
+  return WaveZeroReleaseCopy.playbackCouldNotStart;
 }
 
 String _consumerCatalogStatus(String status) {
   final normalized = status.toLowerCase();
-  if (normalized.contains('error') || normalized.contains('exception') || normalized.contains('failed')) {
-    return 'Couldn’t load music right now. Check your connection and try again.';
+  if (normalized.contains('unavailable') || normalized.contains('error') || normalized.contains('exception') || normalized.contains('failed')) {
+    return '${WaveZeroReleaseCopy.catalogUnavailable} ${WaveZeroReleaseCopy.catalogTryAgain} ${WaveZeroReleaseCopy.catalogLocalFallback}';
   }
-  if (normalized.contains('permission')) return 'Device music permission is needed to import local songs.';
+  if (normalized.contains('permission')) return WaveZeroReleaseCopy.deviceMusicPermission;
   if (normalized.contains('loaded') || normalized.contains('imported')) return status;
   if (normalized.contains('offline')) return status;
   return 'Choose music from your library.';
@@ -287,6 +288,7 @@ class _WaveZeroLiveMetricsAppState extends State<WaveZeroLiveMetricsApp> {
       home: _PlayerScreen(
         playbackBridge: widget._playbackBridge ?? _defaultBridge(),
         sessionStore: widget._sessionStore ?? QueueSessionStore(),
+        appConfig: WaveZeroAppConfig.current,
         themeConfig: _themeConfig,
         onThemeConfigChanged: _setThemeConfig,
       ),
@@ -303,12 +305,14 @@ class _PlayerScreen extends StatefulWidget {
   const _PlayerScreen({
     required this.playbackBridge,
     required this.sessionStore,
+    required this.appConfig,
     required this.themeConfig,
     required this.onThemeConfigChanged,
   });
 
   final PlaybackBridge playbackBridge;
   final QueueSessionStore sessionStore;
+  final WaveZeroAppConfig appConfig;
   final WzThemeConfig themeConfig;
   final ValueChanged<WzThemeConfig> onThemeConfigChanged;
 
@@ -675,6 +679,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool get _queueDisabled => _operation.disablesQueueControls;
   bool get _manualDisabled => _operation.disablesManualTrackControls;
   bool get _developerMode => _appMode == _AppMode.developer;
+  bool get _showDeveloperControls => widget.appConfig.showDeveloperEntry || _developerMode;
+  bool get _allowManualApiSetup => widget.appConfig.allowManualApiSetup && _developerMode;
 
   String get _statusText {
     if ((_lastError ?? _metrics.playbackError) != null) return 'Error';
@@ -700,7 +706,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _sessionRecoveryStartedAtMs = DateTime.now().millisecondsSinceEpoch;
     _titleController = TextEditingController(text: waveZeroTestTrack.title);
     _urlController = TextEditingController(text: waveZeroTestTrack.url);
-    _apiBaseUrlController = TextEditingController(text: CatalogClient.defaultBaseUrl);
+    _apiBaseUrlController = TextEditingController(text: widget.appConfig.apiBaseUrl);
     _searchController = TextEditingController();
     _fullSearchController = TextEditingController();
     _searchController.addListener(() {
@@ -1180,7 +1186,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final savedMode = prefs.getString(_appModePreferenceKey);
     if (!mounted) return;
     setState(() {
-      _appMode = savedMode == _AppMode.developer.name ? _AppMode.developer : _AppMode.consumer;
+      _appMode = savedMode == _AppMode.developer.name && widget.appConfig.showDeveloperEntry ? _AppMode.developer : _AppMode.consumer;
       if (_appMode == _AppMode.consumer && _selectedTab == _AppTab.engine) {
         _selectedTab = _AppTab.home;
       }
@@ -1825,7 +1831,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _selectedTrackId = preferred?.trackId;
           _queueCurrentTrackId = restored?.currentTrackId ?? preferred?.trackId;
           _autoAdvanceEnabled = restored?.autoAdvanceEnabled ?? _autoAdvanceEnabled;
-          _catalogStatus = catalog.tracks.isEmpty ? 'Catalog API returned no tracks.' : 'Loaded ${catalog.tracks.length} catalog tracks.';
+          _catalogStatus = catalog.tracks.isEmpty ? 'Catalog is empty.' : 'Loaded ${catalog.tracks.length} catalog tracks.';
           _queueStatus = restored == null ? 'Queue synced with catalog.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
           _offlineLibraryMode = false;
@@ -1860,7 +1866,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _queue = offlineTracks;
             _selectedTrackId = offlineTracks.first.trackId;
             _queueCurrentTrackId = offlineTracks.first.trackId;
-            _catalogStatus = 'Catalog unavailable. Showing offline cached library. $error';
+            _catalogStatus = 'Catalog unavailable. Showing offline cached library.';
             _queueStatus = 'Offline cache available. Choose a cached track to play.';
             _sessionStatus = '${offlineTracks.length} cached tracks available offline.';
             _offlineCachedTrackCount = offlineLibrary.length;
@@ -1871,7 +1877,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         } else {
           setState(() {
             _lastError = error.toString();
-            _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track. $error' : 'Catalog load failed. $error';
+            _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track.' : WaveZeroReleaseCopy.catalogUnavailable;
             _offlineCachedTrackCount = 0;
             _offlineLibraryAvailable = false;
             _offlineLibraryMode = false;
@@ -3031,7 +3037,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             },
             offlineMode: _catalogStatus.toLowerCase().contains('offline'),
           ),
-          if (_developerMode) ...[
+          if (_allowManualApiSetup) ...[
             const SizedBox(height: WzSpacing.md),
             _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
           ],
@@ -3286,6 +3292,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       deviceLastError: _consumerDeviceError(_deviceMusicLastError),
       onImportDeviceMusic: _importDeviceMusic,
       notificationActive: _metrics.isPlaying || (_metrics.trackTitle?.isNotEmpty ?? false),
+      appConfig: widget.appConfig,
+      contentModeLabel: widget.appConfig.contentModeLabel,
+      catalogStatusLabel: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
+      showDeveloperEntry: _showDeveloperControls,
       appMode: _appMode,
       onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer),
       onOpenEngine: _developerMode ? () => _navigateTo(_AppTab.engine) : null,
@@ -4175,6 +4185,10 @@ class _SettingsPage extends StatelessWidget {
     required this.deviceLastError,
     required this.onImportDeviceMusic,
     required this.notificationActive,
+    required this.appConfig,
+    required this.contentModeLabel,
+    required this.catalogStatusLabel,
+    required this.showDeveloperEntry,
     required this.appMode,
     required this.onDeveloperModeChanged,
     required this.onOpenEngine,
@@ -4219,6 +4233,10 @@ class _SettingsPage extends StatelessWidget {
   final String? deviceLastError;
   final Future<void> Function() onImportDeviceMusic;
   final bool notificationActive;
+  final WaveZeroAppConfig appConfig;
+  final String contentModeLabel;
+  final String catalogStatusLabel;
+  final bool showDeveloperEntry;
   final _AppMode appMode;
   final ValueChanged<bool> onDeveloperModeChanged;
   final VoidCallback? onOpenEngine;
@@ -4240,7 +4258,7 @@ class _SettingsPage extends StatelessWidget {
             subtitle: 'A calm control center for appearance, playback, storage, device music, and app mode.',
           ),
           const SizedBox(height: WzSpacing.md),
-          const WzSectionHeader(title: 'Search & Discovery', subtitle: 'Search on this device across music, collections, downloads, and history.', icon: Icons.search),
+          const WzSectionHeader(title: 'Search & Discovery', subtitle: WaveZeroReleaseCopy.searchLocal, icon: Icons.search),
           WzPanel(
             child: Wrap(
               spacing: WzSpacing.sm,
@@ -4369,7 +4387,7 @@ class _SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: WzSpacing.md),
-          const WzSectionHeader(title: 'Downloads & Storage', subtitle: 'Downloaded and cached-for-offline music on this device.', icon: Icons.offline_pin),
+          const WzSectionHeader(title: 'Downloads & Storage', subtitle: WaveZeroReleaseCopy.downloadsStayOnDevice, icon: Icons.offline_pin),
           WzPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4408,7 +4426,7 @@ class _SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: WzSpacing.md),
-          const WzSectionHeader(title: 'Listening History', subtitle: 'Recently played tracks saved locally on this device.', icon: Icons.history),
+          const WzSectionHeader(title: 'Listening History', subtitle: WaveZeroReleaseCopy.historyLocal, icon: Icons.history),
           WzPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4441,7 +4459,7 @@ class _SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: WzSpacing.md),
-          const WzSectionHeader(title: 'Device music', subtitle: 'Local Android MediaStore import status.', icon: Icons.perm_media),
+          const WzSectionHeader(title: 'Device music', subtitle: WaveZeroReleaseCopy.deviceMusicPermission, icon: Icons.perm_media),
           WzPanel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4457,6 +4475,7 @@ class _SettingsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: WzSpacing.sm),
                 Text('Imported device tracks: $importedDeviceTrackCount', style: WzText.body),
+                const Text(WaveZeroReleaseCopy.deviceMusicPrivacy, style: WzText.caption),
                 if (deviceLastError != null) Text('Last message: $deviceLastError', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
                 const SizedBox(height: WzSpacing.md),
                 Wrap(
@@ -4486,27 +4505,30 @@ class _SettingsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: WzSpacing.md),
-          const WzSectionHeader(title: 'Developer', subtitle: 'Keep diagnostics separate from the consumer experience.', icon: Icons.developer_mode),
-          WzPanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Developer Mode'),
-                  subtitle: Text(appMode == _AppMode.developer ? 'On — Engine diagnostics are available in the bottom navigation.' : 'Off — consumer navigation stays clean.'),
-                  value: appMode == _AppMode.developer,
-                  onChanged: onDeveloperModeChanged,
-                ),
-                if (appMode == _AppMode.developer) ...[
-                  const SizedBox(height: WzSpacing.xs),
-                  const Text('Engine diagnostics remain in the Engine tab and are not shown as raw metrics on consumer Settings.', style: WzText.caption),
-                  const SizedBox(height: WzSpacing.sm),
-                  WzPrimaryAction(label: 'Open Engine diagnostics', icon: Icons.engineering, onPressed: onOpenEngine),
+          if (showDeveloperEntry) ...[
+            const WzSectionHeader(title: 'Developer', subtitle: 'Keep diagnostics separate from the consumer experience.', icon: Icons.developer_mode),
+            WzPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Developer Mode'),
+                    subtitle: Text(appMode == _AppMode.developer ? 'On — Engine diagnostics are available in the bottom navigation.' : 'Off — consumer navigation stays clean.'),
+                    value: appMode == _AppMode.developer,
+                    onChanged: onDeveloperModeChanged,
+                  ),
+                  if (appMode == _AppMode.developer) ...[
+                    const SizedBox(height: WzSpacing.xs),
+                    const Text('Engine diagnostics remain in the Engine tab and are not shown as raw metrics on consumer Settings.', style: WzText.caption),
+                    const SizedBox(height: WzSpacing.sm),
+                    WzPrimaryAction(label: 'Open Engine diagnostics', icon: Icons.engineering, onPressed: onOpenEngine),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: WzSpacing.md),
+          ],
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'About', subtitle: 'WaveZero app information.', icon: Icons.info_outline),
           WzPanel(
@@ -4517,9 +4539,19 @@ class _SettingsPage extends StatelessWidget {
                 const SizedBox(height: WzSpacing.xs),
                 const Text('A smart music experience engine for native playback, offline listening, queue intelligence, and premium now-playing UX.', style: WzText.body),
                 const SizedBox(height: WzSpacing.xs),
-                const Text('Version/build: 0.1.0+1', style: WzText.caption),
+                Text('Version/build: ${appConfig.displayVersion} • ${appConfig.buildLabel}', style: WzText.caption),
                 const SizedBox(height: WzSpacing.xs),
-                const Text('WaveZero does not claim rights for local/device files. Production catalog tracks require verified rights metadata.', style: WzText.caption),
+                Text('App environment: ${appConfig.appEnvLabel}', style: WzText.caption),
+                const SizedBox(height: WzSpacing.xs),
+                Text('Content mode: $contentModeLabel', style: WzText.caption),
+                const SizedBox(height: WzSpacing.xs),
+                Text('Catalog status: $catalogStatusLabel', style: WzText.caption),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('Local privacy: Device Music, downloads, collections, search history, and listening history stay on this device unless you choose otherwise.', style: WzText.caption),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('Device Music belongs to your device context. WaveZero does not upload your device music.', style: WzText.caption),
+                const SizedBox(height: WzSpacing.xs),
+                const Text('Catalog tracks require explicit rights metadata. Dev-only tracks are not production-safe, and beta builds do not claim commercial catalog rights.', style: WzText.caption),
                 const SizedBox(height: WzSpacing.sm),
                 WzPrimaryAction(
                   label: 'Open Legal / Licenses',
@@ -7330,7 +7362,9 @@ class _LegalLicensesPage extends StatelessWidget {
                     children: const [
                       Text('WaveZero separates user device music, local dev audio, demo catalog tracks, and future licensed/artist uploads.', style: WzText.body),
                       SizedBox(height: WzSpacing.xs),
-                      Text('Local or unknown tracks are not for production distribution until rights are verified.', style: WzText.caption),
+                      Text('Device Music belongs to the user/device context and is not uploaded by WaveZero.', style: WzText.caption),
+                      SizedBox(height: WzSpacing.xs),
+                      Text('Local/dev-only tracks are not production-safe until rights are verified. Beta builds do not claim commercial catalog rights.', style: WzText.caption),
                     ],
                   ),
                 ),
