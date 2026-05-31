@@ -20,6 +20,56 @@ import 'player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
 
+enum _AppMode { consumer, developer }
+
+enum _AppTab { home, library, now, queue, downloads, engine }
+
+class _ShellDestination {
+  const _ShellDestination({required this.tab, required this.label, required this.icon});
+
+  final _AppTab tab;
+  final String label;
+  final IconData icon;
+}
+
+const _consumerShellDestinations = <_ShellDestination>[
+  _ShellDestination(tab: _AppTab.home, label: 'Home', icon: Icons.home_filled),
+  _ShellDestination(tab: _AppTab.library, label: 'Library', icon: Icons.library_music),
+  _ShellDestination(tab: _AppTab.now, label: 'Now', icon: Icons.play_circle_fill),
+  _ShellDestination(tab: _AppTab.queue, label: 'Queue', icon: Icons.queue_music),
+  _ShellDestination(tab: _AppTab.downloads, label: 'Downloads', icon: Icons.download_done),
+];
+
+const _developerShellDestinations = <_ShellDestination>[
+  ..._consumerShellDestinations,
+  _ShellDestination(tab: _AppTab.engine, label: 'Engine', icon: Icons.engineering),
+];
+
+String _friendlyLoadError(String error) {
+  final normalized = error.toLowerCase();
+  if (normalized.contains('permission')) return 'Device music permission is needed to import local songs.';
+  if (normalized.contains('socketexception') || normalized.contains('connection') || normalized.contains('http')) {
+    return 'Couldn’t load music right now. Check your connection and try again.';
+  }
+  return 'Couldn’t load music right now.';
+}
+
+String _consumerCatalogStatus(String status) {
+  final normalized = status.toLowerCase();
+  if (normalized.contains('error') || normalized.contains('exception') || normalized.contains('failed')) {
+    return 'Couldn’t load music right now. Check your connection and try again.';
+  }
+  if (normalized.contains('permission')) return 'Device music permission is needed to import local songs.';
+  if (normalized.contains('loaded') || normalized.contains('imported')) return status;
+  if (normalized.contains('offline')) return status;
+  return 'Choose music from your library.';
+}
+
+String? _consumerDeviceError(String? error) {
+  if (error == null || error.isEmpty) return null;
+  return _friendlyLoadError(error);
+}
+
 class WaveZeroLiveMetricsApp extends StatelessWidget {
   const WaveZeroLiveMetricsApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
       : _playbackBridge = playbackBridge,
@@ -78,7 +128,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _refreshInterval = Duration(milliseconds: 500);
   static const _autoAdvanceThresholdMs = 1200;
   static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
-  static const _tabLabels = ['Home', 'Now', 'Queue', 'Library', 'Downloads', 'Engine'];
+  static const _appModePreferenceKey = 'wavezero.app_mode';
 
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
@@ -103,7 +153,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   PlayerOperation _operation = PlayerOperation.idle;
   bool _refreshingMetrics = false;
   bool _showMetrics = false;
-  int _selectedIndex = 0;
+  _AppMode _appMode = _AppMode.consumer;
+  _AppTab _selectedTab = _AppTab.home;
   bool _autoAdvanceEnabled = true;
   bool _sessionRestored = false;
   int _autoAdvanceCount = 0;
@@ -231,6 +282,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool get _catalogRefreshDisabled => _operation.disablesCatalogRefresh;
   bool get _queueDisabled => _operation.disablesQueueControls;
   bool get _manualDisabled => _operation.disablesManualTrackControls;
+  bool get _developerMode => _appMode == _AppMode.developer;
 
   String get _statusText {
     if ((_lastError ?? _metrics.playbackError) != null) return 'Error';
@@ -242,8 +294,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   String get _statusDetail {
     final error = _lastError ?? _metrics.playbackError;
-    if (error != null && error.isNotEmpty) return error;
-    if (_refreshingMetrics) return 'Metrics refresh is running without blocking controls.';
+    if (error != null && error.isNotEmpty) return _developerMode ? error : _friendlyLoadError(error);
+    if (_refreshingMetrics) {
+      return _developerMode ? 'Metrics refresh is running without blocking controls.' : 'Updating playback status.';
+    }
     if (_upNextQueueTrack != null) return 'Up next: ${_upNextQueueTrack!.title}';
     return _queueStatus;
   }
@@ -264,6 +318,44 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_initCache());
     unawaited(_initAudioEffects());
     unawaited(_refreshDeviceMusicPermissionStatus());
+    unawaited(_loadAppMode());
+  }
+
+  Future<void> _loadAppMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedMode = prefs.getString(_appModePreferenceKey);
+    if (!mounted) return;
+    setState(() {
+      _appMode = savedMode == _AppMode.developer.name ? _AppMode.developer : _AppMode.consumer;
+      if (_appMode == _AppMode.consumer && _selectedTab == _AppTab.engine) {
+        _selectedTab = _AppTab.home;
+      }
+    });
+  }
+
+  Future<void> _setAppMode(_AppMode mode) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_appModePreferenceKey, mode.name);
+    if (!mounted) return;
+    setState(() {
+      _appMode = mode;
+      if (mode == _AppMode.consumer && _selectedTab == _AppTab.engine) {
+        _selectedTab = _AppTab.home;
+      }
+    });
+    messenger.showSnackBar(
+      SnackBar(content: Text(mode == _AppMode.developer ? 'Developer mode enabled' : 'Consumer mode enabled')),
+    );
+  }
+
+  Future<void> _toggleAppMode() {
+    return _setAppMode(_developerMode ? _AppMode.consumer : _AppMode.developer);
+  }
+
+  void _navigateTo(_AppTab tab) {
+    if (tab == _AppTab.engine && !_developerMode) return;
+    setState(() => _selectedTab = tab);
   }
 
   Future<void> _refreshDeviceMusicPermissionStatus() async {
@@ -1267,7 +1359,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       await _refreshCacheStats();
       _refreshOfflineLibraryIfNeeded();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text(ok ? 'Deleted cached ${track.title}' : 'Delete failed for ${track.title}')),
       );
     } finally {
@@ -1566,11 +1658,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             qualityLabel: qualityLabel,
           ),
           const SizedBox(height: WzSpacing.md),
-          _HomeQuickActions(onNavigate: (index) => setState(() => _selectedIndex = index)),
+          _HomeQuickActions(onNavigate: _navigateTo, showDeveloperTools: _developerMode),
           const SizedBox(height: WzSpacing.md),
-          _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
-          const SizedBox(height: WzSpacing.sm),
-          _SessionStrip(status: _sessionStatus),
+          if (_developerMode) ...[
+            _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
+            const SizedBox(height: WzSpacing.sm),
+            _SessionStrip(status: _sessionStatus),
+          ],
         ],
       ),
       WzPageScaffold(
@@ -1623,8 +1717,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             queueLength: _queue.length,
           ),
           const SizedBox(height: WzSpacing.md),
-          _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
-          if (_showMetrics) ...[const SizedBox(height: WzSpacing.md), _MetricsPanel(metrics: _metrics)],
+          if (_developerMode) ...[
+            _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
+            if (_showMetrics) ...[const SizedBox(height: WzSpacing.md), _MetricsPanel(metrics: _metrics)],
+          ],
         ],
       ),
       WzPageScaffold(
@@ -1645,6 +1741,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             autoAdvanceCount: _autoAdvanceCount,
             smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
             smartQueueReason: _smartQueueReason,
+            showDeveloperDetails: _developerMode,
             onToggleAutoAdvance: (value) {
               setState(() {
                 _autoAdvanceEnabled = value;
@@ -1661,39 +1758,43 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onRemoveTrack: _removeFromQueue,
             onClearQueue: _clearQueue,
           ),
-          const SizedBox(height: WzSpacing.md),
-          _SmartPreloadCard(
-            metrics: _metrics,
-            enabled: _prefetchEnabled,
-            prefetchedTrackId: _prefetchedTrackId,
-            prefetchedTrackTitle: _prefetchedTrackTitle,
-            prefetchInFlight: _prefetchInFlight,
-            manifestPrefetched: _manifestPrefetched,
-            audioPreparedBeforeNext: _audioPreparedBeforeNext,
-            lastPrefetchHit: _lastPrefetchHit,
-            prefetchHitCount: _prefetchHitCount,
-            prefetchMissCount: _prefetchMissCount,
-            nextTapToAudioMs: _nextTapToAudioMs,
-            nextPreparedBeforePlay: _nextPreparedBeforePlay,
-            smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
-            smartQueueReason: _smartQueueReason,
-            controlsDisabled: _queueDisabled,
-            onToggle: _setPrefetchEnabled,
-          ),
-          const SizedBox(height: WzSpacing.sm),
-          _SmartDownloadsCard(
-            enabled: _smartDownloadsEnabled,
-            lastTrackId: _lastSmartDownloadTrackId,
-            lastTitle: _lastSmartDownloadTitle,
-            lastReason: _lastSmartDownloadReason,
-            lastResult: _lastSmartDownloadResult,
-            startedCount: _smartDownloadStartedCount,
-            completedCount: _smartDownloadCompletedCount,
-            failedCount: _smartDownloadFailedCount,
-            skippedCount: _smartDownloadSkippedCount,
-            inFlight: _autoCacheInFlight.length,
-            onToggle: (v) => setState(() { _smartDownloadsEnabled = v; }),
-          ),
+          if (_developerMode) ...[
+            const SizedBox(height: WzSpacing.md),
+            _SmartPreloadCard(
+              metrics: _metrics,
+              enabled: _prefetchEnabled,
+              prefetchedTrackId: _prefetchedTrackId,
+              prefetchedTrackTitle: _prefetchedTrackTitle,
+              prefetchInFlight: _prefetchInFlight,
+              manifestPrefetched: _manifestPrefetched,
+              audioPreparedBeforeNext: _audioPreparedBeforeNext,
+              lastPrefetchHit: _lastPrefetchHit,
+              prefetchHitCount: _prefetchHitCount,
+              prefetchMissCount: _prefetchMissCount,
+              nextTapToAudioMs: _nextTapToAudioMs,
+              nextPreparedBeforePlay: _nextPreparedBeforePlay,
+              smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
+              smartQueueReason: _smartQueueReason,
+              controlsDisabled: _queueDisabled,
+              onToggle: _setPrefetchEnabled,
+            ),
+            const SizedBox(height: WzSpacing.sm),
+            _SmartDownloadsCard(
+              enabled: _smartDownloadsEnabled,
+              lastTrackId: _lastSmartDownloadTrackId,
+              lastTitle: _lastSmartDownloadTitle,
+              lastReason: _lastSmartDownloadReason,
+              lastResult: _lastSmartDownloadResult,
+              startedCount: _smartDownloadStartedCount,
+              completedCount: _smartDownloadCompletedCount,
+              failedCount: _smartDownloadFailedCount,
+              skippedCount: _smartDownloadSkippedCount,
+              inFlight: _autoCacheInFlight.length,
+              onToggle: (v) => setState(() {
+                _smartDownloadsEnabled = v;
+              }),
+            ),
+          ],
         ],
       ),
       WzPageScaffold(
@@ -1713,7 +1814,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             combinedTrackCount: _libraryCombinedTrackCount,
             cacheBytes: _cacheBytes,
             selectedTrackId: _selectedTrackId,
-            status: _catalogStatus,
+            status: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
             loading: _operation == PlayerOperation.loadingCatalog,
             refreshDisabled: _catalogRefreshDisabled,
             addToQueueDisabled: _operation.isTrackLoading || _operation.isQueueAdvancing,
@@ -1722,7 +1823,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             librarySortMode: _librarySortMode,
             devicePermissionStatus: _deviceMusicPermissionStatus.status,
             deviceScanStatus: _deviceMusicScanStatus,
-            deviceLastError: _deviceMusicLastError,
+            deviceLastError: _developerMode ? _deviceMusicLastError : _consumerDeviceError(_deviceMusicLastError),
             onSourceFilterChanged: (filter) => setState(() => _librarySourceFilter = filter),
             onSortModeChanged: (mode) => setState(() => _librarySortMode = mode),
             onClearSearch: () => _searchController.clear(),
@@ -1737,8 +1838,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             },
             offlineMode: _catalogStatus.toLowerCase().contains('offline'),
           ),
-          const SizedBox(height: WzSpacing.md),
-          _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
+          if (_developerMode) ...[
+            const SizedBox(height: WzSpacing.md),
+            _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
+          ],
         ],
       ),
       WzPageScaffold(
@@ -1766,6 +1869,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             title: 'Engine diagnostics',
             subtitle: 'Advanced playback, preload, cache, quality, and effects diagnostics remain available.',
           ),
+          const SizedBox(height: WzSpacing.md),
+          _DeveloperModePanel(enabled: _developerMode, onChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer)),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Playback Engine', subtitle: 'Current player state and operation summary.', icon: Icons.graphic_eq),
           _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
@@ -1881,6 +1986,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
     ];
 
+    final destinations = _developerMode ? _developerShellDestinations : _consumerShellDestinations;
+    final currentTab = _selectedTab == _AppTab.engine && !_developerMode ? _AppTab.home : _selectedTab;
+    final currentIndex = destinations.indexWhere((destination) => destination.tab == currentTab);
+    final selectedDestination = destinations[currentIndex < 0 ? 0 : currentIndex];
+    final currentPage = switch (selectedDestination.tab) {
+      _AppTab.home => pages[0],
+      _AppTab.now => pages[1],
+      _AppTab.queue => pages[2],
+      _AppTab.library => pages[3],
+      _AppTab.downloads => pages[4],
+      _AppTab.engine => pages[5],
+    };
+
     return Scaffold(
       backgroundColor: _WzTokens.canvas,
       body: SafeArea(
@@ -1890,12 +2008,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             child: Column(
               children: [
                 _ProductShellHeader(
-                  selectedTabLabel: _tabLabels[_selectedIndex],
+                  selectedTabLabel: selectedDestination.label,
                   status: _statusText,
                   engineSummary: engineSummary,
                   offlineReady: _offlineLibraryAvailable,
+                  appMode: _appMode,
+                  onLogoLongPress: _toggleAppMode,
                 ),
-                Expanded(child: pages[_selectedIndex]),
+                Expanded(child: currentPage),
               ],
             ),
           ),
@@ -1907,20 +2027,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             BottomNavigationBar(
-              currentIndex: _selectedIndex,
-              onTap: (i) => setState(() => _selectedIndex = i),
+              currentIndex: currentIndex < 0 ? 0 : currentIndex,
+              onTap: (i) => _navigateTo(destinations[i].tab),
               backgroundColor: _WzTokens.surfaceMuted,
               selectedItemColor: _WzTokens.accent,
               unselectedItemColor: _WzTokens.textMuted,
               type: BottomNavigationBarType.fixed,
-              items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Home'),
-                BottomNavigationBarItem(icon: Icon(Icons.play_circle_fill), label: 'Now'),
-                BottomNavigationBarItem(icon: Icon(Icons.queue_music), label: 'Queue'),
-                BottomNavigationBarItem(icon: Icon(Icons.library_music), label: 'Library'),
-                BottomNavigationBarItem(icon: Icon(Icons.download_done), label: 'Downloads'),
-                BottomNavigationBarItem(icon: Icon(Icons.engineering), label: 'Engine'),
-              ],
+              items: destinations
+                  .map((destination) => BottomNavigationBarItem(
+                        icon: Icon(destination.icon),
+                        label: destination.label,
+                      ))
+                  .toList(growable: false),
             ),
             const Divider(height: 1, color: _WzTokens.border),
             Padding(
@@ -2094,12 +2212,16 @@ class _ProductShellHeader extends StatelessWidget {
     required this.status,
     required this.engineSummary,
     required this.offlineReady,
+    required this.appMode,
+    required this.onLogoLongPress,
   });
 
   final String selectedTabLabel;
   final String status;
   final String engineSummary;
   final bool offlineReady;
+  final _AppMode appMode;
+  final VoidCallback onLogoLongPress;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -2109,14 +2231,17 @@ class _ProductShellHeader extends StatelessWidget {
           gradient: WzColors.heroGradient,
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  gradient: WzColors.accentGradient,
-                  borderRadius: BorderRadius.circular(WzRadius.md),
+              GestureDetector(
+                onLongPress: onLogoLongPress,
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    gradient: WzColors.accentGradient,
+                    borderRadius: BorderRadius.circular(WzRadius.md),
+                  ),
+                  child: const Icon(Icons.graphic_eq, color: Colors.white),
                 ),
-                child: const Icon(Icons.graphic_eq, color: Colors.white),
               ),
               const SizedBox(width: WzSpacing.sm),
               Expanded(
@@ -2125,7 +2250,14 @@ class _ProductShellHeader extends StatelessWidget {
                   children: [
                     const Text('WaveZero', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
                     const SizedBox(height: WzSpacing.xxs),
-                    Text('$selectedTabLabel • $engineSummary', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                    Text(
+                      appMode == _AppMode.developer
+                          ? '$selectedTabLabel • Developer mode • $engineSummary'
+                          : '$selectedTabLabel • $engineSummary',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: WzText.caption,
+                    ),
                   ],
                 ),
               ),
@@ -2276,9 +2408,10 @@ class _SmartEngineCards extends StatelessWidget {
 }
 
 class _HomeQuickActions extends StatelessWidget {
-  const _HomeQuickActions({required this.onNavigate});
+  const _HomeQuickActions({required this.onNavigate, required this.showDeveloperTools});
 
-  final ValueChanged<int> onNavigate;
+  final ValueChanged<_AppTab> onNavigate;
+  final bool showDeveloperTools;
 
   @override
   Widget build(BuildContext context) => WzPanel(
@@ -2290,10 +2423,11 @@ class _HomeQuickActions extends StatelessWidget {
               spacing: WzSpacing.sm,
               runSpacing: WzSpacing.sm,
               children: [
-                WzPrimaryAction(label: 'Go to Library', icon: Icons.library_music, onPressed: () => onNavigate(3)),
-                WzPrimaryAction(label: 'Go to Queue', icon: Icons.queue_music, onPressed: () => onNavigate(2)),
-                WzPrimaryAction(label: 'Go to Downloads', icon: Icons.download_done, onPressed: () => onNavigate(4)),
-                WzPrimaryAction(label: 'Go to Engine', icon: Icons.engineering, onPressed: () => onNavigate(5)),
+                WzPrimaryAction(label: 'Go to Library', icon: Icons.library_music, onPressed: () => onNavigate(_AppTab.library)),
+                WzPrimaryAction(label: 'Go to Now', icon: Icons.play_circle_fill, onPressed: () => onNavigate(_AppTab.now)),
+                WzPrimaryAction(label: 'Go to Queue', icon: Icons.queue_music, onPressed: () => onNavigate(_AppTab.queue)),
+                WzPrimaryAction(label: 'Go to Downloads', icon: Icons.download_done, onPressed: () => onNavigate(_AppTab.downloads)),
+                if (showDeveloperTools) WzPrimaryAction(label: 'Go to Engine', icon: Icons.engineering, onPressed: () => onNavigate(_AppTab.engine)),
               ],
             ),
           ],
@@ -3292,6 +3426,7 @@ class _QueueCard extends StatelessWidget {
     required this.autoAdvanceCount,
     required this.smartQueueCandidateTrackId,
     required this.smartQueueReason,
+    required this.showDeveloperDetails,
     required this.onToggleAutoAdvance,
     required this.onPlayTrack,
     required this.onMoveUp,
@@ -3310,6 +3445,7 @@ class _QueueCard extends StatelessWidget {
   final int autoAdvanceCount;
   final String? smartQueueCandidateTrackId;
   final String smartQueueReason;
+  final bool showDeveloperDetails;
   final ValueChanged<bool> onToggleAutoAdvance;
   final ValueChanged<CatalogTrackSummary> onPlayTrack;
   final ValueChanged<CatalogTrackSummary> onMoveUp;
@@ -3354,7 +3490,7 @@ class _QueueCard extends StatelessWidget {
             children: [
               _QueueStateChip(label: 'Current', value: currentTrack?.title ?? 'none', active: currentTrack != null),
               _QueueStateChip(label: 'Up next', value: nextTrack?.title ?? 'none', active: nextTrack != null),
-              _QueueStateChip(label: 'Auto', value: '$autoAdvanceCount advances', active: autoAdvanceEnabled),
+              if (showDeveloperDetails) _QueueStateChip(label: 'Auto', value: '$autoAdvanceCount advances', active: autoAdvanceEnabled),
             ],
           ),
           const SizedBox(height: 8),
@@ -3364,12 +3500,13 @@ class _QueueCard extends StatelessWidget {
               Switch(value: autoAdvanceEnabled, onChanged: controlsDisabled ? null : onToggleAutoAdvance),
             ],
           ),
-          Text(
-            'smartQueueReason: $smartQueueReason • candidate: ${smartQueueCandidateTrackId ?? 'none'}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
-          ),
+          if (showDeveloperDetails)
+            Text(
+              'smartQueueReason: $smartQueueReason • candidate: ${smartQueueCandidateTrackId ?? 'none'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+            ),
           const SizedBox(height: 12),
           if (queue.isEmpty)
             const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from the catalog.')
@@ -3945,6 +4082,24 @@ class _HealthChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _MetricCard(label: label, value: value, active: good);
+}
+
+class _DeveloperModePanel extends StatelessWidget {
+  const _DeveloperModePanel({required this.enabled, required this.onChanged});
+
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        child: SwitchListTile(
+          value: enabled,
+          onChanged: onChanged,
+          secondary: const Icon(Icons.admin_panel_settings),
+          title: const Text('Internal developer mode'),
+          subtitle: const Text('Turn off to return to the consumer music shell.'),
+        ),
+      );
 }
 
 class _MetricsToggle extends StatelessWidget {

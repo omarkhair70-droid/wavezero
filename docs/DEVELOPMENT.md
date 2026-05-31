@@ -556,3 +556,54 @@ WaveZero #70 is not:
 12. Delete cached track from Library Downloads view and confirm Downloads tab updates.
 13. Confirm Now Playing still works.
 14. Confirm Engine diagnostics still exist.
+
+## WaveZero #71B — Consumer Shell + Remove Dev UI from User App
+
+WaveZero now separates the Flutter shell into two persisted app modes:
+
+- **Consumer mode** is the default app mode for fresh installs and normal use. It presents WaveZero as a music app rather than a developer dashboard.
+- **Developer mode** keeps the internal playback, library, cache, quality, effects, and metrics tools available for diagnostics without deleting them.
+
+The mode is stored in SharedPreferences so a local developer device can stay in developer mode across launches. For now, developer mode is enabled or disabled through the internal long-press gesture on the WaveZero logo in the top shell header. Developer mode also includes an internal switch on the Engine diagnostics page to return to consumer mode.
+
+Consumer bottom navigation is limited to:
+
+1. Home
+2. Library
+3. Now
+4. Queue
+5. Downloads
+
+The **Engine** tab is developer-only. In developer mode, navigation shows:
+
+1. Home
+2. Library
+3. Now
+4. Queue
+5. Downloads
+6. Engine
+
+Manual/API setup is developer-only. API base URL fields, manual title/audio URL fields, raw metrics, raw performance baselines, engine diagnostics, device/library diagnostics, and developer metric names such as `tapToAudioMs`, `nativePrebufferReady`, `manifestPrefetched`, and `smartQueueReason` should not appear in consumer pages.
+
+Consumer pages should prefer product copy and friendly failures. Raw catalog/API/network details remain available in developer mode, while consumer surfaces use simple messages such as:
+
+- “Couldn’t load music right now.”
+- “Check your connection and try again.”
+- “Device music permission is needed to import local songs.”
+
+Release builds should eventually be locked to consumer-only by default unless an explicit internal build flag enables developer mode. Future production API URLs should come from configuration or the build environment, not a user-editable text field in the consumer app.
+
+Manual checklist:
+
+1. Start app fresh.
+2. Confirm default mode is consumer.
+3. Confirm bottom nav does not show Engine.
+4. Confirm Home has no raw metrics.
+5. Confirm Library has no raw API setup panel.
+6. Confirm Now has no raw metrics panel unless developer mode is enabled.
+7. Enable developer mode with the internal WaveZero logo long-press gesture.
+8. Confirm Engine tab appears.
+9. Confirm Manual/API setup and raw metrics are still available in developer mode.
+10. Disable developer mode from the Engine diagnostics internal switch or by long-pressing the WaveZero logo again.
+11. Confirm app returns to the consumer shell.
+12. Confirm playback, Library, Device Music, Queue, Downloads still work.
