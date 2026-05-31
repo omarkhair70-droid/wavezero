@@ -1110,3 +1110,138 @@ WaveZero now includes a local-first Collections v1 foundation so users can organ
 17. Clear downloads and confirm collections remain but removed cached-only tracks show unavailable if needed.
 18. Confirm no raw debug UI appears in consumer mode.
 19. Confirm Library, Queue, Now, Downloads, Storage Manager, Settings, Legal/Licenses, and notifications still work.
+
+## WaveZero #78 — Listening History + Recently Played + Continue Listening
+
+WaveZero now includes a local-first Listening History v1 foundation for Recently Played, Continue Listening, play counts, last played position, and user-facing history controls. The feature is intentionally device-only and does not introduce accounts, cloud sync, backend APIs, analytics SDKs, SQLite, Supabase, uploads, DRM, payments, or any new Rust/native playback surface.
+
+### Local-first history store
+
+- Persistence is a SharedPreferences JSON document at `wavezero.listening_history.v1`.
+- The store is managed by `ListeningHistoryService` and uses lightweight `WzListeningHistoryEntry` snapshots.
+- Bad or corrupt JSON fails safely to an empty history list.
+- Entries are sorted by `lastPlayedAtMs` descending and capped to 200 entries.
+- New plays update an existing `trackId` entry instead of duplicating it.
+
+### Stored metadata
+
+History stores only lightweight playback metadata:
+
+- track id, title, subtitle/artist, optional album and artwork URL
+- source: API, Device Music, Downloads/Cached, or Unknown
+- safely available playback pointer metadata such as manifest/content/local URL references already used by the app
+- quality label, codec, duration, play count, first/last played time, last position, and completed count foundation
+- existing legal/license metadata snapshot when available
+
+History does not store raw debug data, large blobs, copied audio files, analytics events, private consumer-facing path dumps, accounts, tokens, uploads, or cloud identifiers.
+
+### Recording behavior
+
+- API/catalog playback records history after a manifest resolves and the native bridge successfully loads the playable URL.
+- Cached/downloaded playback records the entry as `cached` when the resolved playable URL is local cache backed.
+- Device Music playback records after the MediaStore-backed manifest is loaded into native playback.
+- `playCount` increments once per meaningful load/play snapshot, not on every progress tick.
+- `lastPositionMs` is saved opportunistically on pause, stop, track switch, and user seek rather than every polling tick.
+
+### Source handling
+
+- API tracks resolve back through the current catalog/library track list.
+- Device Music tracks resolve through the current imported device music list and keep the “Device music / user device” license label.
+- Downloads/Cached tracks resolve through the cached library and keep original license metadata when available.
+- If an entry cannot be resolved from the current library/device/cache lists, consumer UI shows: “Track is not available right now.”
+- History never invents playback URLs and does not bypass existing `_loadCatalogTrack`, device, cache, or queue flows.
+
+### Home personalization
+
+Home now has local history-powered sections:
+
+- **Continue Listening** shows the most recent entry, source/license/quality badges, saved position copy, and Continue/Play action.
+- **Recently Played** shows the latest local entries with source badge, friendly last-played time, play count, Play, Queue, Collection, and Remove controls.
+- **Listening Snapshot** metrics summarize history count, most played title, and the local-only privacy note: listening history stays on this device.
+
+### History page and entry points
+
+An internal Listening History page is available without adding a bottom navigation item. Entry points include:
+
+- Home → Recently Played → View all
+- Settings → Listening History → View History
+
+The page includes summary cards, a full history list, Play, Add to Queue, Add to Collection, Remove from history, and Clear all history actions.
+
+### Settings integration
+
+Settings includes a Listening History section with:
+
+- recently played count
+- most played track
+- local-only privacy indicator
+- View History
+- Clear listening history
+
+The clear-history copy is consumer-friendly: clearing history does not delete downloads, playlists, collections, or device music.
+
+### Collections relationship
+
+Listening History is separate from Collections:
+
+- Clearing history does not delete collections.
+- Deleting a collection does not delete history.
+- Removing an item from history does not unlike it and does not remove it from playlists/collections.
+- Add-to-Collection from history uses the existing collection sheet and collection snapshot flow.
+
+### Storage and downloads relationship
+
+History is metadata-only and is not storage-heavy download data:
+
+- Clearing downloads/cache does not clear history.
+- Clearing history does not delete downloads/cache.
+- Cached-only history entries can become unavailable if their playable cached source is removed.
+- History is not counted as downloaded audio storage.
+
+### Legal metadata preservation
+
+History snapshots preserve existing license metadata where available:
+
+- API/dev catalog tracks keep their current license status such as Dev only, License pending, Verified, or Unknown.
+- Device Music entries use Device music / Your device metadata and do not claim catalog rights.
+- Cached entries keep the original cached metadata license snapshot when available.
+- No production rights claims or legal catalog rules were changed.
+
+### Intentionally not changed
+
+WaveZero #78 does not add auth, cloud sync, cross-device state, backend APIs, analytics SDKs, database complexity, uploads, subscriptions/payments, DRM, real music files, Rust API changes, Android native playback changes, MediaStore behavior changes, CacheService file format changes, Queue Engine v2 semantic changes, Smart Downloads changes, Audio Quality changes, Audio Effects bridge changes, legal catalog rule changes, or consumer-mode raw engine metrics.
+
+### Future work
+
+- cloud sync
+- account sync
+- cross-device history
+- listening analytics dashboard
+- recommendations
+- skip/complete intelligence
+- replay year summary
+- private mode
+- per-playlist history
+
+### Manual checklist
+
+1. Start app.
+2. Play an API track.
+3. Confirm it appears in Recently Played.
+4. Play a Device Music track.
+5. Confirm it appears with Device source/user-device label.
+6. Play a cached/downloaded track.
+7. Confirm it appears in history.
+8. Restart app and confirm history persists.
+9. Open Home and confirm Continue Listening shows the latest track.
+10. Play from Continue Listening.
+11. Open History page.
+12. Remove one history item.
+13. Clear all history.
+14. Confirm clearing history does not delete Collections.
+15. Confirm clearing history does not delete Downloads/cache.
+16. Confirm unavailable tracks show friendly unavailable copy.
+17. Confirm add-to-Queue from history works for available tracks.
+18. Confirm add-to-Collection from history works.
+19. Confirm no raw debug UI appears in consumer mode.
+20. Confirm Library, Collections, Queue, Now, Downloads, Storage Manager, Settings, Legal/Licenses, and notifications still work.

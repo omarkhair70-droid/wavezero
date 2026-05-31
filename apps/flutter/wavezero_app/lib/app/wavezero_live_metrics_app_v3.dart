@@ -19,13 +19,14 @@ import '../design/wavezero_design_system.dart';
 import '../device_music/device_music_service.dart';
 import '../device_music/device_music_track.dart';
 import 'collections_service.dart';
+import 'listening_history_service.dart';
 import 'player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
 
 enum _AppMode { consumer, developer }
 
-enum _AppTab { home, library, now, queue, collections, collectionDetail, downloads, storage, settings, engine }
+enum _AppTab { home, library, now, queue, collections, collectionDetail, downloads, storage, history, settings, engine }
 
 class _ShellDestination {
   const _ShellDestination({required this.tab, required this.label, required this.icon});
@@ -379,12 +380,26 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<WzCollection> _collections = <WzCollection>[WzCollection.liked()];
   String? _selectedCollectionId = likedTracksCollectionId;
 
+  final ListeningHistoryService _listeningHistoryService = ListeningHistoryService();
+  List<WzListeningHistoryEntry> _listeningHistory = const <WzListeningHistoryEntry>[];
+
   WzCollection get _likedCollection => _collections.firstWhere(
         (collection) => collection.type == WzCollectionType.liked,
         orElse: () => WzCollection.liked(),
       );
 
   List<WzCollection> get _userCollections => _collections.where((collection) => collection.type == WzCollectionType.user).toList(growable: false);
+
+  WzListeningHistoryEntry? get _continueListeningEntry => _listeningHistory.isEmpty ? null : _listeningHistory.first;
+
+  WzListeningHistoryEntry? get _mostPlayedHistoryEntry {
+    if (_listeningHistory.isEmpty) return null;
+    final entries = [..._listeningHistory]..sort((a, b) {
+        final byPlays = b.playCount.compareTo(a.playCount);
+        return byPlays == 0 ? b.lastPlayedAtMs.compareTo(a.lastPlayedAtMs) : byPlays;
+      });
+    return entries.first;
+  }
 
   WzCollection? get _selectedCollection {
     final id = _selectedCollectionId;
@@ -506,6 +521,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_refreshDeviceMusicPermissionStatus());
     unawaited(_loadAppMode());
     unawaited(_loadCollections());
+    unawaited(_loadListeningHistory());
+  }
+
+  Future<void> _loadListeningHistory() async {
+    final entries = await _listeningHistoryService.load();
+    if (!mounted) return;
+    setState(() => _listeningHistory = entries);
   }
 
   Future<void> _loadCollections() async {
@@ -572,6 +594,97 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       if (track.trackId == snapshot.trackId) return track;
     }
     return null;
+  }
+
+  CatalogTrackSummary? _resolveHistoryEntry(WzListeningHistoryEntry entry) {
+    for (final track in _libraryTracks) {
+      if (track.trackId == entry.trackId) return track;
+    }
+    return null;
+  }
+
+  WzListeningHistoryEntry _historySnapshotForManifest(
+    CatalogTrackManifest manifest, {
+    required WzListeningHistorySource source,
+    required String? playableUrl,
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return WzListeningHistoryEntry(
+      trackId: manifest.trackId,
+      title: manifest.title,
+      subtitle: manifest.subtitle,
+      artworkUrl: manifest.artworkUrl,
+      source: source,
+      primaryUrl: playableUrl ?? manifest.streamUrl,
+      qualityLabel: manifest.qualityLabel,
+      codec: manifest.codec,
+      license: source == WzListeningHistorySource.device ? LicenseMetadata.userDevice : manifest.license,
+      lastPlayedAtMs: now,
+      firstPlayedAtMs: now,
+      playCount: 1,
+      lastPositionMs: 0,
+      durationMs: manifest.durationMs,
+    );
+  }
+
+  Future<void> _recordListeningHistory(WzListeningHistoryEntry snapshot) async {
+    final next = await _listeningHistoryService.recordPlay(snapshot);
+    if (!mounted) return;
+    setState(() => _listeningHistory = next);
+  }
+
+  Future<void> _saveCurrentHistoryPosition() async {
+    final trackId = _manifest?.trackId ?? _metrics.currentTrackId ?? _selectedTrackId;
+    if (trackId == null || trackId.isEmpty) return;
+    final position = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
+    final duration = _metrics.durationMs ?? _manifest?.durationMs;
+    final next = await _listeningHistoryService.updatePosition(trackId, positionMs: position, durationMs: duration);
+    if (!mounted) return;
+    setState(() => _listeningHistory = next);
+  }
+
+  Future<void> _playHistoryEntry(WzListeningHistoryEntry entry, {bool autoPlay = true}) async {
+    final resolved = _resolveHistoryEntry(entry);
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    await _loadCatalogTrack(trackId: resolved.trackId, autoPlay: autoPlay, status: 'Loaded from listening history: ${resolved.title}');
+    if (entry.lastPositionMs > 0) {
+      await _seekTo(entry.lastPositionMs.toDouble());
+    }
+  }
+
+  Future<void> _addHistoryEntryToQueue(WzListeningHistoryEntry entry) async {
+    final resolved = _resolveHistoryEntry(entry);
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    _addToQueue(resolved);
+  }
+
+  Future<void> _addHistoryEntryToCollection(WzListeningHistoryEntry entry) async {
+    final resolved = _resolveHistoryEntry(entry);
+    if (resolved == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      return;
+    }
+    await _showAddToCollectionSheet(resolved);
+  }
+
+  Future<void> _removeHistoryEntry(WzListeningHistoryEntry entry) async {
+    final next = await _listeningHistoryService.remove(entry.trackId);
+    if (!mounted) return;
+    setState(() => _listeningHistory = next);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Removed from listening history')));
+  }
+
+  Future<void> _clearListeningHistory() async {
+    await _listeningHistoryService.clear();
+    if (!mounted) return;
+    setState(() => _listeningHistory = const <WzListeningHistoryEntry>[]);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Listening history cleared. Downloads, collections, and device music were not changed.')));
   }
 
   Future<void> _toggleLikedTrack(CatalogTrackSummary track) async {
@@ -1508,6 +1621,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       });
       await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
       await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: 'device');
+      unawaited(_recordListeningHistory(_historySnapshotForManifest(
+        manifest,
+        source: WzListeningHistorySource.device,
+        playableUrl: manifest.streamUrl,
+      )));
       if (autoPlay) await widget.playbackBridge.play();
       unawaited(_saveSession());
       unawaited(_updatePredictivePreloadCandidate());
@@ -1516,6 +1634,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _loadCatalogTrack({String? trackId, bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status, CatalogTrackManifest? prefetchedManifest}) {
+    unawaited(_saveCurrentHistoryPosition());
     final id = trackId ?? _selectedTrackId ?? (_catalog.isNotEmpty ? _catalog.first.trackId : null);
     if (id == null) return Future<void>.value();
     final deviceTrack = _findDeviceTrack(id);
@@ -1622,7 +1741,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       setState(() => _currentCachedQuality = cachedMetadata?.qualityLabel ?? 'unknown');
     }
     await widget.playbackBridge.loadTrack(title: manifest.title, url: resolvedUrl);
-    await _pushNotificationMetadata(manifest, url: resolvedUrl, source: resolvedUrl.startsWith('file://') ? 'cached' : 'api');
+    final historySource = resolvedUrl.startsWith('file://') ? WzListeningHistorySource.cached : WzListeningHistorySource.api;
+    await _pushNotificationMetadata(manifest, url: resolvedUrl, source: historySource.name);
+    unawaited(_recordListeningHistory(_historySnapshotForManifest(
+      manifest,
+      source: historySource,
+      playableUrl: resolvedUrl,
+    )));
     unawaited(_refreshCacheStats());
     if (autoPlay) await widget.playbackBridge.play();
     if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
@@ -1783,6 +1908,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _playPause() {
     return _runOperation(PlayerOperation.playbackCommand, () async {
       if (_metrics.isPlaying) {
+        await _saveCurrentHistoryPosition();
         await widget.playbackBridge.pause();
       } else {
         if (_lastStopAtMs != null) {
@@ -1797,6 +1923,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _stop() => _runOperation(PlayerOperation.playbackCommand, () async {
+        await _saveCurrentHistoryPosition();
         await widget.playbackBridge.stop();
         if (!mounted) return;
         setState(() {
@@ -1813,7 +1940,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         if (!mounted) return;
         setState(() => _clearFlutterPrebufferState());
       });
-  Future<void> _seekTo(double positionMs) => _runOperation(PlayerOperation.seeking, () => widget.playbackBridge.seekTo(positionMs.round()));
+  Future<void> _seekTo(double positionMs) => _runOperation(PlayerOperation.seeking, () async {
+        final target = positionMs.round();
+        await widget.playbackBridge.seekTo(target);
+        final trackId = _manifest?.trackId ?? _metrics.currentTrackId ?? _selectedTrackId;
+        if (trackId != null && trackId.isNotEmpty) {
+          final next = await _listeningHistoryService.updatePosition(trackId, positionMs: target, durationMs: _metrics.durationMs ?? _manifest?.durationMs);
+          if (mounted) setState(() => _listeningHistory = next);
+        }
+      });
 
   Future<void> _copyMetrics() {
     return _runOperation(PlayerOperation.copyingMetrics, () async {
@@ -2117,7 +2252,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _audioPreparedBeforeNext = false;
       _nextPreparedBeforePlay = true;
     });
-    await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: manifest.streamUrl.startsWith('file://') ? 'cached' : 'api');
+    final historySource = manifest.streamUrl.startsWith('file://') ? WzListeningHistorySource.cached : WzListeningHistorySource.api;
+    await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: historySource.name);
+    unawaited(_recordListeningHistory(_historySnapshotForManifest(
+      manifest,
+      source: historySource,
+      playableUrl: manifest.streamUrl,
+    )));
     await _refreshMetrics(allowAutoAdvance: false);
     unawaited(_saveSession());
     unawaited(_updatePredictivePreloadCandidate());
@@ -2170,6 +2311,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             deviceTrackCount: _deviceMusicTracks.length,
             devicePermissionStatus: _deviceMusicPermissionStatus.status,
             status: _statusText,
+          ),
+          const SizedBox(height: WzSpacing.md),
+          _HomeHistorySection(
+            entries: _listeningHistory,
+            continueEntry: _continueListeningEntry,
+            mostPlayedEntry: _mostPlayedHistoryEntry,
+            resolver: _resolveHistoryEntry,
+            onPlay: (entry) => unawaited(_playHistoryEntry(entry)),
+            onAddToQueue: (entry) => unawaited(_addHistoryEntryToQueue(entry)),
+            onAddToCollection: (entry) => unawaited(_addHistoryEntryToCollection(entry)),
+            onRemove: (entry) => unawaited(_removeHistoryEntry(entry)),
+            onViewAll: () => _navigateTo(_AppTab.history),
           ),
           const SizedBox(height: WzSpacing.md),
           _SmartEngineCards(
@@ -2430,6 +2583,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onDelete: _deleteCachedTrack,
         onClearAll: _clearCache,
       ),
+      _ListeningHistoryPage(
+        entries: _listeningHistory,
+        mostPlayedEntry: _mostPlayedHistoryEntry,
+        resolver: _resolveHistoryEntry,
+        onPlay: (entry) => unawaited(_playHistoryEntry(entry)),
+        onAddToQueue: (entry) => unawaited(_addHistoryEntryToQueue(entry)),
+        onAddToCollection: (entry) => unawaited(_addHistoryEntryToCollection(entry)),
+        onRemove: (entry) => unawaited(_removeHistoryEntry(entry)),
+        onClearAll: _listeningHistory.isEmpty ? null : () => unawaited(_clearListeningHistory()),
+      ),
       WzPageScaffold(
         children: [
           const WzPageHeader(
@@ -2586,6 +2749,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer),
       onOpenEngine: _developerMode ? () => _navigateTo(_AppTab.engine) : null,
       onManageStorage: () => _navigateTo(_AppTab.storage),
+      listeningHistoryCount: _listeningHistory.length,
+      mostPlayedHistoryTitle: _mostPlayedHistoryEntry?.title,
+      onOpenHistory: () => _navigateTo(_AppTab.history),
+      onClearListeningHistory: _listeningHistory.isEmpty ? null : () => unawaited(_clearListeningHistory()),
       legalTracks: _libraryTracks,
     );
 
@@ -2596,6 +2763,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final selectedTabLabel = switch (_selectedTab) {
       _AppTab.settings => 'Settings',
       _AppTab.storage => 'Storage Manager',
+      _AppTab.history => 'Listening History',
       _AppTab.collections => 'Collections',
       _AppTab.collectionDetail => _selectedCollection?.name ?? 'Collection',
       _ => selectedDestination.label,
@@ -2609,8 +2777,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _AppTab.collectionDetail => pages[5],
       _AppTab.downloads => pages[6],
       _AppTab.storage => pages[7],
+      _AppTab.history => pages[8],
       _AppTab.settings => settingsPage,
-      _AppTab.engine => pages[8],
+      _AppTab.engine => pages[9],
     };
 
     return Scaffold(
@@ -2747,6 +2916,296 @@ bool _isDeviceCatalogTrack(CatalogTrackSummary track) => track.source == 'device
 bool _isCachedCatalogTrack(CatalogTrackSummary track) => track.source == 'cached' || track.primaryAsset?.assetId.startsWith('cached-') == true;
 
 
+String _historySourceLabel(WzListeningHistorySource source) => switch (source) {
+      WzListeningHistorySource.api => 'API',
+      WzListeningHistorySource.device => 'Device',
+      WzListeningHistorySource.cached => 'Cached',
+      WzListeningHistorySource.unknown => 'Unknown',
+    };
+
+String _friendlyHistoryTime(int timestampMs) {
+  final elapsed = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(timestampMs));
+  if (elapsed.inMinutes < 1) return 'Just now';
+  if (elapsed.inHours < 1) return '${elapsed.inMinutes}m ago';
+  if (elapsed.inDays < 1) return '${elapsed.inHours}h ago';
+  if (elapsed.inDays < 7) return '${elapsed.inDays}d ago';
+  return '${DateTime.fromMillisecondsSinceEpoch(timestampMs).month}/${DateTime.fromMillisecondsSinceEpoch(timestampMs).day}';
+}
+
+String _historyPositionLabel(WzListeningHistoryEntry entry) {
+  if (entry.lastPositionMs <= 0) return entry.durationMs == null ? 'Ready to play' : 'Start from beginning';
+  final total = entry.durationMs;
+  final position = _formatDuration(entry.lastPositionMs);
+  if (total == null || total <= 0) return 'Resume at $position';
+  return 'Resume at $position of ${_formatDuration(total)}';
+}
+
+String _formatDuration(int ms) {
+  final totalSeconds = (ms / 1000).floor();
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return '$minutes:${seconds.toString().padLeft(2, '0')}';
+}
+
+class _HomeHistorySection extends StatelessWidget {
+  const _HomeHistorySection({
+    required this.entries,
+    required this.continueEntry,
+    required this.mostPlayedEntry,
+    required this.resolver,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onAddToCollection,
+    required this.onRemove,
+    required this.onViewAll,
+  });
+
+  final List<WzListeningHistoryEntry> entries;
+  final WzListeningHistoryEntry? continueEntry;
+  final WzListeningHistoryEntry? mostPlayedEntry;
+  final CatalogTrackSummary? Function(WzListeningHistoryEntry entry) resolver;
+  final ValueChanged<WzListeningHistoryEntry> onPlay;
+  final ValueChanged<WzListeningHistoryEntry> onAddToQueue;
+  final ValueChanged<WzListeningHistoryEntry> onAddToCollection;
+  final ValueChanged<WzListeningHistoryEntry> onRemove;
+  final VoidCallback onViewAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = entries.take(6).toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        WzSectionHeader(
+          title: 'Continue Listening',
+          subtitle: 'Listening history stays on this device.',
+          icon: Icons.history,
+        ),
+        WzPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (continueEntry == null)
+                const Text('Play something from Library, Device Music, or Downloads and it will appear here.', style: WzText.body)
+              else
+                _ContinueListeningCard(entry: continueEntry!, available: resolver(continueEntry!) != null, onPlay: () => onPlay(continueEntry!)),
+              const SizedBox(height: WzSpacing.md),
+              Wrap(
+                spacing: WzSpacing.sm,
+                runSpacing: WzSpacing.sm,
+                children: [
+                  WzMiniMetric(label: 'History count', value: '${entries.length}', active: entries.isNotEmpty, icon: Icons.history),
+                  WzMiniMetric(label: 'Most played', value: mostPlayedEntry?.title ?? 'None yet', active: mostPlayedEntry != null, icon: Icons.repeat),
+                  const WzMiniMetric(label: 'Privacy', value: 'Device only', active: true, icon: Icons.lock),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: WzSpacing.md),
+        WzSectionHeader(
+          title: 'Recently Played',
+          subtitle: recent.isEmpty ? 'Your latest plays will show up here.' : 'Last ${recent.length} tracks saved locally.',
+          icon: Icons.schedule,
+        ),
+        WzPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (recent.isEmpty)
+                const Text('No listening history yet.', style: WzText.body)
+              else
+                ...recent.map((entry) => _HistoryEntryTile(
+                      entry: entry,
+                      available: resolver(entry) != null,
+                      compact: true,
+                      onPlay: () => onPlay(entry),
+                      onAddToQueue: () => onAddToQueue(entry),
+                      onAddToCollection: () => onAddToCollection(entry),
+                      onRemove: () => onRemove(entry),
+                    )),
+              const SizedBox(height: WzSpacing.sm),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(onPressed: onViewAll, icon: const Icon(Icons.open_in_full), label: const Text('View all')),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ContinueListeningCard extends StatelessWidget {
+  const _ContinueListeningCard({required this.entry, required this.available, required this.onPlay});
+
+  final WzListeningHistoryEntry entry;
+  final bool available;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
+            WzStatusPill(label: _historySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
+            WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
+            if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
+          ]),
+          const SizedBox(height: WzSpacing.sm),
+          Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
+          const SizedBox(height: WzSpacing.xxs),
+          Text('${entry.subtitle} • ${_historyPositionLabel(entry)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
+          if (!available) ...[
+            const SizedBox(height: WzSpacing.xs),
+            const Text('Track is not available right now.', style: WzText.caption),
+          ],
+          const SizedBox(height: WzSpacing.md),
+          WzPrimaryAction(label: entry.lastPositionMs > 0 ? 'Continue' : 'Play', icon: Icons.play_arrow, onPressed: available ? onPlay : null),
+        ],
+      );
+}
+
+class _ListeningHistoryPage extends StatelessWidget {
+  const _ListeningHistoryPage({
+    required this.entries,
+    required this.mostPlayedEntry,
+    required this.resolver,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onAddToCollection,
+    required this.onRemove,
+    required this.onClearAll,
+  });
+
+  final List<WzListeningHistoryEntry> entries;
+  final WzListeningHistoryEntry? mostPlayedEntry;
+  final CatalogTrackSummary? Function(WzListeningHistoryEntry entry) resolver;
+  final ValueChanged<WzListeningHistoryEntry> onPlay;
+  final ValueChanged<WzListeningHistoryEntry> onAddToQueue;
+  final ValueChanged<WzListeningHistoryEntry> onAddToCollection;
+  final ValueChanged<WzListeningHistoryEntry> onRemove;
+  final VoidCallback? onClearAll;
+
+  @override
+  Widget build(BuildContext context) => WzPageScaffold(
+        children: [
+          WzPageHeader(
+            icon: Icons.history,
+            title: 'Listening History',
+            subtitle: 'Recently played tracks saved locally on this device.',
+            trailing: OutlinedButton.icon(onPressed: onClearAll, icon: const Icon(Icons.delete_sweep), label: const Text('Clear all')),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          WzPanel(
+            child: Wrap(
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: [
+                WzMiniMetric(label: 'Recently played', value: '${entries.length}', active: entries.isNotEmpty, icon: Icons.history),
+                WzMiniMetric(label: 'Most played', value: mostPlayedEntry?.title ?? 'None yet', active: mostPlayedEntry != null, icon: Icons.repeat),
+                const WzMiniMetric(label: 'Privacy', value: 'Local only', active: true, icon: Icons.lock),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (entries.isEmpty)
+                  const Text('No listening history yet. Play a track to start building your local history.', style: WzText.body)
+                else
+                  ...entries.map((entry) => _HistoryEntryTile(
+                        entry: entry,
+                        available: resolver(entry) != null,
+                        onPlay: () => onPlay(entry),
+                        onAddToQueue: () => onAddToQueue(entry),
+                        onAddToCollection: () => onAddToCollection(entry),
+                        onRemove: () => onRemove(entry),
+                      )),
+                const SizedBox(height: WzSpacing.sm),
+                const Text('Removing history does not unlike tracks, delete collections, or remove downloads/cache.', style: WzText.caption),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _HistoryEntryTile extends StatelessWidget {
+  const _HistoryEntryTile({
+    required this.entry,
+    required this.available,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onAddToCollection,
+    required this.onRemove,
+    this.compact = false,
+  });
+
+  final WzListeningHistoryEntry entry;
+  final bool available;
+  final VoidCallback onPlay;
+  final VoidCallback onAddToQueue;
+  final VoidCallback onAddToCollection;
+  final VoidCallback onRemove;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: WzSpacing.sm),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: WzColors.surfaceElevated,
+            borderRadius: BorderRadius.circular(WzRadius.lg),
+            border: Border.all(color: WzColors.borderSoft),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(WzSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle)),
+                    const SizedBox(width: WzSpacing.xs),
+                    Text(_friendlyHistoryTime(entry.lastPlayedAtMs), style: WzText.caption),
+                  ],
+                ),
+                const SizedBox(height: WzSpacing.xxs),
+                Text(entry.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
+                const SizedBox(height: WzSpacing.xs),
+                Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
+                  WzStatusPill(label: _historySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
+                  WzStatusPill(label: '${entry.playCount} play${entry.playCount == 1 ? '' : 's'}', icon: Icons.repeat),
+                  if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
+                  WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
+                ]),
+                if (!available) ...[
+                  const SizedBox(height: WzSpacing.xs),
+                  const Text('Track is not available right now.', style: WzText.caption),
+                ],
+                const SizedBox(height: WzSpacing.sm),
+                Wrap(
+                  spacing: WzSpacing.xs,
+                  runSpacing: WzSpacing.xs,
+                  children: [
+                    FilledButton.icon(onPressed: available ? onPlay : null, icon: const Icon(Icons.play_arrow), label: Text(compact ? 'Play' : 'Play / Continue')),
+                    OutlinedButton.icon(onPressed: available ? onAddToQueue : null, icon: const Icon(Icons.queue_music), label: const Text('Queue')),
+                    OutlinedButton.icon(onPressed: available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add), label: const Text('Collection')),
+                    TextButton.icon(onPressed: onRemove, icon: const Icon(Icons.close), label: const Text('Remove')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+
 class _SettingsPage extends StatelessWidget {
   const _SettingsPage({
     required this.themeConfig,
@@ -2777,6 +3236,10 @@ class _SettingsPage extends StatelessWidget {
     required this.onDeveloperModeChanged,
     required this.onOpenEngine,
     required this.onManageStorage,
+    required this.listeningHistoryCount,
+    required this.mostPlayedHistoryTitle,
+    required this.onOpenHistory,
+    required this.onClearListeningHistory,
     required this.legalTracks,
   });
 
@@ -2808,6 +3271,10 @@ class _SettingsPage extends StatelessWidget {
   final ValueChanged<bool> onDeveloperModeChanged;
   final VoidCallback? onOpenEngine;
   final VoidCallback onManageStorage;
+  final int listeningHistoryCount;
+  final String? mostPlayedHistoryTitle;
+  final VoidCallback onOpenHistory;
+  final VoidCallback? onClearListeningHistory;
   final List<CatalogTrackSummary> legalTracks;
 
   @override
@@ -2935,6 +3402,39 @@ class _SettingsPage extends StatelessWidget {
                       onPressed: controlsDisabled || cachedTrackCount == 0 ? null : () => unawaited(onClearCache()),
                       icon: const Icon(Icons.clear_all),
                       label: const Text('Clear all downloads'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Listening History', subtitle: 'Recently played tracks saved locally on this device.', icon: Icons.history),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzMiniMetric(label: 'Recently played', value: '$listeningHistoryCount', active: listeningHistoryCount > 0, icon: Icons.history),
+                    WzMiniMetric(label: 'Most played', value: mostPlayedHistoryTitle ?? 'None yet', active: mostPlayedHistoryTitle != null, icon: Icons.repeat),
+                    const WzMiniMetric(label: 'Privacy', value: 'Device only', active: true, icon: Icons.lock),
+                  ],
+                ),
+                const SizedBox(height: WzSpacing.sm),
+                const Text('Clear listening history does not delete downloads, playlists, collections, or device music.', style: WzText.caption),
+                const SizedBox(height: WzSpacing.md),
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzPrimaryAction(label: 'View History', icon: Icons.history, onPressed: onOpenHistory),
+                    OutlinedButton.icon(
+                      onPressed: onClearListeningHistory,
+                      icon: const Icon(Icons.delete_sweep),
+                      label: const Text('Clear listening history'),
                     ),
                   ],
                 ),
