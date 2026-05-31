@@ -736,7 +736,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _catalogStatus = status ?? (_catalogStatus.startsWith('Loaded offline') ? _catalogStatus : 'Loaded from catalog API: ${manifest.title}');
     });
     final cachedMetadata = await _cacheService.cachedTrackById(manifest.trackId);
-    final resolvedUrl = await _cacheService.cachedOrRemoteUrl(manifest.trackId, manifest.streamUrl);
+    final resolvedUrl = await _cacheService.cachedOrRemoteUrlForAsset(
+      trackId: manifest.trackId,
+      remoteUrl: manifest.streamUrl,
+      qualityLabel: manifest.qualityLabel,
+    );
     if (mounted && resolvedUrl.startsWith('file://')) {
       setState(() => _currentCachedQuality = cachedMetadata?.qualityLabel ?? 'unknown');
     }

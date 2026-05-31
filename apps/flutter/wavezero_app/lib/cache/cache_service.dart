@@ -219,6 +219,34 @@ class CacheService {
     return remoteUrl;
   }
 
+  Future<String> cachedOrRemoteUrlForAsset({
+    required String trackId,
+    required String remoteUrl,
+    String? qualityLabel,
+  }) async {
+    await ensureInitialized();
+    final local = _index[trackId];
+    if (local == null) return remoteUrl;
+
+    final f = File(local);
+    if (!await f.exists()) return remoteUrl;
+
+    final metadata = _metadata[trackId];
+    if (metadata == null) return remoteUrl;
+
+    if (metadata.originalRemoteUrl == remoteUrl) {
+      return 'file://${f.path}';
+    }
+
+    final selectedQuality = qualityLabel?.trim().toLowerCase();
+    final cachedQuality = metadata.qualityLabel.trim().toLowerCase();
+    if (selectedQuality != null && selectedQuality.isNotEmpty && cachedQuality == selectedQuality) {
+      return 'file://${f.path}';
+    }
+
+    return remoteUrl;
+  }
+
   Future<bool> downloadAndCache(String trackId, String url, {CachedTrackMetadata? metadata}) async {
     await ensureInitialized();
     _status[trackId] = TrackCacheStatus.caching;
