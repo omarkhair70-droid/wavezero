@@ -1437,3 +1437,108 @@ This work does not change:
 18. Confirm no raw debug text appears in consumer mode.
 19. Confirm Library search still works and the full-search entry works.
 20. Confirm Home, Library, Collections, History, Queue, Now, Downloads, Storage Manager, Settings, Legal/Licenses, and notifications still work.
+
+## WaveZero #80 — Premium Player Surface v2 + Mini Player Sheet
+
+WaveZero #80 upgrades the Flutter playback presentation into a premium music-app surface while keeping the playback engine, queue semantics, cache files, Device Music import, native notification bridge, Rust API, and legal catalog behavior unchanged.
+
+### Mini player behavior
+
+- A persistent premium mini player appears above the bottom navigation whenever a track is currently loaded or selected by live playback state.
+- The mini player uses compact artwork or a gradient vinyl/equalizer placeholder, one-line title, one-line subtitle, a tiny progress bar, a source badge such as Cache, Device, or Remote, and an offline-ready indicator when available.
+- Tapping the mini player opens the bottom player sheet.
+- Tapping the mini player play/pause button only toggles playback through the existing Flutter callback and does not intentionally navigate away from the current tab.
+- The mini player is constrained for narrow Android screens and is intended to keep the bottom nav usable without adding a new nav destination.
+
+### Tap-to-open sheet and full player behavior
+
+- The mini player opens a `showModalBottomSheet` with `isScrollControlled: true` and a `DraggableScrollableSheet` player container.
+- The sheet starts around a medium-height player, can be dragged toward a near-full-screen player, and can be dragged down or closed with the top handle.
+- Opening and closing the sheet does not stop playback and does not create a second playback controller.
+- The sheet reuses the same premium player surface as the Now tab, including artwork, status badges, progress, primary controls, actions, and up-next preview.
+
+### Now tab relationship
+
+- The Now tab remains in the existing bottom navigation for navigation stability.
+- Now now renders the same premium player surface used by the bottom sheet instead of maintaining a separate older player-card layout.
+- A later PR can decide whether Now should stay as a tab or become sheet-only.
+
+### Home cleanup direction
+
+- Home is now discovery- and personalization-oriented instead of repeating a full player surface when a track is active.
+- If playback state has a current track, Home shows a compact Continue Listening summary and lets the mini player own live playback controls.
+- If no track is active, Home can still show the existing Current Listening starter card.
+- History, Continue Listening, Recently Played, smart engine cards, quick actions, Search, Library, Collections, Downloads, Storage, and Settings flows remain intact.
+
+### Controls and actions
+
+- The premium player surface uses existing callbacks only: play/pause, previous, next, stop, retry, seek, like, add to collection, add to queue, and queue navigation.
+- The central play/pause control is visually dominant; retry and stop remain secondary actions.
+- Like and Add to Collection are enabled only when the current track can be resolved through existing library/manifest/selected-track state.
+- Add Up Next uses the existing queue add path and does not alter Queue Engine v2 semantics.
+
+### Up-next preview
+
+- The player surface shows the next queued track when one exists.
+- When no next track is available, the friendly copy is: “Add more tracks to Queue”.
+- The preview is intentionally compact so the player does not become a diagnostics dashboard.
+
+### Visual direction
+
+- The player UI uses dark glass, gradients, compact badges, controlled spacing, tasteful artwork sizing, and one-line constrained metadata for long or Arabic titles.
+- Missing artwork uses a premium gradient/equalizer placeholder instead of relying on a plain giant icon.
+- Consumer mode avoids raw metrics, debug IDs, internal URLs, and diagnostics in the player surface.
+- Developer mode keeps the existing Engine/raw metrics panels where they already live; #80 does not add new diagnostics.
+
+### Notification and lock-screen boundary
+
+- #80 does not build custom Android notification RemoteViews and does not redesign native notification rendering.
+- Notification and lock-screen controls continue to use the existing Android MediaStyle/system-rendered metadata foundation.
+- Flutter-side surfaces read the same title, artist/subtitle, artwork, source, cache, and queue state fields that already feed playback metadata.
+- Native notification artwork polish and deeper lock-screen metadata are future native-focused work.
+
+### Intentionally unchanged
+
+- Android native playback behavior was not changed.
+- Rust API behavior was not changed.
+- Device Music MediaStore behavior was not changed.
+- CacheService file format was not changed.
+- Queue Engine v2 semantics were not changed.
+- Smart Downloads logic was not changed.
+- Audio Quality selection logic was not changed.
+- Audio Effects bridge behavior was not changed.
+- Legal Catalog rules were not changed.
+- No auth, cloud sync, database, backend API, analytics SDK, uploads, payments, subscriptions, DRM, or real music files were added.
+- The Now tab was not removed and no new bottom-nav item was added.
+
+### Future work
+
+- Custom artwork pipeline.
+- Animated visualizer.
+- Crossfade.
+- Sleep timer.
+- Shuffle/repeat.
+- Native notification artwork polish.
+- Lock-screen metadata deepening.
+- Sheet-only Now navigation option.
+
+### Manual checklist
+
+1. Start app.
+2. Play an API track.
+3. Confirm mini player appears above bottom nav.
+4. Tap mini player and confirm player sheet opens.
+5. Drag sheet up/down.
+6. Confirm play/pause works from mini player.
+7. Confirm play/pause/next/previous/seek work from sheet/full player.
+8. Confirm Now tab shows premium player surface.
+9. Confirm Home is less crowded and does not duplicate player heavily.
+10. Play Device Music and confirm mini player/sheet show correct title/source.
+11. Play cached/downloaded track and confirm cache/offline badges.
+12. Confirm Like/Add to Collection works when current track is resolvable.
+13. Confirm Up Next preview reflects queue state.
+14. Confirm Arabic/long titles do not overflow.
+15. Confirm bottom nav remains usable.
+16. Confirm notification controls still work.
+17. Confirm Search, Library, Collections, History, Queue, Downloads, Storage, Settings still work.
+18. Confirm no raw debug UI appears in consumer mode.
