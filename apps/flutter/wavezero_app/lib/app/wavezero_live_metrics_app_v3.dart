@@ -116,6 +116,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   String? _lastCacheResult;
   int _offlineCachedTrackCount = 0;
   bool _offlineLibraryAvailable = false;
+  bool _offlineLibraryMode = false;
   String _lastOfflineLibraryStatus = 'Offline library not initialized.';
 
   String? _selectedTrackId;
@@ -269,6 +270,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     } catch (_) {}
   }
 
+  bool get _isOfflineLibraryMode => _offlineLibraryMode;
+
   void _capturePlaybackBaselineMetrics(PlaybackMetrics metrics) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final hasAudioSignal = metrics.isPlaying &&
@@ -329,6 +332,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           _catalogStatus = catalog.tracks.isEmpty ? 'Catalog API returned no tracks.' : 'Loaded ${catalog.tracks.length} catalog tracks.';
           _queueStatus = restored == null ? 'Queue synced with catalog.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
+          _offlineLibraryMode = false;
         });
         if (preferred == null) throw const FormatException('Catalog API returned no playable tracks');
         await _loadManifestAndNativeTrack(preferred.trackId, client: client);
@@ -359,6 +363,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _sessionStatus = '${offlineTracks.length} cached tracks available offline.';
             _offlineCachedTrackCount = offlineLibrary.length;
             _offlineLibraryAvailable = true;
+            _offlineLibraryMode = true;
             _lastOfflineLibraryStatus = 'Offline cached library loaded.';
           });
         } else {
@@ -367,6 +372,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track. $error' : 'Catalog load failed. $error';
             _offlineCachedTrackCount = 0;
             _offlineLibraryAvailable = false;
+            _offlineLibraryMode = false;
             _lastOfflineLibraryStatus = 'Offline library empty.';
           });
           if (fallbackToDemo) {
@@ -445,27 +451,44 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (prefetchedManifest?.trackId == trackId) {
       manifest = prefetchedManifest!;
     } else {
-      try {
-        manifest = await client.fetchTrackManifest(trackId: trackId);
-      } catch (error) {
-        final cachedMetadata = await _cacheService.cachedTrackById(trackId);
-        if (cachedMetadata != null) {
-          manifest = CatalogTrackManifest(
-            trackId: cachedMetadata.trackId,
-            title: cachedMetadata.title,
-            streamUrl: cachedMetadata.originalRemoteUrl,
-            artistId: null,
-            artistName: cachedMetadata.artistName,
-            durationMs: cachedMetadata.durationMs,
-            artworkUrl: cachedMetadata.artworkUrl,
-          );
-          if (mounted) {
-            setState(() {
-              _catalogStatus = 'Loaded offline cached track: ${manifest.title}';
-            });
+      final cachedMetadata = await _cacheService.cachedTrackById(trackId);
+      if (_isOfflineLibraryMode && cachedMetadata != null) {
+        manifest = CatalogTrackManifest(
+          trackId: cachedMetadata.trackId,
+          title: cachedMetadata.title,
+          streamUrl: cachedMetadata.originalRemoteUrl,
+          artistId: null,
+          artistName: cachedMetadata.artistName,
+          durationMs: cachedMetadata.durationMs,
+          artworkUrl: cachedMetadata.artworkUrl,
+        );
+        if (mounted) {
+          setState(() {
+            _catalogStatus = 'Loaded offline cached track: ${manifest.title}';
+          });
+        }
+      } else {
+        try {
+          manifest = await client.fetchTrackManifest(trackId: trackId);
+        } catch (error) {
+          if (cachedMetadata != null) {
+            manifest = CatalogTrackManifest(
+              trackId: cachedMetadata.trackId,
+              title: cachedMetadata.title,
+              streamUrl: cachedMetadata.originalRemoteUrl,
+              artistId: null,
+              artistName: cachedMetadata.artistName,
+              durationMs: cachedMetadata.durationMs,
+              artworkUrl: cachedMetadata.artworkUrl,
+            );
+            if (mounted) {
+              setState(() {
+                _catalogStatus = 'Loaded offline cached track: ${manifest.title}';
+              });
+            }
+          } else {
+            rethrow;
           }
-        } else {
-          rethrow;
         }
       }
     }
