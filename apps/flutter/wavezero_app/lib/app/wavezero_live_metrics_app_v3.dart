@@ -13,6 +13,7 @@ import '../playback/playback_bridge.dart';
 import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
 import '../cache/cache_service.dart';
+import '../design/wavezero_design_system.dart';
 import 'player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
@@ -75,6 +76,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _refreshInterval = Duration(milliseconds: 500);
   static const _autoAdvanceThresholdMs = 1200;
   static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
+  static const _tabLabels = ['Home', 'Now', 'Queue', 'Library', 'Downloads', 'Engine'];
 
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
@@ -1319,54 +1321,59 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final displayedPositionMs = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
     final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
 
+    final qualityLabel = _manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label;
+    final isPlayingFromCache = _currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false);
+    final effectsSummary = _nativeAudioEffectStatus == NativeAudioEffectStatus.applied
+        ? 'Applied'
+        : _nativeAudioEffectStatus == NativeAudioEffectStatus.unsupported
+            ? 'Unsupported'
+            : _selectedAudioEffectProfile == AudioEffectProfile.off
+                ? 'Off'
+                : _nativeAudioEffectStatus.name;
+    final engineSummary = '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
+        '${_prefetchEnabled ? 'Instant Next on' : 'Instant Next off'} • '
+        '${_offlineLibraryAvailable ? 'Offline Ready' : 'Offline empty'}';
+
     // Build per-tab pages using existing widgets — keep behavior unchanged.
     final pages = <Widget>[
-      // Home: identity + compact status and health
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _TopBar(),
-            const SizedBox(height: 18),
-            _NowPlayingCard(
-              metrics: _metrics,
-              manifest: _manifest,
-              nextTrack: _upNextQueueTrack,
-              progressValue: progress,
-              displayedPositionMs: displayedPositionMs,
-              durationMs: durationMs,
-              controlsDisabled: _playerDisabled,
-              canPlayPrevious: _canPrevious,
-              canPlayNext: _canNext,
-              onPlayPause: _playPause,
-              onStop: _stop,
-              onRetry: _retry,
-              onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
-              onNext: () => _playNext(autoStart: _metrics.isPlaying),
-              onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
-              onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
-                  ? null
-                  : (value) async {
-                      final target = value * durationMs;
-                      setState(() => _dragPositionMs = null);
-                      await _seekTo(target);
-                    },
-            ),
-            const SizedBox(height: 12),
-            _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
-            const SizedBox(height: 8),
-            _SessionStrip(status: _sessionStatus),
-            const SizedBox(height: 12),
-            _HealthStrip(metrics: _metrics),
-          ],
-        ),
+      WzPageScaffold(
+        children: [
+          _HomeHero(engineSummary: engineSummary),
+          const SizedBox(height: WzSpacing.md),
+          _CurrentListeningCard(
+            metrics: _metrics,
+            manifest: _manifest,
+            qualityLabel: qualityLabel,
+            playingFromCache: isPlayingFromCache,
+            offlineReady: _offlineLibraryAvailable,
+            status: _statusText,
+          ),
+          const SizedBox(height: WzSpacing.md),
+          _SmartEngineCards(
+            smartDownloadsEnabled: _smartDownloadsEnabled,
+            smartDownloadsCompleted: _smartDownloadCompletedCount,
+            prefetchEnabled: _prefetchEnabled,
+            prefetchedTrackTitle: _prefetchedTrackTitle,
+            offlineReady: _offlineLibraryAvailable,
+            offlineTrackCount: _offlineCachedTrackCount,
+            qualityLabel: qualityLabel,
+          ),
+          const SizedBox(height: WzSpacing.md),
+          _HomeQuickActions(onNavigate: (index) => setState(() => _selectedIndex = index)),
+          const SizedBox(height: WzSpacing.md),
+          _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
+          const SizedBox(height: WzSpacing.sm),
+          _SessionStrip(status: _sessionStatus),
+        ],
       ),
-      // Now Playing: focused player controls
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const SizedBox(height: 6),
+      WzPageScaffold(
+        children: [
+          const WzPageHeader(
+            icon: Icons.play_circle_fill,
+            title: 'Now Playing',
+            subtitle: 'Focused playback controls with current quality and effects context.',
+          ),
+          const SizedBox(height: WzSpacing.md),
           _NowPlayingCard(
             metrics: _metrics,
             manifest: _manifest,
@@ -1391,16 +1398,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     await _seekTo(target);
                   },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: WzSpacing.md),
+          _NowContextPanel(
+            qualityLabel: qualityLabel,
+            effectsSummary: effectsSummary,
+            playingFromCache: isPlayingFromCache,
+            offlineReady: _offlineLibraryAvailable,
+            nextTrack: _upNextQueueTrack,
+          ),
+          const SizedBox(height: WzSpacing.md),
           _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
-          if (_showMetrics) ...[const SizedBox(height: 14), _MetricsPanel(metrics: _metrics)],
-        ]),
+          if (_showMetrics) ...[const SizedBox(height: WzSpacing.md), _MetricsPanel(metrics: _metrics)],
+        ],
       ),
-      // Queue: queue card and Smart Queue reason
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const SizedBox(height: 12),
+      WzPageScaffold(
+        children: [
+          const WzPageHeader(
+            icon: Icons.queue_music,
+            title: 'Queue',
+            subtitle: 'Queue Engine v2 stays intact with cleaner product hierarchy.',
+          ),
+          const SizedBox(height: WzSpacing.md),
           _QueueCard(
             queue: _queue,
             currentTrackId: _queueCurrentTrackId,
@@ -1427,7 +1445,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onRemoveTrack: _removeFromQueue,
             onClearQueue: _clearQueue,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: WzSpacing.md),
           _SmartPreloadCard(
             metrics: _metrics,
             enabled: _prefetchEnabled,
@@ -1446,7 +1464,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             controlsDisabled: _queueDisabled,
             onToggle: _setPrefetchEnabled,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: WzSpacing.sm),
           _SmartDownloadsCard(
             enabled: _smartDownloadsEnabled,
             lastTrackId: _lastSmartDownloadTrackId,
@@ -1460,13 +1478,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             inFlight: _autoCacheInFlight.length,
             onToggle: (v) => setState(() { _smartDownloadsEnabled = v; }),
           ),
-        ]),
+        ],
       ),
-      // Library: catalog/search/track list
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const SizedBox(height: 8),
+      WzPageScaffold(
+        children: [
+          const WzPageHeader(
+            icon: Icons.library_music,
+            title: 'Library',
+            subtitle: 'Browse catalog tracks, select playback assets, and manage local cache.',
+          ),
+          const SizedBox(height: WzSpacing.md),
           _CatalogListCard(
             tracks: _filteredCatalog,
             totalTrackCount: _catalog.length,
@@ -1483,15 +1504,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onCache: (track) => _toggleCache(track),
             offlineMode: _catalogStatus.toLowerCase().contains('offline'),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: WzSpacing.md),
           _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
-        ]),
+        ],
       ),
-      // Downloads: cached tracks and storage actions
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const SizedBox(height: 8),
+      WzPageScaffold(
+        children: [
+          const WzPageHeader(
+            icon: Icons.download_done,
+            title: 'Downloads',
+            subtitle: 'Offline Ready library with manual and smart cached tracks.',
+          ),
+          const SizedBox(height: WzSpacing.md),
           _DownloadsCard(
             downloads: _cachedLibrary,
             cacheBytes: _cacheBytes,
@@ -1500,13 +1524,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onDelete: _deleteCachedTrack,
             onClearAll: _clearCache,
           ),
-        ]),
+        ],
       ),
-      // Engine: smart preload, baseline, raw metrics
-      SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 28),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const SizedBox(height: 8),
+      WzPageScaffold(
+        children: [
+          const WzPageHeader(
+            icon: Icons.engineering,
+            title: 'Engine diagnostics',
+            subtitle: 'Advanced playback, preload, cache, quality, and effects diagnostics remain available.',
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Playback Engine', subtitle: 'Current player state and operation summary.', icon: Icons.graphic_eq),
+          _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Smart Preload', subtitle: 'Instant Next readiness and preload hit/miss telemetry.', icon: Icons.offline_bolt),
           _SmartPreloadCard(
             metrics: _metrics,
             enabled: _prefetchEnabled,
@@ -1525,7 +1556,62 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             controlsDisabled: _queueDisabled,
             onToggle: _setPrefetchEnabled,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Smart Downloads', subtitle: 'Predictive cache activity and counters.', icon: Icons.download_for_offline),
+          _SmartDownloadsCard(
+            enabled: _smartDownloadsEnabled,
+            lastTrackId: _lastSmartDownloadTrackId,
+            lastTitle: _lastSmartDownloadTitle,
+            lastReason: _lastSmartDownloadReason,
+            lastResult: _lastSmartDownloadResult,
+            startedCount: _smartDownloadStartedCount,
+            completedCount: _smartDownloadCompletedCount,
+            failedCount: _smartDownloadFailedCount,
+            skippedCount: _smartDownloadSkippedCount,
+            inFlight: _autoCacheInFlight.length,
+            onToggle: (v) => setState(() { _smartDownloadsEnabled = v; }),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Audio Quality', subtitle: 'Preferred and currently selected audio asset quality.', icon: Icons.high_quality),
+          _AudioQualityPanel(
+            preferredAudioQuality: _preferredAudioQuality,
+            manifest: _manifest,
+            currentAssetUrl: _currentAssetUrl,
+            currentCachedQuality: _currentCachedQuality,
+            lastQualityFallbackReason: _lastQualityFallbackReason,
+            controlsDisabled: _queueDisabled,
+            onSelected: (values) => setState(() {
+              _preferredAudioQuality = values.first;
+              _lastQualityFallbackReason = 'preferred quality set to ${values.first.label}';
+            }),
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Audio Effects', subtitle: 'Effect profile bridge status and diagnostics.', icon: Icons.tune),
+          _AudioEffectsPanel(
+            selectedProfile: _selectedAudioEffectProfile,
+            nativeStatus: _nativeAudioEffectStatus,
+            lastApplyResult: _lastAudioEffectApplyResult,
+            preferredAudioQuality: _preferredAudioQuality,
+            controlsDisabled: _queueDisabled,
+            onSelected: _setAudioEffectProfile,
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Cache / Offline', subtitle: 'Manual downloads, smart downloads, and offline library counters.', icon: Icons.offline_pin),
+          _CacheDiagnosticsPanel(
+            cachedTrackCount: _cachedTrackCount,
+            cacheBytes: _cacheBytes,
+            offlineLibraryAvailable: _offlineLibraryAvailable,
+            offlineCachedTrackCount: _offlineCachedTrackCount,
+            manualDownloadedCount: _manualDownloadedCount,
+            smartDownloadedCount: _smartDownloadedCount,
+            lastOfflineLibraryStatus: _lastOfflineLibraryStatus,
+            lastCacheResult: _lastCacheResult,
+            lastCacheDeleteResult: _lastCacheDeleteResult,
+            controlsDisabled: _queueDisabled,
+            onClearCache: _clearCache,
+          ),
+          const SizedBox(height: WzSpacing.md),
+          const WzSectionHeader(title: 'Raw Metrics', subtitle: 'Complete developer telemetry keeps original metric names.', icon: Icons.data_object),
           _PerformanceBaselinePanel(
             metrics: _metrics,
             nextTapToAudioMs: _nextTapToAudioMs,
@@ -1536,72 +1622,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             audioPreparedBeforeNext: _audioPreparedBeforeNext,
             nextPreparedBeforePlay: _nextPreparedBeforePlay,
           ),
-          const SizedBox(height: 12),
-          _AudioEffectsPanel(
-            selectedProfile: _selectedAudioEffectProfile,
-            nativeStatus: _nativeAudioEffectStatus,
-            lastApplyResult: _lastAudioEffectApplyResult,
-            preferredAudioQuality: _preferredAudioQuality,
-            controlsDisabled: _queueDisabled,
-            onSelected: _setAudioEffectProfile,
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const Text('Audio Quality', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 10),
-              SegmentedButton<AudioQualityTier>(
-                segments: const [
-                  ButtonSegment(value: AudioQualityTier.standard, label: Text('Standard')),
-                  ButtonSegment(value: AudioQualityTier.high, label: Text('High')),
-                  ButtonSegment(value: AudioQualityTier.original, label: Text('Original')),
-                ],
-                selected: {_preferredAudioQuality},
-                onSelectionChanged: _queueDisabled
-                    ? null
-                    : (values) => setState(() {
-                          _preferredAudioQuality = values.first;
-                          _lastQualityFallbackReason = 'preferred quality set to ${values.first.label}';
-                        }),
-              ),
-              const SizedBox(height: 10),
-              Text('Preferred quality: ${_preferredAudioQuality.label}', style: _WzTokens.caption),
-              Text('Current track quality: ${_manifest?.qualityLabel ?? 'unknown'}', style: _WzTokens.caption),
-              Text('Current codec: ${_manifest?.codec ?? 'unknown'}', style: _WzTokens.caption),
-              Text('Current bitrate: ${_manifest?.bitrateKbps == null ? 'unknown' : '${_manifest!.bitrateKbps} kbps'}', style: _WzTokens.caption),
-              Text('Current asset URL: ${_currentAssetUrl ?? _manifest?.streamUrl ?? 'none'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-              Text('Quality fallback reason: $_lastQualityFallbackReason', style: _WzTokens.caption),
-              Text('Cached quality: ${_currentCachedQuality ?? 'not playing from cache'}', style: _WzTokens.caption),
-            ]),
-          ),
-          const SizedBox(height: 12),
-          _Panel(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Cache', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 6),
-                    Text('Cached tracks: $_cachedTrackCount • ${(_cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
-                    Text('Offline cached library: ${_offlineLibraryAvailable ? 'available' : 'unavailable'}', style: _WzTokens.caption),
-                    Text('Offline cache items: $_offlineCachedTrackCount', style: _WzTokens.caption),
-                    Text('downloadedTrackCount: $_cachedTrackCount', style: _WzTokens.caption),
-                    Text('totalCacheBytes: $_cacheBytes', style: _WzTokens.caption),
-                    Text('manualDownloadedCount: $_manualDownloadedCount', style: _WzTokens.caption),
-                    Text('smartDownloadedCount: $_smartDownloadedCount', style: _WzTokens.caption),
-                    Text('Offline status: $_lastOfflineLibraryStatus', style: _WzTokens.caption),
-                    if (_lastCacheResult != null) Text('Last: $_lastCacheResult', style: _WzTokens.caption),
-                    if (_lastCacheDeleteResult != null) Text('lastCacheDeleteResult: $_lastCacheDeleteResult', style: _WzTokens.caption),
-                  ]),
-                ),
-                FilledButton.tonalIcon(onPressed: _queueDisabled ? null : () async { await _clearCache(); }, icon: const Icon(Icons.clear_all), label: const Text('Clear cache'))
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: WzSpacing.md),
           _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
-          if (_showMetrics) ...[const SizedBox(height: 14), _MetricsPanel(metrics: _metrics)],
-        ]),
+          if (_showMetrics) ...[const SizedBox(height: WzSpacing.md), _MetricsPanel(metrics: _metrics)],
+        ],
       ),
     ];
 
@@ -1611,7 +1635,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 760),
-            child: pages[_selectedIndex],
+            child: Column(
+              children: [
+                _ProductShellHeader(
+                  selectedTabLabel: _tabLabels[_selectedIndex],
+                  status: _statusText,
+                  engineSummary: engineSummary,
+                  offlineReady: _offlineLibraryAvailable,
+                ),
+                Expanded(child: pages[_selectedIndex]),
+              ],
+            ),
           ),
         ),
       ),
@@ -1653,21 +1687,21 @@ enum QueueAdvanceSource { manual, next, previous, auto }
 class _WzTokens {
   const _WzTokens._();
 
-  static const Color canvas = Color(0xFF060810);
-  static const Color surface = Color(0xFF101521);
-  static const Color surfaceElevated = Color(0xFF151B2A);
-  static const Color surfaceMuted = Color(0xFF0B0F19);
-  static const Color border = Color(0xFF252E43);
-  static const Color borderSoft = Color(0xFF1C2435);
-  static const Color accent = Color(0xFF9A8CFF);
-  static const Color accentSoft = Color(0x1F9A8CFF);
-  static const Color success = Color(0xFF38D996);
-  static const Color successSoft = Color(0x1838D996);
-  static const Color warning = Color(0xFFFFC46B);
-  static const Color warningSoft = Color(0x1AFFC46B);
-  static const Color textPrimary = Color(0xFFF3F5FB);
-  static const Color textMuted = Color(0xFFA4ADC1);
-  static const Color textSubtle = Color(0xFF7F899F);
+  static const Color canvas = WzColors.canvas;
+  static const Color surface = WzColors.surface;
+  static const Color surfaceElevated = WzColors.surfaceElevated;
+  static const Color surfaceMuted = WzColors.surfaceMuted;
+  static const Color border = WzColors.border;
+  static const Color borderSoft = WzColors.borderSoft;
+  static const Color accent = WzColors.accent;
+  static const Color accentSoft = WzColors.accentSoft;
+  static const Color success = WzColors.success;
+  static const Color successSoft = WzColors.successSoft;
+  static const Color warning = WzColors.warning;
+  static const Color warningSoft = WzColors.warningSoft;
+  static const Color textPrimary = WzColors.textPrimary;
+  static const Color textMuted = WzColors.textMuted;
+  static const Color textSubtle = WzColors.textSubtle;
 
   static const double space1 = 4;
   static const double space2 = 8;
@@ -1724,6 +1758,345 @@ class _TopBar extends StatelessWidget {
           ),
           Icon(Icons.graphic_eq, color: _WzTokens.accent),
         ],
+      );
+}
+
+
+class _ProductShellHeader extends StatelessWidget {
+  const _ProductShellHeader({
+    required this.selectedTabLabel,
+    required this.status,
+    required this.engineSummary,
+    required this.offlineReady,
+  });
+
+  final String selectedTabLabel;
+  final String status;
+  final String engineSummary;
+  final bool offlineReady;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(22, 14, 22, 8),
+        child: WzPanel(
+          padding: const EdgeInsets.symmetric(horizontal: WzSpacing.md, vertical: WzSpacing.sm),
+          gradient: WzColors.heroGradient,
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  gradient: WzColors.accentGradient,
+                  borderRadius: BorderRadius.circular(WzRadius.md),
+                ),
+                child: const Icon(Icons.graphic_eq, color: Colors.white),
+              ),
+              const SizedBox(width: WzSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('WaveZero', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                    const SizedBox(height: WzSpacing.xxs),
+                    Text('$selectedTabLabel • $engineSummary', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                  ],
+                ),
+              ),
+              const SizedBox(width: WzSpacing.sm),
+              WzStatusPill(label: status, active: status == 'Playing', warning: status == 'Error', icon: Icons.radio_button_checked),
+              const SizedBox(width: WzSpacing.xs),
+              WzStatusPill(label: offlineReady ? 'Offline Ready' : 'Online catalog', active: offlineReady, icon: Icons.offline_pin),
+            ],
+          ),
+        ),
+      );
+}
+
+class _HomeHero extends StatelessWidget {
+  const _HomeHero({required this.engineSummary});
+
+  final String engineSummary;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        padding: const EdgeInsets.all(WzSpacing.xl),
+        gradient: WzColors.heroGradient,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('WaveZero', style: WzText.display),
+            const SizedBox(height: WzSpacing.xs),
+            const Text('A smart music experience engine.', style: TextStyle(fontSize: 17, color: WzColors.textMuted, height: 1.35)),
+            const SizedBox(height: WzSpacing.lg),
+            Wrap(
+              spacing: WzSpacing.xs,
+              runSpacing: WzSpacing.xs,
+              children: [
+                const WzStatusPill(label: 'Native playback', active: true, icon: Icons.phone_android),
+                WzStatusPill(label: engineSummary, active: true, icon: Icons.auto_awesome),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _CurrentListeningCard extends StatelessWidget {
+  const _CurrentListeningCard({
+    required this.metrics,
+    required this.manifest,
+    required this.qualityLabel,
+    required this.playingFromCache,
+    required this.offlineReady,
+    required this.status,
+  });
+
+  final PlaybackMetrics metrics;
+  final CatalogTrackManifest? manifest;
+  final String qualityLabel;
+  final bool playingFromCache;
+  final bool offlineReady;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = metrics.trackTitle ?? manifest?.title ?? 'No track loaded';
+    return WzPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const WzSectionHeader(title: 'Current listening', subtitle: 'Real playback state from the engine.', icon: Icons.album),
+          Row(
+            children: [
+              _Artwork(artworkUrl: manifest?.artworkUrl),
+              const SizedBox(width: WzSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
+                    const SizedBox(height: WzSpacing.xs),
+                    Text(manifest?.subtitle ?? 'Choose a track from Library to start listening.', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: WzSpacing.md),
+          Wrap(
+            spacing: WzSpacing.xs,
+            runSpacing: WzSpacing.xs,
+            children: [
+              WzStatusPill(label: status, active: metrics.isPlaying, warning: status == 'Error', icon: metrics.isPlaying ? Icons.play_arrow : Icons.pause),
+              WzStatusPill(label: 'Quality: ${_productQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
+              if (playingFromCache) const WzStatusPill(label: 'Playing from cache', active: true, icon: Icons.offline_pin),
+              if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SmartEngineCards extends StatelessWidget {
+  const _SmartEngineCards({
+    required this.smartDownloadsEnabled,
+    required this.smartDownloadsCompleted,
+    required this.prefetchEnabled,
+    required this.prefetchedTrackTitle,
+    required this.offlineReady,
+    required this.offlineTrackCount,
+    required this.qualityLabel,
+  });
+
+  final bool smartDownloadsEnabled;
+  final int smartDownloadsCompleted;
+  final bool prefetchEnabled;
+  final String? prefetchedTrackTitle;
+  final bool offlineReady;
+  final int offlineTrackCount;
+  final String qualityLabel;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const WzSectionHeader(title: 'Smart engine', subtitle: 'Product-facing summary of engine foundations.', icon: Icons.auto_awesome),
+            Wrap(
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: [
+                WzMiniMetric(label: 'Smart Downloads', value: smartDownloadsEnabled ? '$smartDownloadsCompleted cached' : 'Off', active: smartDownloadsEnabled, icon: Icons.download_for_offline),
+                WzMiniMetric(label: 'Instant Next / Preload', value: prefetchEnabled ? (prefetchedTrackTitle ?? 'Ready') : 'Off', active: prefetchEnabled, icon: Icons.offline_bolt),
+                WzMiniMetric(label: 'Offline Ready', value: offlineReady ? '$offlineTrackCount tracks' : 'No cached tracks', active: offlineReady, icon: Icons.offline_pin),
+                WzMiniMetric(label: 'Audio Quality', value: _productQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _HomeQuickActions extends StatelessWidget {
+  const _HomeQuickActions({required this.onNavigate});
+
+  final ValueChanged<int> onNavigate;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const WzSectionHeader(title: 'Quick actions', subtitle: 'Jump into the core WaveZero workflows.', icon: Icons.bolt),
+            Wrap(
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: [
+                WzPrimaryAction(label: 'Go to Library', icon: Icons.library_music, onPressed: () => onNavigate(3)),
+                WzPrimaryAction(label: 'Go to Queue', icon: Icons.queue_music, onPressed: () => onNavigate(2)),
+                WzPrimaryAction(label: 'Go to Downloads', icon: Icons.download_done, onPressed: () => onNavigate(4)),
+                WzPrimaryAction(label: 'Go to Engine', icon: Icons.engineering, onPressed: () => onNavigate(5)),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _NowContextPanel extends StatelessWidget {
+  const _NowContextPanel({
+    required this.qualityLabel,
+    required this.effectsSummary,
+    required this.playingFromCache,
+    required this.offlineReady,
+    required this.nextTrack,
+  });
+
+  final String qualityLabel;
+  final String effectsSummary;
+  final bool playingFromCache;
+  final bool offlineReady;
+  final CatalogTrackSummary? nextTrack;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const WzSectionHeader(title: 'Listening context', subtitle: 'Quality, effects, cache, and up-next state.', icon: Icons.tune),
+            Wrap(
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: [
+                WzMiniMetric(label: 'Quality', value: _productQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
+                WzMiniMetric(label: 'Effects', value: effectsSummary, active: effectsSummary == 'Applied', icon: Icons.tune),
+                WzMiniMetric(label: 'Cache', value: playingFromCache ? 'Playing from cache' : offlineReady ? 'Offline Ready' : 'Streaming / ready', active: playingFromCache || offlineReady, icon: Icons.offline_pin),
+                WzMiniMetric(label: 'Up next', value: nextTrack?.title ?? 'Queue empty', active: nextTrack != null, icon: Icons.skip_next),
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _AudioQualityPanel extends StatelessWidget {
+  const _AudioQualityPanel({
+    required this.preferredAudioQuality,
+    required this.manifest,
+    required this.currentAssetUrl,
+    required this.currentCachedQuality,
+    required this.lastQualityFallbackReason,
+    required this.controlsDisabled,
+    required this.onSelected,
+  });
+
+  final AudioQualityTier preferredAudioQuality;
+  final CatalogTrackManifest? manifest;
+  final String? currentAssetUrl;
+  final String? currentCachedQuality;
+  final String lastQualityFallbackReason;
+  final bool controlsDisabled;
+  final ValueChanged<Set<AudioQualityTier>> onSelected;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const _PanelHeader(icon: Icons.high_quality, title: 'Audio Quality', subtitle: 'Selection foundation without changing quality logic.'),
+          const SizedBox(height: 10),
+          SegmentedButton<AudioQualityTier>(
+            segments: const [
+              ButtonSegment(value: AudioQualityTier.standard, label: Text('Standard')),
+              ButtonSegment(value: AudioQualityTier.high, label: Text('High')),
+              ButtonSegment(value: AudioQualityTier.original, label: Text('Original')),
+            ],
+            selected: {preferredAudioQuality},
+            onSelectionChanged: controlsDisabled ? null : onSelected,
+          ),
+          const SizedBox(height: 10),
+          Text('Preferred quality: ${_productQualityLabel(preferredAudioQuality.label)}', style: _WzTokens.caption),
+          Text('Current track quality: ${_productQualityLabel(manifest?.qualityLabel ?? 'unknown')}', style: _WzTokens.caption),
+          Text('Current codec: ${manifest?.codec ?? 'unknown'}', style: _WzTokens.caption),
+          Text('Current bitrate: ${manifest?.bitrateKbps == null ? 'unknown' : '${manifest!.bitrateKbps} kbps'}', style: _WzTokens.caption),
+          Text('Current asset URL: ${currentAssetUrl ?? manifest?.streamUrl ?? 'none'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+          Text('Quality fallback reason: $lastQualityFallbackReason', style: _WzTokens.caption),
+          Text('Cached quality: ${currentCachedQuality ?? 'not playing from cache'}', style: _WzTokens.caption),
+        ]),
+      );
+}
+
+class _CacheDiagnosticsPanel extends StatelessWidget {
+  const _CacheDiagnosticsPanel({
+    required this.cachedTrackCount,
+    required this.cacheBytes,
+    required this.offlineLibraryAvailable,
+    required this.offlineCachedTrackCount,
+    required this.manualDownloadedCount,
+    required this.smartDownloadedCount,
+    required this.lastOfflineLibraryStatus,
+    required this.lastCacheResult,
+    required this.lastCacheDeleteResult,
+    required this.controlsDisabled,
+    required this.onClearCache,
+  });
+
+  final int cachedTrackCount;
+  final int cacheBytes;
+  final bool offlineLibraryAvailable;
+  final int offlineCachedTrackCount;
+  final int manualDownloadedCount;
+  final int smartDownloadedCount;
+  final String lastOfflineLibraryStatus;
+  final String? lastCacheResult;
+  final String? lastCacheDeleteResult;
+  final bool controlsDisabled;
+  final Future<void> Function() onClearCache;
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const _PanelHeader(icon: Icons.offline_pin, title: 'Cache / Offline', subtitle: 'Offline Ready plus raw cache counters.'),
+                const SizedBox(height: 10),
+                Text('Cached tracks: $cachedTrackCount • ${(cacheBytes / 1024).toStringAsFixed(1)} KB', style: _WzTokens.caption),
+                Text('Offline cached library: ${offlineLibraryAvailable ? 'available' : 'unavailable'}', style: _WzTokens.caption),
+                Text('Offline cache items: $offlineCachedTrackCount', style: _WzTokens.caption),
+                Text('downloadedTrackCount: $cachedTrackCount', style: _WzTokens.caption),
+                Text('totalCacheBytes: $cacheBytes', style: _WzTokens.caption),
+                Text('manualDownloadedCount: $manualDownloadedCount', style: _WzTokens.caption),
+                Text('smartDownloadedCount: $smartDownloadedCount', style: _WzTokens.caption),
+                Text('Offline status: $lastOfflineLibraryStatus', style: _WzTokens.caption),
+                if (lastCacheResult != null) Text('Last: $lastCacheResult', style: _WzTokens.caption),
+                if (lastCacheDeleteResult != null) Text('lastCacheDeleteResult: $lastCacheDeleteResult', style: _WzTokens.caption),
+              ]),
+            ),
+            FilledButton.tonalIcon(onPressed: controlsDisabled ? null : () async { await onClearCache(); }, icon: const Icon(Icons.clear_all), label: const Text('Clear cache')),
+          ],
+        ),
       );
 }
 
@@ -2330,6 +2703,26 @@ class _MetricCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+String _productQualityLabel(String? value) {
+  final normalized = value?.trim().toLowerCase();
+  switch (normalized) {
+    case 'original':
+    case 'lossless':
+      return 'Original';
+    case 'high':
+      return 'High';
+    case 'standard':
+    case 'low':
+      return 'Standard';
+    case null:
+    case '':
+    case 'unknown':
+      return 'Unknown';
+    default:
+      return value!;
+  }
 }
 
 String _prefetchResultLabel(bool? value) {
