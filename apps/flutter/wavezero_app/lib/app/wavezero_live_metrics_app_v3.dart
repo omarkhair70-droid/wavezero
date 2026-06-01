@@ -4206,7 +4206,7 @@ class _SearchPage extends StatelessWidget {
               ),
               const SizedBox(height: WzSpacing.sm),
               Text(
-                hasQuery ? '$query • ${filter.label} • ${results.length} result${results.length == 1 ? '' : 's'}' : 'Search is local-only across $allResultCount available items.',
+                hasQuery ? '${filter.label} • ${results.length} result${results.length == 1 ? '' : 's'}' : 'Search your local WaveZero library across $allResultCount available items.',
                 style: WzText.caption,
               ),
             ],
@@ -4234,9 +4234,9 @@ class _SearchPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('No search results found on this device.', style: WzText.title),
+                Text('No matching music found.', style: WzText.title),
                 const SizedBox(height: WzSpacing.xs),
-                const Text('Import Device music or load the Catalog to search more.', style: WzText.body),
+                const Text('Try a different title, import device music, or refresh the catalog when you are online.', style: WzText.body),
                 const SizedBox(height: WzSpacing.md),
                 Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
                   WzPrimaryAction(label: 'Import Device music', icon: Icons.perm_media, onPressed: onImportDeviceMusic),
@@ -5086,7 +5086,7 @@ class _SettingsPage extends StatelessWidget {
                   spacing: WzSpacing.sm,
                   runSpacing: WzSpacing.sm,
                   children: [
-                    WzStatusPill(label: 'Permission: $devicePermissionStatus', active: devicePermissionStatus == 'granted', warning: devicePermissionStatus.contains('denied'), icon: Icons.privacy_tip),
+                    WzStatusPill(label: devicePermissionStatus == 'granted' ? 'Device access ready' : 'Device access optional', active: devicePermissionStatus == 'granted', warning: devicePermissionStatus.contains('denied'), icon: Icons.privacy_tip),
                     WzStatusPill(label: devicePlatformSupported ? 'Platform supported' : 'Platform unavailable', active: devicePlatformSupported, warning: !devicePlatformSupported, icon: Icons.phone_android),
                     WzStatusPill(label: 'Scan: $deviceScanStatus', active: deviceScanStatus == 'success', warning: deviceScanStatus == 'error', icon: Icons.search),
                   ],
@@ -5211,6 +5211,7 @@ class _WzTokens {
   static const Color canvas = WzColors.canvas;
   static const Color surface = WzColors.surface;
   static const Color surfaceElevated = WzColors.surfaceElevated;
+  static const Color surfacePremium = WzColors.surfacePremium;
   static const Color surfaceMuted = WzColors.surfaceMuted;
   static const Color border = WzColors.border;
   static const Color borderSoft = WzColors.borderSoft;
@@ -5233,6 +5234,11 @@ class _WzTokens {
   static const double radiusMd = 18;
   static const double radiusLg = 26;
   static const double radiusXl = 32;
+
+  static const Duration motionFast = WzMotion.fast;
+  static const Duration motionNormal = WzMotion.normal;
+  static const Duration motionSlow = WzMotion.slow;
+  static const Curve motionCurve = WzMotion.curve;
 
   static const TextStyle eyebrow = TextStyle(
     color: accent,
@@ -5344,7 +5350,7 @@ class _ProductShellHeader extends StatelessWidget {
                         Text(
                           appMode == _AppMode.developer
                               ? '$selectedTabLabel • Developer mode • $engineSummary'
-                              : '$selectedTabLabel • $engineSummary',
+                              : '$selectedTabLabel • ${offlineReady ? 'Offline listening ready' : 'Music library ready'}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: WzText.caption,
@@ -5365,7 +5371,7 @@ class _ProductShellHeader extends StatelessWidget {
                 runSpacing: WzSpacing.xs,
                 children: [
                   WzStatusPill(label: status, active: status == 'Playing', warning: status == 'Error', icon: Icons.radio_button_checked),
-                  WzStatusPill(label: offlineReady ? 'Offline Ready' : 'Online catalog', active: offlineReady, icon: Icons.offline_pin),
+                  WzStatusPill(label: offlineReady ? 'Offline Ready' : 'Catalog ready', active: offlineReady, icon: Icons.offline_pin),
                 ],
               ),
             ],
@@ -5396,7 +5402,7 @@ class _HomeHero extends StatelessWidget {
               runSpacing: WzSpacing.xs,
               children: [
                 const WzStatusPill(label: 'Native playback', active: true, icon: Icons.phone_android),
-                WzStatusPill(label: engineSummary, active: true, icon: Icons.auto_awesome),
+                const WzStatusPill(label: 'Music-first playback • offline-aware library', active: true, icon: Icons.auto_awesome),
               ],
             ),
           ],
@@ -5483,7 +5489,7 @@ class _CurrentListeningCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const WzSectionHeader(title: 'Current listening', subtitle: 'Real playback state from the engine.', icon: Icons.album),
+          const WzSectionHeader(title: 'Current listening', subtitle: 'Pick up from the mini player or choose something from Library.', icon: Icons.album),
           LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 340;
@@ -5526,7 +5532,7 @@ class _CurrentListeningCard extends StatelessWidget {
               if (playingFromCache) const WzStatusPill(label: 'Downloaded', active: true, icon: Icons.offline_pin),
               if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
               WzStatusPill(label: 'Device music: $deviceTrackCount', active: deviceTrackCount > 0, icon: Icons.perm_media),
-              WzStatusPill(label: 'Permission: $devicePermissionStatus', active: devicePermissionStatus == 'granted', warning: devicePermissionStatus.contains('denied'), icon: Icons.privacy_tip),
+              WzStatusPill(label: devicePermissionStatus == 'granted' ? 'Device access ready' : 'Device access optional', active: devicePermissionStatus == 'granted', warning: devicePermissionStatus.contains('denied'), icon: Icons.privacy_tip),
             ],
           ),
         ],
@@ -5617,14 +5623,14 @@ class _SmartEngineCards extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const WzSectionHeader(title: 'Smart listening', subtitle: 'Downloads, instant next, and quality at a glance.', icon: Icons.auto_awesome),
+            const WzSectionHeader(title: 'Smart listening', subtitle: 'Offline comfort, playback readiness, and quality at a glance.', icon: Icons.auto_awesome),
             Wrap(
               spacing: WzSpacing.sm,
               runSpacing: WzSpacing.sm,
               children: [
                 WzMiniMetric(label: 'Smart Downloads', value: smartDownloadsEnabled ? '$smartDownloadsCompleted cached' : 'Off', active: smartDownloadsEnabled, icon: Icons.download_for_offline),
-                WzMiniMetric(label: 'Instant Next / Preload', value: prefetchEnabled ? (prefetchedTrackTitle ?? 'Ready') : 'Off', active: prefetchEnabled, icon: Icons.offline_bolt),
-                WzMiniMetric(label: 'Offline Ready', value: offlineReady ? '$offlineTrackCount tracks' : 'No cached tracks', active: offlineReady, icon: Icons.offline_pin),
+                WzMiniMetric(label: 'Next track ready', value: prefetchEnabled ? (prefetchedTrackTitle ?? 'Ready') : 'Off', active: prefetchEnabled, icon: Icons.offline_bolt),
+                WzMiniMetric(label: 'Offline Ready', value: offlineReady ? '$offlineTrackCount tracks' : 'No downloads yet', active: offlineReady, icon: Icons.offline_pin),
                 WzMiniMetric(label: 'Audio Quality', value: _productQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
               ],
             ),
@@ -6157,7 +6163,9 @@ class _PlaybackModesCard extends StatelessWidget {
   final VoidCallback onOpenSleepTimer;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: _WzTokens.motionNormal,
+        curve: _WzTokens.motionCurve,
         padding: const EdgeInsets.all(WzSpacing.sm),
         decoration: BoxDecoration(
           color: WzColors.surfaceMuted.withOpacity(0.56),
@@ -6176,7 +6184,7 @@ class _PlaybackModesCard extends StatelessWidget {
               children: [
                 FilterChip(
                   avatar: const Icon(Icons.shuffle, size: 18),
-                  label: Text(shuffleEnabled ? 'Shuffle on' : 'Shuffle off'),
+                  label: Text(shuffleEnabled ? 'Shuffle on' : 'Shuffle'),
                   selected: shuffleEnabled,
                   onSelected: controlsDisabled ? null : onShuffleChanged,
                 ),
@@ -6206,7 +6214,9 @@ class _PlayerArtworkHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = artworkUrl;
-    return Container(
+    return AnimatedContainer(
+      duration: _WzTokens.motionSlow,
+      curve: _WzTokens.motionCurve,
       width: size,
       height: size,
       clipBehavior: Clip.antiAlias,
@@ -6286,7 +6296,11 @@ class _PlayerProgressBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SliderTheme(data: SliderTheme.of(context).copyWith(trackHeight: 7, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9)), child: Slider(value: progressValue, onChanged: onSeekChanged, onChangeEnd: onSeekEnd)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: WzSpacing.xs, vertical: WzSpacing.xs),
+          decoration: BoxDecoration(color: WzColors.surfaceMuted.withOpacity(0.46), borderRadius: BorderRadius.circular(WzRadius.lg), border: Border.all(color: WzColors.borderSoft)),
+          child: SliderTheme(data: SliderTheme.of(context).copyWith(trackHeight: 7, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9)), child: Slider(value: progressValue, onChanged: onSeekChanged, onChangeEnd: onSeekEnd)),
+        ),
         const SizedBox(height: WzSpacing.xs),
         Row(children: [Text(_formatTime(displayedPositionMs), style: WzText.caption.copyWith(color: WzColors.textPrimary)), Expanded(child: Text(durationMs == null ? 'Duration unknown' : '$percent% • -${_formatTime(remainingMs)}', textAlign: TextAlign.center, style: WzText.caption)), Text(_formatTime(durationMs), style: WzText.caption.copyWith(color: WzColors.textPrimary))]),
       ],
@@ -7438,13 +7452,16 @@ class _LibrarySourceSummaryCard extends StatelessWidget {
   final bool active;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: _WzTokens.motionNormal,
+        curve: _WzTokens.motionCurve,
         constraints: const BoxConstraints(minWidth: 132, maxWidth: 220),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: active ? const Color(0x227C5CFF) : const Color(0xFF0B0E18),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: active ? const Color(0xFF8D7CFF) : const Color(0xFF20273A)),
+          color: active ? WzColors.accentSoft : WzColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(WzRadius.lg),
+          border: Border.all(color: active ? WzColors.accent.withOpacity(0.58) : WzColors.borderSoft),
+          boxShadow: active ? [BoxShadow(color: WzColors.accent.withOpacity(0.12), blurRadius: 20, offset: const Offset(0, 10))] : null,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -7787,7 +7804,7 @@ class _CatalogListCard extends StatelessWidget {
                   children: [
                     Text('Library', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                     SizedBox(height: 4),
-                    Text('Browse Catalog, Device music, Downloaded, or everything together.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
+                    Text('Browse catalog music, device tracks, downloads, and Cloud Vault entries without loading everything at once.', style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
                   ],
                 ),
               ),
@@ -7809,9 +7826,9 @@ class _CatalogListCard extends StatelessWidget {
                 children: [
                   SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'All', detail: '$combinedTrackCount tracks', status: 'Unified library', icon: Icons.library_music, active: librarySourceFilter == _LibrarySourceFilter.all)),
                   SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue, active: librarySourceFilter == _LibrarySourceFilter.api)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Device music', detail: '$deviceTrackCount imported', status: 'Permission $devicePermissionStatus • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == _LibrarySourceFilter.device)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Device music', detail: '$deviceTrackCount imported', status: devicePermissionStatus == 'granted' ? 'Device access ready • $deviceScanStatus' : 'Device access optional • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == _LibrarySourceFilter.device)),
                   SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done, active: librarySourceFilter == _LibrarySourceFilter.downloads)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Private sources • coming soon', icon: Icons.cloud_done_outlined, active: librarySourceFilter == _LibrarySourceFilter.cloud)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Saved metadata • playback coming soon', icon: Icons.cloud_done_outlined, active: librarySourceFilter == _LibrarySourceFilter.cloud)),
                 ],
               );
             },
@@ -7855,8 +7872,8 @@ class _CatalogListCard extends StatelessWidget {
                 icon: const Icon(Icons.cloud_done_outlined),
                 label: const Text('Cloud Vault'),
               ),
-              Text('Permission: $devicePermissionStatus', style: _WzTokens.caption),
-              Text('Device scan: $deviceScanStatus • $deviceTrackCount tracks', style: _WzTokens.caption),
+              Text(devicePermissionStatus == 'granted' ? 'Device access ready' : 'Device access optional', style: _WzTokens.caption),
+              Text('Device music: $deviceScanStatus • $deviceTrackCount tracks', style: _WzTokens.caption),
             ],
           ),
           if (deviceLastError != null) ...[
@@ -7886,10 +7903,10 @@ class _CatalogListCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             hasQuery
-                ? 'Search active: $filteredTrackCount result${filteredTrackCount == 1 ? '' : 's'} in ${librarySourceFilter.label}; showing $visibleTrackCount.'
+                ? '$filteredTrackCount result${filteredTrackCount == 1 ? '' : 's'} in ${librarySourceFilter.label}; showing $visibleTrackCount.'
                 : largeCatalogMode
-                    ? 'Large demo library loaded. Showing first $visibleTrackCount of $filteredTrackCount tracks. Safe window $catalogLimit. Total available: $combinedTrackCount.'
-                    : 'Showing $visibleTrackCount of $filteredTrackCount tracks in ${librarySourceFilter.label}. Total available: $combinedTrackCount. $status',
+                    ? 'Large library ready. Showing $visibleTrackCount of $filteredTrackCount tracks in a safe $catalogLimit-track window. Total available: $combinedTrackCount.'
+                    : 'Showing $visibleTrackCount of $filteredTrackCount tracks in ${librarySourceFilter.label}. Total available: $combinedTrackCount.',
             style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -7898,10 +7915,10 @@ class _CatalogListCard extends StatelessWidget {
           const SizedBox(height: 12),
           if (totalTrackCount == 0)
             _EmptyCatalogMessage(
-              message: offlineMode ? 'No cached tracks available offline.' : 'No catalog tracks loaded yet.',
+              message: offlineMode ? 'No downloads are ready offline yet. Save tracks from Library before going offline.' : 'Your catalog is waiting. Refresh when you are online or import device music to begin.',
             )
           else if (tracks.isEmpty)
-            _EmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear search to show ${librarySourceFilter.label}.' : 'No tracks available for ${librarySourceFilter.label}.')
+            _EmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear it to return to ${librarySourceFilter.label}.' : 'No tracks available in ${librarySourceFilter.label} yet.')
           else ...[
             SizedBox(
               height: math.min(560.0, math.max(220.0, tracks.length * 96.0)),
@@ -7951,7 +7968,7 @@ IconData _librarySourceFilterIcon(_LibrarySourceFilter filter) => switch (filter
 
 String _librarySourceFilterShortLabel(_LibrarySourceFilter filter) => switch (filter) {
       _LibrarySourceFilter.all => 'All',
-      _LibrarySourceFilter.api => 'API',
+      _LibrarySourceFilter.api => 'Catalog',
       _LibrarySourceFilter.device => 'Device',
       _LibrarySourceFilter.downloads => 'Downloads',
       _LibrarySourceFilter.cloud => 'Cloud',
@@ -8151,7 +8168,7 @@ class _CatalogRow extends StatelessWidget {
     final status = CacheService().statusForTrack(track.trackId);
     final isDevice = _isDeviceCatalogTrack(track);
     final isCached = _isCachedCatalogTrack(track);
-    final sourceLabel = isDevice ? 'Device' : isCached ? _cachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'API');
+    final sourceLabel = isDevice ? 'Device' : isCached ? _cachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'Catalog');
     final licenseLabel = _licenseBadgeLabel(track);
     final asset = track.primaryAsset;
     Icon cacheIcon;
@@ -8173,11 +8190,13 @@ class _CatalogRow extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
+      borderRadius: BorderRadius.circular(WzRadius.lg),
+      child: AnimatedContainer(
+        duration: _WzTokens.motionFast,
+        curve: _WzTokens.motionCurve,
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: selected ? const Color(0x227C5CFF) : const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: selected ? const Color(0xFF8D7CFF) : const Color(0xFF20273A))),
+        decoration: BoxDecoration(color: selected ? WzColors.accentSoft : WzColors.surfaceMuted, borderRadius: BorderRadius.circular(WzRadius.lg), border: Border.all(color: selected ? WzColors.accent.withOpacity(0.65) : WzColors.borderSoft), boxShadow: selected ? [BoxShadow(color: WzColors.accent.withOpacity(0.14), blurRadius: 22, offset: const Offset(0, 10))] : null),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -8446,7 +8465,9 @@ class _PremiumMiniPlayer extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(WzRadius.xl),
           onTap: onTap,
-          child: Container(
+          child: AnimatedContainer(
+            duration: _WzTokens.motionSlow,
+            curve: _WzTokens.motionCurve,
             constraints: const BoxConstraints(minHeight: 72),
             padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
             decoration: BoxDecoration(
@@ -8579,7 +8600,7 @@ class _EmptyCatalogMessage extends StatelessWidget {
 }
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
-String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(_isDeviceCatalogTrack(track) ? 'source: Device' : 'source: ${track.license.sourceName ?? 'API'}'); parts.add(track.license.badgeLabel); return parts.join(' • '); }
+String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(_isDeviceCatalogTrack(track) ? 'Device music' : (track.license.sourceName ?? 'Catalog')); parts.add(track.license.badgeLabel); return parts.join(' • '); }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }

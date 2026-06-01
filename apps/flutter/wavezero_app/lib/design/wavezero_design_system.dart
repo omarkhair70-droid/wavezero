@@ -11,6 +11,7 @@ class WzColors {
   static const Color canvasTop = Color(0xFF0C1020);
   static const Color surface = Color(0xFF101521);
   static const Color surfaceElevated = Color(0xFF151B2A);
+  static const Color surfacePremium = Color(0xFF1A2033);
   static const Color surfaceMuted = Color(0xFF0B0F19);
   static const Color border = Color(0xFF252E43);
   static const Color borderSoft = Color(0xFF1C2435);
@@ -100,8 +101,13 @@ class WzText {
 class WzMotion {
   const WzMotion._();
 
-  static const Duration quick = Duration(milliseconds: 160);
-  static const Duration standard = Duration(milliseconds: 240);
+  static const Duration fast = Duration(milliseconds: 120);
+  static const Duration normal = Duration(milliseconds: 200);
+  static const Duration slow = Duration(milliseconds: 280);
+  static const Curve curve = Curves.easeOutCubic;
+
+  static const Duration quick = fast;
+  static const Duration standard = normal;
 }
 
 class WzSurface {
@@ -112,6 +118,13 @@ class WzSurface {
         borderRadius: BorderRadius.circular(WzRadius.xl),
         border: Border.all(color: WzColors.border),
         boxShadow: elevated ? shadows : null,
+      );
+
+  static BoxDecoration selected({Color? glow}) => BoxDecoration(
+        color: WzColors.accentSoft,
+        borderRadius: BorderRadius.circular(WzRadius.lg),
+        border: Border.all(color: WzColors.accent.withOpacity(0.58)),
+        boxShadow: [BoxShadow(color: (glow ?? WzColors.accent).withOpacity(0.16), blurRadius: 24, offset: const Offset(0, 12))],
       );
 
   static const List<BoxShadow> shadows = [
@@ -214,7 +227,9 @@ class WzPanel extends StatelessWidget {
   final Gradient? gradient;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
+  Widget build(BuildContext context) => AnimatedContainer(
+        duration: WzMotion.normal,
+        curve: WzMotion.curve,
         decoration: WzSurface.panel().copyWith(gradient: gradient),
         child: Padding(padding: padding, child: child),
       );
