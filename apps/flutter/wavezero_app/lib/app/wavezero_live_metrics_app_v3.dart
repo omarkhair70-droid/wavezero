@@ -347,6 +347,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _shufflePreferenceKey = 'wavezero.shuffle_enabled';
   static const _repeatModePreferenceKey = 'wavezero.repeat_mode';
   static const _sleepTimerPresetPreferenceKey = 'wavezero.sleep_timer_preset';
+  static const int _defaultCatalogLimit = 300;
+  static const int _initialVisibleTrackCount = 200;
+  static const int _libraryPageSize = 100;
+  static const int _searchResultLimit = 100;
+  static const Duration _searchDebounce = Duration(milliseconds: 250);
 
   late final TextEditingController _titleController;
   late final TextEditingController _urlController;
@@ -360,10 +365,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Timer? _poller;
   Timer? _sleepTimer;
+  Timer? _librarySearchDebounce;
+  Timer? _fullSearchDebounce;
   PlaybackMetrics _metrics = const PlaybackMetrics();
   CatalogTrackManifest? _manifest;
   List<CatalogTrackSummary> _catalog = const [];
   List<CatalogTrackSummary> _queue = const [];
+  Set<String> _catalogTrackIds = const <String>{};
+  int _visibleTrackCount = _initialVisibleTrackCount;
+  int _filteredTrackCount = 0;
+  String _debouncedFullSearchQuery = '';
+  List<CatalogTrackSummary>? _filteredCatalogMemo;
+  int _filteredCatalogMemoKey = 0;
+  List<WzSearchResult>? _searchIndexMemo;
+  int _searchIndexMemoKey = 0;
+  List<WzSearchResult>? _filteredSearchMemo;
+  int _filteredSearchMemoKey = 0;
   final DeviceMusicService _deviceMusicService = DeviceMusicService();
   DeviceMusicPermissionStatus _deviceMusicPermissionStatus = const DeviceMusicPermissionStatus(status: 'unknown');
   String _deviceMusicScanStatus = 'not_scanned';
@@ -532,10 +549,61 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   int get _libraryCombinedTrackCount => _catalog.length + _deviceMusicTracks.length + _cachedLibrary.length + _cloudVaultTracks.length;
 
-  List<CatalogTrackSummary> get _filteredCatalog =>
-      _sortLibraryTracks(_libraryTracks.where((track) => track.matchesQuery(_catalogQuery)).toList(growable: false));
+  bool get _largeCatalogMode => _libraryCombinedTrackCount > _catalogLimit;
+
+  int get _catalogLimit => _PlayerScreenState._defaultCatalogLimit;
+
+  int get _effectiveVisibleTrackCount => math.min(_visibleTrackCount, _filteredTrackCount);
+
+  void _invalidateCatalogMemos() {
+    _filteredCatalogMemo = null;
+    _searchIndexMemo = null;
+    _filteredSearchMemo = null;
+  }
+
+  int _libraryMemoKey() => Object.hash(
+        _catalog.length,
+        _deviceMusicTracks.length,
+        _cachedLibrary.length,
+        _cloudVaultTracks.length,
+        _librarySourceFilter,
+        _librarySortMode,
+        _catalogQuery,
+        _visibleTrackCount,
+        _deviceMusicImportedAtMs,
+      );
+
+  List<CatalogTrackSummary> get _filteredCatalog {
+    final key = _libraryMemoKey();
+    final memo = _filteredCatalogMemo;
+    if (memo != null && _filteredCatalogMemoKey == key) return memo;
+    final query = _catalogQuery.trim();
+    final List<CatalogTrackSummary> matching = query.isEmpty
+        ? _libraryTracks
+        : _libraryTracks.where((track) => track.matchesQuery(query)).toList(growable: false);
+    _filteredTrackCount = matching.length;
+    final sorted = _sortLibraryTracks(matching);
+    final visible = sorted.take(_visibleTrackCount).toList(growable: false);
+    _filteredCatalogMemoKey = key;
+    _filteredCatalogMemo = visible;
+    return visible;
+  }
+
+  List<CatalogTrackSummary> get _searchableCatalogTracks => _catalog.take(_defaultCatalogLimit).toList(growable: false);
+
+  int _searchIndexKey() => Object.hash(
+        _catalog.length,
+        _deviceMusicTracks.length,
+        _cachedLibrary.length,
+        _cloudVaultTracks.length,
+        _collections.length,
+        _listeningHistory.length,
+      );
 
   List<WzSearchResult> get _allSearchResults {
+    final key = _searchIndexKey();
+    final memo = _searchIndexMemo;
+    if (memo != null && _searchIndexMemoKey == key) return memo;
     final results = <WzSearchResult>[];
     WzSearchResult resultForTrack(CatalogTrackSummary track, WzSearchResultType type, WzSearchSource source, String secondary) {
       final asset = track.primaryAsset;
@@ -571,7 +639,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       );
     }
 
-    for (final track in _catalog) {
+    for (final track in _searchableCatalogTracks) {
       final source = track.license.needsRightsWarning || track.license.sourceName?.toLowerCase().contains('demo') == true
           ? WzSearchSource.legalDemo
           : WzSearchSource.apiCatalog;
@@ -640,13 +708,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ));
     }
 
+    _searchIndexMemoKey = key;
+    _searchIndexMemo = results;
     return results;
   }
 
+  int _filteredSearchKey() => Object.hash(_searchIndexKey(), _searchFilter, _debouncedFullSearchQuery);
+
   List<WzSearchResult> get _filteredSearchResults {
-    final query = _fullSearchController.text;
+    final query = _debouncedFullSearchQuery;
     final normalized = _normalizeWzSearch(query);
     if (normalized.isEmpty) return const <WzSearchResult>[];
+    final key = _filteredSearchKey();
+    final memo = _filteredSearchMemo;
+    if (memo != null && _filteredSearchMemoKey == key) return memo;
     final matches = _allSearchResults
         .where((result) => _searchFilterAllows(_searchFilter, result) && result.searchText.contains(normalized))
         .toList(growable: false);
@@ -654,11 +729,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     indexed.sort((a, b) {
       final rank = _searchRank(a.$2, query).compareTo(_searchRank(b.$2, query));
       if (rank != 0) return rank;
-      final title = _normalizeWzSearch(a.$2.title).compareTo(_normalizeWzSearch(b.$2.title));
+      final title = a.$2.searchText.compareTo(b.$2.searchText);
       if (title != 0) return title;
       return a.$1.compareTo(b.$1);
     });
-    return indexed.map((item) => item.$2).toList(growable: false);
+    final limited = indexed.map((item) => item.$2).take(_searchResultLimit).toList(growable: false);
+    _filteredSearchMemoKey = key;
+    _filteredSearchMemo = limited;
+    return limited;
   }
 
 
@@ -683,7 +761,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   SmartQueueDecision _smartQueueDecision() => decideSmartQueueCandidate(
         smartPreloadEnabled: _prefetchEnabled,
         queue: _queue,
-        catalogTrackIds: _catalog.map((track) => track.trackId).toSet(),
+        catalogTrackIds: _catalogTrackIds,
         currentTrackId: _queueCurrentTrackId,
         selectedTrackId: _selectedTrackId,
         previousCandidateTrackId: _smartQueueCandidateTrackId ?? _prefetchedTrackId,
@@ -746,10 +824,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _cloudSeedUrlController = TextEditingController();
     _cloudSeedProviderController = TextEditingController(text: CloudVaultProvider.manualUrl.label);
     _searchController.addListener(() {
-      if (mounted) setState(() => _catalogQuery = _searchController.text);
+      _librarySearchDebounce?.cancel();
+      _librarySearchDebounce = Timer(_searchDebounce, () {
+        if (mounted) {
+          setState(() {
+            _catalogQuery = _searchController.text;
+            _visibleTrackCount = _initialVisibleTrackCount;
+            _invalidateCatalogMemos();
+          });
+        }
+      });
     });
     _fullSearchController.addListener(() {
-      if (mounted) setState(() {});
+      _fullSearchDebounce?.cancel();
+      _fullSearchDebounce = Timer(_searchDebounce, () {
+        if (mounted) {
+          setState(() {
+            _debouncedFullSearchQuery = _fullSearchController.text;
+            _filteredSearchMemo = null;
+          });
+        }
+      });
     });
     _poller = Timer.periodic(_refreshInterval, (_) => _refreshMetrics());
     _loadCatalog(fallbackToDemo: true);
@@ -767,7 +862,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _loadCloudVault() async {
     final tracks = await _cloudVaultService.listTracks();
     if (!mounted) return;
-    setState(() => _cloudVaultTracks = tracks);
+    setState(() {
+      _cloudVaultTracks = tracks;
+      _invalidateCatalogMemos();
+    });
   }
 
   Future<void> _addDeveloperCloudSeed() async {
@@ -1507,6 +1605,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _deviceMusicLastScanCount = scan.count;
         _deviceMusicLastError = scan.error;
         _deviceMusicImportedAtMs = scan.scannedAtMs ?? DateTime.now().millisecondsSinceEpoch;
+        _visibleTrackCount = _initialVisibleTrackCount;
+        _invalidateCatalogMemos();
         if (scan.tracks.isNotEmpty) _librarySourceFilter = _LibrarySourceFilter.device;
         _catalogStatus = scan.status == 'success'
             ? 'Imported ${scan.tracks.length} device music tracks from Android MediaStore.'
@@ -1592,6 +1692,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   @override
   void dispose() {
+    _librarySearchDebounce?.cancel();
+    _fullSearchDebounce?.cancel();
     _poller?.cancel();
     _sleepTimer?.cancel();
     _titleController.dispose();
@@ -1661,7 +1763,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _pushNotificationQueueSnapshot() {
     return widget.playbackBridge.updateNotificationQueueSnapshot(
-      _queue.map(_notificationSnapshotForQueueTrack).where((track) => track.url.isNotEmpty).toList(growable: false),
+      _queue.take(_initialVisibleTrackCount).map(_notificationSnapshotForQueueTrack).where((track) => track.url.isNotEmpty).toList(growable: false),
     );
   }
 
@@ -1703,6 +1805,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _smartDownloadedCount = cachedLibrary.where((entry) => entry.downloadSource.startsWith('smart_')).length;
         _offlineCachedTrackCount = cachedLibrary.length;
         _offlineLibraryAvailable = cachedLibrary.isNotEmpty;
+        _invalidateCatalogMemos();
         _lastCacheResult = _cacheService.lastCacheResult;
         _lastOfflineLibraryStatus = cachedLibrary.isNotEmpty
             ? 'Offline cached library ready with ${cachedLibrary.length} tracks.'
@@ -1989,19 +2092,29 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _findTrack(catalog.tracks, restored?.selectedTrackId) ??
             _findTrack(catalog.tracks, _selectedTrackId) ??
             (catalog.tracks.isEmpty ? null : catalog.tracks.first);
+        final restoredQueue = restored == null ? const <CatalogTrackSummary>[] : _queueFromSnapshot(catalog.tracks, restored);
+        final startupQueue = restoredQueue.isNotEmpty
+            ? restoredQueue.take(_initialVisibleTrackCount).toList(growable: false)
+            : (preferred == null ? const <CatalogTrackSummary>[] : <CatalogTrackSummary>[preferred]);
         if (!mounted) return;
         setState(() {
           _catalog = catalog.tracks;
-          _queue = restored == null ? (_queue.isEmpty ? catalog.tracks : _queue) : _queueFromSnapshot(catalog.tracks, restored);
-          if (_queue.isEmpty) _queue = catalog.tracks;
+          _catalogTrackIds = catalog.tracks.map((track) => track.trackId).toSet();
+          _visibleTrackCount = _initialVisibleTrackCount;
+          _filteredTrackCount = catalog.tracks.length;
+          _invalidateCatalogMemos();
+          _queue = _queue.isEmpty ? startupQueue : _queue;
+          if (_queue.isEmpty && preferred != null) _queue = <CatalogTrackSummary>[preferred];
           _selectedTrackId = preferred?.trackId;
           _queueCurrentTrackId = restored?.currentTrackId ?? preferred?.trackId;
           _autoAdvanceEnabled = restored?.autoAdvanceEnabled ?? _autoAdvanceEnabled;
           _contentStatus = contentStatus;
           _catalogStatus = catalog.tracks.isEmpty
               ? 'Catalog is empty.'
-              : contentStatus?.friendlyLabel ?? _catalogModeLabel(catalog.contentMode, catalog.tracks.length);
-          _queueStatus = restored == null ? 'Queue synced with catalog.' : 'Queue restored from previous session.';
+              : (catalog.tracks.length > _defaultCatalogLimit
+                  ? 'Large demo library loaded. Showing first $_initialVisibleTrackCount tracks.'
+                  : contentStatus?.friendlyLabel ?? _catalogModeLabel(catalog.contentMode, catalog.tracks.length));
+          _queueStatus = restored == null ? 'Queue ready for selected track.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
           _offlineLibraryMode = false;
         });
@@ -2033,7 +2146,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _lastError = error.toString();
             _contentStatus = null;
             _catalog = offlineTracks;
-            _queue = offlineTracks;
+            _catalogTrackIds = offlineTracks.map((track) => track.trackId).toSet();
+            _visibleTrackCount = _initialVisibleTrackCount;
+            _filteredTrackCount = offlineTracks.length;
+            _invalidateCatalogMemos();
+            _queue = offlineTracks.take(_initialVisibleTrackCount).toList(growable: false);
             _selectedTrackId = offlineTracks.first.trackId;
             _queueCurrentTrackId = offlineTracks.first.trackId;
             _catalogStatus = 'Catalog unavailable. Showing offline cached library.';
@@ -2201,10 +2318,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         source: WzListeningHistorySource.device,
         playableUrl: manifest.streamUrl,
       )));
-      if (autoPlay) await widget.playbackBridge.play();
+      if (autoPlay) {
+        await widget.playbackBridge.play();
+        unawaited(_maybeAutoCacheNextQueuedTrack());
+      }
       unawaited(_saveSession());
       unawaited(_updatePredictivePreloadCandidate());
-      unawaited(_maybeAutoCacheNextQueuedTrack());
     });
   }
 
@@ -2342,9 +2461,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       });
     }
     unawaited(_updatePredictivePreloadCandidate());
-    // Schedule smart downloads for current and next queued tracks
-    unawaited(_maybeAutoCacheCurrentTrack(manifest));
-    unawaited(_maybeAutoCacheNextQueuedTrack());
+    // Smart Downloads only follows active playback/queue context; avoid startup cache storms.
+    if (autoPlay || _metrics.isPlaying) {
+      unawaited(_maybeAutoCacheCurrentTrack(manifest));
+      unawaited(_maybeAutoCacheNextQueuedTrack());
+    }
   }
 
   void _clearNextPlaybackAttemptMetrics() {
@@ -2627,7 +2748,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (!mounted) return;
     setState(() {
       _catalog = offlineTracks;
-      _queue = offlineTracks;
+      _catalogTrackIds = offlineTracks.map((track) => track.trackId).toSet();
+      _visibleTrackCount = _initialVisibleTrackCount;
+      _filteredTrackCount = offlineTracks.length;
+      _invalidateCatalogMemos();
+      _queue = offlineTracks.take(_initialVisibleTrackCount).toList(growable: false);
       if (!offlineTracks.any((track) => track.trackId == _selectedTrackId)) {
         _selectedTrackId = offlineTracks.isEmpty ? null : offlineTracks.first.trackId;
       }
@@ -3188,6 +3313,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             cachedTrackCount: _cachedLibrary.length,
             cloudTrackCount: _cloudVaultTracks.length,
             combinedTrackCount: _libraryCombinedTrackCount,
+            visibleTrackCount: _effectiveVisibleTrackCount,
+            filteredTrackCount: _filteredTrackCount,
+            catalogLimit: _defaultCatalogLimit,
+            largeCatalogMode: _largeCatalogMode,
+            onLoadMore: _effectiveVisibleTrackCount < _filteredTrackCount
+                ? () => setState(() {
+                      _visibleTrackCount = math.min(_visibleTrackCount + _libraryPageSize, _filteredTrackCount);
+                      _filteredCatalogMemo = null;
+                    })
+                : null,
             cacheBytes: _cacheBytes,
             selectedTrackId: _selectedTrackId,
             status: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
@@ -3200,8 +3335,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             devicePermissionStatus: _deviceMusicPermissionStatus.status,
             deviceScanStatus: _deviceMusicScanStatus,
             deviceLastError: _developerMode ? _deviceMusicLastError : _consumerDeviceError(_deviceMusicLastError),
-            onSourceFilterChanged: (filter) => setState(() => _librarySourceFilter = filter),
-            onSortModeChanged: (mode) => setState(() => _librarySortMode = mode),
+            onSourceFilterChanged: (filter) => setState(() {
+              _librarySourceFilter = filter;
+              _visibleTrackCount = _initialVisibleTrackCount;
+              _invalidateCatalogMemos();
+            }),
+            onSortModeChanged: (mode) => setState(() {
+              _librarySortMode = mode;
+              _visibleTrackCount = _initialVisibleTrackCount;
+              _invalidateCatalogMemos();
+            }),
             onClearSearch: () => _searchController.clear(),
             onOpenFullSearch: () => _openSearch(query: _searchController.text),
             onOpenCloudVault: _openCloudVaultPage,
@@ -3292,8 +3435,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         history: _listeningHistory,
         cachedTracks: _cachedCatalogTracks,
         collections: _collections,
-        catalogTracks: _catalog,
-        onFilterChanged: (filter) => setState(() => _searchFilter = filter),
+        catalogTracks: _searchableCatalogTracks,
+        onFilterChanged: (filter) => setState(() {
+          _searchFilter = filter;
+          _filteredSearchMemo = null;
+        }),
         onClearQuery: () => _fullSearchController.clear(),
         onRecentSearch: (query) => _fullSearchController.text = query,
         onClearRecentSearches: _recentSearches.isEmpty ? null : () => unawaited(_clearRecentSearches()),
@@ -3336,6 +3482,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             status: _contentStatus,
             catalogStatus: _catalogStatus,
             catalogTrackCount: _catalog.length,
+            visibleTrackCount: _effectiveVisibleTrackCount,
+            filteredTrackCount: _filteredTrackCount,
+            catalogLimit: _defaultCatalogLimit,
+            largeCatalogMode: _largeCatalogMode,
           ),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Playback Engine', subtitle: 'Current player state and operation summary.', icon: Icons.graphic_eq),
@@ -4096,16 +4246,25 @@ class _SearchPage extends StatelessWidget {
             ),
           ),
         ] else ...[
-          ...results.map((result) => Padding(
-                padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-                child: _SearchResultCard(
-                  result: result,
-                  onPlay: () => onPlay(result),
-                  onAddToQueue: () => onAddToQueue(result),
-                  onAddToCollection: () => onAddToCollection(result),
-                  onOpenCollection: result.type == WzSearchResultType.collection ? () => onOpenCollection(result) : null,
-                ),
-              )),
+          SizedBox(
+            height: math.min(620.0, math.max(260.0, results.length * 150.0)),
+            child: ListView.builder(
+              itemCount: results.length,
+              itemBuilder: (context, index) {
+                final result = results[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: WzSpacing.sm),
+                  child: _SearchResultCard(
+                    result: result,
+                    onPlay: () => onPlay(result),
+                    onAddToQueue: () => onAddToQueue(result),
+                    onAddToCollection: () => onAddToCollection(result),
+                    onOpenCollection: result.type == WzSearchResultType.collection ? () => onOpenCollection(result) : null,
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ],
     );
@@ -7537,6 +7696,11 @@ class _CatalogListCard extends StatelessWidget {
     required this.cachedTrackCount,
     required this.cloudTrackCount,
     required this.combinedTrackCount,
+    required this.visibleTrackCount,
+    required this.filteredTrackCount,
+    required this.catalogLimit,
+    required this.largeCatalogMode,
+    required this.onLoadMore,
     required this.cacheBytes,
     required this.selectedTrackId,
     required this.status,
@@ -7574,6 +7738,11 @@ class _CatalogListCard extends StatelessWidget {
   final int cachedTrackCount;
   final int cloudTrackCount;
   final int combinedTrackCount;
+  final int visibleTrackCount;
+  final int filteredTrackCount;
+  final int catalogLimit;
+  final bool largeCatalogMode;
+  final VoidCallback? onLoadMore;
   final int cacheBytes;
   final String? selectedTrackId;
   final String status;
@@ -7717,10 +7886,15 @@ class _CatalogListCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             hasQuery
-                ? 'Search active: ${tracks.length} result${tracks.length == 1 ? '' : 's'} in ${librarySourceFilter.label} (from $totalTrackCount available).'
-                : 'Showing $totalTrackCount tracks in ${librarySourceFilter.label}. Total available: $combinedTrackCount. $status',
+                ? 'Search active: $filteredTrackCount result${filteredTrackCount == 1 ? '' : 's'} in ${librarySourceFilter.label}; showing $visibleTrackCount.'
+                : largeCatalogMode
+                    ? 'Large demo library loaded. Showing first $visibleTrackCount of $filteredTrackCount tracks. Safe window $catalogLimit. Total available: $combinedTrackCount.'
+                    : 'Showing $visibleTrackCount of $filteredTrackCount tracks in ${librarySourceFilter.label}. Total available: $combinedTrackCount. $status',
             style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
           ),
+          const SizedBox(height: 12),
+          if (largeCatalogMode)
+            WzStatusPill(label: 'Showing first $visibleTrackCount tracks', active: true, icon: Icons.library_music),
           const SizedBox(height: 12),
           if (totalTrackCount == 0)
             _EmptyCatalogMessage(
@@ -7728,18 +7902,39 @@ class _CatalogListCard extends StatelessWidget {
             )
           else if (tracks.isEmpty)
             _EmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear search to show ${librarySourceFilter.label}.' : 'No tracks available for ${librarySourceFilter.label}.')
-          else ...tracks.map((track) => _CatalogRow(
-                track: track,
-                selected: track.trackId == selectedTrackId,
-                addDisabled: addToQueueDisabled || (track.source == 'cloud_vault' && track.primaryAsset == null),
-                onTap: () => onSelectTrack(track),
-                onAdd: () => onAddToQueue(track),
-                onToggleLike: () => onToggleLike(track),
-                onAddToCollection: () => onAddToCollection(track),
-                liked: isLiked(track),
-                onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) || track.source == 'cloud_vault' ? null : () => onCache(track),
-                onDeleteCached: _isCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
-              )),
+          else ...[
+            SizedBox(
+              height: math.min(560.0, math.max(220.0, tracks.length * 96.0)),
+              child: ListView.builder(
+                itemCount: tracks.length,
+                itemBuilder: (context, index) {
+                  final track = tracks[index];
+                  return _CatalogRow(
+                    track: track,
+                    selected: track.trackId == selectedTrackId,
+                    addDisabled: addToQueueDisabled || (track.source == 'cloud_vault' && track.primaryAsset == null),
+                    onTap: () => onSelectTrack(track),
+                    onAdd: () => onAddToQueue(track),
+                    onToggleLike: () => onToggleLike(track),
+                    onAddToCollection: () => onAddToCollection(track),
+                    liked: isLiked(track),
+                    onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) || track.source == 'cloud_vault' ? null : () => onCache(track),
+                    onDeleteCached: _isCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
+                  );
+                },
+              ),
+            ),
+            if (onLoadMore != null) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: onLoadMore,
+                  icon: const Icon(Icons.expand_more),
+                  label: Text('Load more (${filteredTrackCount - visibleTrackCount} remaining)'),
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -8049,12 +8244,20 @@ class _ContentServerDiagnosticsPanel extends StatelessWidget {
     required this.status,
     required this.catalogStatus,
     required this.catalogTrackCount,
+    required this.visibleTrackCount,
+    required this.filteredTrackCount,
+    required this.catalogLimit,
+    required this.largeCatalogMode,
   });
 
   final String apiBaseUrl;
   final ContentStatus? status;
   final String catalogStatus;
   final int catalogTrackCount;
+  final int visibleTrackCount;
+  final int filteredTrackCount;
+  final int catalogLimit;
+  final bool largeCatalogMode;
 
   @override
   Widget build(BuildContext context) {
@@ -8070,6 +8273,10 @@ class _ContentServerDiagnosticsPanel extends StatelessWidget {
               _MetricCard(label: 'Catalog', value: status?.friendlyLabel ?? catalogStatus, active: status?.ok ?? catalogTrackCount > 0),
               _MetricCard(label: 'Mode', value: status?.contentMode ?? 'unknown', active: status?.contentMode == 'production' || status?.contentMode == 'demo'),
               _MetricCard(label: 'Tracks', value: '${status?.trackCount ?? catalogTrackCount}', active: (status?.trackCount ?? catalogTrackCount) > 0),
+              _MetricCard(label: 'Visible', value: '$visibleTrackCount', active: visibleTrackCount > 0),
+              _MetricCard(label: 'Filtered', value: '$filteredTrackCount', active: filteredTrackCount > 0),
+              _MetricCard(label: 'Catalog limit', value: '$catalogLimit', active: largeCatalogMode),
+              _MetricCard(label: 'Large catalog mode', value: largeCatalogMode ? 'enabled' : 'disabled', active: largeCatalogMode),
               _MetricCard(label: 'Assets', value: '${status?.assetCount ?? 0}', active: (status?.assetCount ?? 0) > 0),
               _MetricCard(label: 'Production-safe', value: '${status?.productionSafeTrackCount ?? 0}', active: (status?.productionSafeTrackCount ?? 0) > 0),
               _MetricCard(label: 'Local folder', value: status?.localFolderCatalogEnabled == true ? 'enabled' : 'disabled', active: status?.localFolderCatalogEnabled == true),
@@ -8077,6 +8284,7 @@ class _ContentServerDiagnosticsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text('API base URL: $apiBaseUrl', style: _WzTokens.caption),
+          Text('catalogTrackCount=$catalogTrackCount • visibleTrackCount=$visibleTrackCount • filteredTrackCount=$filteredTrackCount • catalogLimit=$catalogLimit • largeCatalogMode=${largeCatalogMode ? 'enabled' : 'disabled'}', style: _WzTokens.caption),
           Text(status?.developerSummary ?? catalogStatus, style: _WzTokens.caption),
         ],
       ),

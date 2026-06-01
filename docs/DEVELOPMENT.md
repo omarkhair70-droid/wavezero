@@ -2081,3 +2081,37 @@ Safety and legal boundaries:
 - Do not add ripping/downloading from YouTube, SoundCloud, Spotify, Anghami, or other commercial streaming services.
 
 See `docs/fma-local-demo-library.md` for the complete local workflow and the distinction between the small Curated Featured Demo and the Big Local Demo Library.
+
+## Large local demo catalog performance boundary
+
+The Flutter host is hardened for large local demo catalogs such as the FMA Green Small library with **1,374 tracks**. The app keeps the full catalog count available for status and diagnostics, but it does not eagerly render every row or seed the queue with every catalog entry on startup.
+
+Large catalog behavior:
+
+- Catalog loading keeps the mini player and playback controls responsive by loading the selected/startup track first and avoiding a full-catalog startup queue.
+- Library defaults to a safe visible window of **200 tracks** and uses a **Load more** button in **100-track** increments.
+- Large catalog mode is enabled once the combined library is larger than the safe catalog limit of **300 tracks**.
+- Consumer copy says **“Large demo library loaded”** and **“Showing first X tracks”** rather than exposing raw debug state.
+- Search input is debounced and search results are capped; the no-query discovery view only samples a few catalog entries.
+- Smart Downloads only follows the current/up-next playback context and does not scan or cache the full catalog at startup.
+
+Developer diagnostics in the Engine tab include:
+
+- `catalogTrackCount`
+- `visibleTrackCount`
+- `filteredTrackCount`
+- `catalogLimit`
+- `largeCatalogMode` enabled/disabled
+
+Manual large-catalog checklist:
+
+1. Run with 200-track catalog.
+2. Run with full 1374-track catalog.
+3. Confirm app does not freeze on startup.
+4. Confirm Library opens smoothly.
+5. Confirm Search does not freeze while typing.
+6. Confirm Queue works.
+7. Confirm Play works.
+8. Confirm Smart Downloads does not mass-cache.
+9. Confirm mini player remains responsive.
+10. Confirm Device Music / Downloads / Cloud Vault still work.
