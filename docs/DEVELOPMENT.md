@@ -2115,3 +2115,66 @@ Manual large-catalog checklist:
 8. Confirm Smart Downloads does not mass-cache.
 9. Confirm mini player remains responsive.
 10. Confirm Device Music / Downloads / Cloud Vault still work.
+
+## WaveZero #90 — Premium visual identity and motion pass v1
+
+WaveZero #90 adds the first consumer-facing premium visual identity pass for the Flutter app. The goal is a calmer, darker, music-first experience that feels like a smart music experience engine while preserving playback, catalog, queue, downloads, storage, Cloud Vault, and Rust/API behavior.
+
+### Visual identity changes
+
+- Shared visual tokens now drive premium dark surfaces, elevated cards, subtle borders, radius sizes, spacing, text hierarchy, compact badges, and selected states.
+- Home is positioned as a product landing surface with a stronger WaveZero hero, concise continue-listening area, library/offline summaries, smart-listening cards, and clearer start actions.
+- Library keeps the bounded large-catalog workflow while presenting source summaries, filters, rows, selected states, and load-more copy as consumer-facing library controls.
+- Search uses calmer copy for local search, recent searches, no-result states, and result hierarchy. Cloud Vault entries are described as metadata/private-source entries instead of raw implementation details.
+- The Now surface and player sheet emphasize artwork, track identity, progress, primary controls, playback modes, up-next preview, and compact quality/source/offline badges.
+- Downloads, Storage Manager, Collections, Cloud Vault, and Settings retain existing behavior with calmer empty-state and consumer copy.
+
+### Motion principles
+
+- Motion is intentionally small and safe: no continuous animation loops, no heavy blur, no 3D effects, and no animation that blocks scrolling or playback controls.
+- Shared motion tokens are used for fast (~120ms), normal (~200ms), and slow (~280ms) transitions with an ease-out cubic curve.
+- Low-risk surfaces use animated containers for card/selected-state changes, mini-player presentation, source-card state, and track-row selection.
+- Playback callbacks, seek callbacks, queue controls, shuffle/repeat/sleep controls, and native notification behavior are unchanged.
+
+### Consumer/developer separation
+
+- Consumer surfaces should avoid raw URLs, debug IDs, content-server diagnostics, and implementation terms.
+- Engine diagnostics, content-server status, manual/API setup, telemetry, and developer preview Cloud Vault seed controls remain available only through Developer Mode / Engine diagnostics.
+- Home and the consumer shell summarize readiness in product language; detailed internal status remains in developer surfaces.
+
+### Large catalog preservation
+
+The visual pass must not weaken the large FMA local demo safeguards:
+
+- Keep the 300 catalog fetch limit.
+- Keep the 200 initial visible track window.
+- Keep 100-track load-more increments.
+- Keep debounced Library/Search input.
+- Keep memoized search/filter caches.
+- Keep Smart Downloads no-startup-storm behavior.
+- Keep `ListView.builder` / bounded visible rows so the 1,374-track FMA Green Small local demo library remains responsive.
+
+### Manual checklist
+
+1. Launch app with normal small catalog.
+2. Launch app with full FMA 1,374-track local demo catalog.
+3. Confirm app does not freeze on startup.
+4. Confirm Home feels cleaner and not duplicated with full player UI.
+5. Confirm Library opens smoothly.
+6. Confirm Load more still works.
+7. Confirm Search is still debounced and smooth.
+8. Confirm playing FMA tracks still works.
+9. Confirm mini player opens player sheet.
+10. Confirm play/pause button on mini player does not accidentally open sheet.
+11. Confirm Now tab uses polished premium surface.
+12. Confirm Queue still works.
+13. Confirm Downloads/Storage still work.
+14. Confirm Cloud Vault page still works.
+15. Confirm Settings remains calm and not debug-heavy.
+16. Confirm Developer Mode / Engine diagnostics remain available.
+17. Confirm long titles and Arabic/system RTL do not overflow badly.
+18. Confirm no consumer screen shows raw URLs/debug IDs.
+19. Confirm no new bottom nav item was added.
+20. Confirm no playback/Rust/catalog behavior was changed.
+
+No automated validation was required for #90 unless explicitly requested.
