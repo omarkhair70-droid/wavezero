@@ -2178,3 +2178,85 @@ The visual pass must not weaken the large FMA local demo safeguards:
 20. Confirm no playback/Rust/catalog behavior was changed.
 
 No automated validation was required for #90 unless explicitly requested.
+
+## WaveZero #91 — Curated featured demo picks
+
+WaveZero #91 turns the FMA Green Small local demo library into a more intentional first-listening experience. Instead of presenting the 1,374-track demo catalog as a random dump, Flutter now resolves a small set of track-ID-only curated shelves and displays them as premium WaveZero Picks across Home, Library, and Search.
+
+### Curated picks purpose
+
+- Curated picks are consumer-facing entry points into the existing local demo catalog.
+- The pick definitions live in Flutter app metadata and reference catalog track IDs, shelf labels, and moods only.
+- Picks do not contain MP3 URLs, local machine paths, remote artwork URLs, bundled audio, ZIP files, or generated catalog data.
+- The initial shelves include WaveZero Picks, Start Here, Electronic Pulse, Focus / Instrumental, Indie / Folk Calm, Hip-Hop Beats, Long Session / Deep Cuts, and Fresh from the Demo Library.
+
+### Artwork safety boundary
+
+Real album artwork is intentionally not bundled or scraped in v1. FMA audio/license metadata does not automatically prove artwork redistribution rights, so artwork is treated as a separate asset category.
+
+- If a catalog item already has a verified `artworkUrl`, the UI may render that existing URL through the normal artwork path.
+- If `artworkUrl` is missing or fails to load, Flutter renders a WaveZero-generated visual treatment.
+- Generated artwork is deterministic from stable track metadata such as track ID, title, artist, and mood.
+- Generated artwork uses gradients, abstract waveform bars, initials, and a small WaveZero mark.
+- No new image package, Lottie/Rive asset, shader loop, copyrighted cover art, scraped image, or random remote image URL is introduced.
+
+### Catalog-aware resolution
+
+Curated picks resolve against the currently loaded catalog by track ID:
+
+1. Flutter builds a map keyed by `CatalogTrackSummary.trackId` from loaded catalog tracks.
+2. Each shelf asks for its known pick IDs.
+3. Missing IDs are skipped gracefully.
+4. Empty resolved shelves are omitted.
+5. If no picks resolve, Home shows: “Curated picks will appear when the demo catalog is loaded.”
+
+This keeps startup non-blocking and resilient to local catalog regeneration, partial catalogs, offline fallback catalogs, and future demo catalog changes.
+
+### Home, Library, and Search behavior
+
+- Home shows WaveZero Picks as horizontal curated shelves with generated artwork, title, artist, mood/label copy, Play, and queue actions.
+- Library shows a small “Featured from this demo” shelf near the top before the bounded catalog list.
+- Search shows “Try these picks” when the query is empty, using already resolved curated suggestions instead of eagerly searching the full catalog.
+- Consumer copy remains calm: “Demo picks from legally reviewable FMA metadata.” and “Artwork shown here is WaveZero-generated visual treatment unless a verified artwork URL is present.”
+
+### Large catalog preservation
+
+The #91 curated layer must preserve the #89/#90 large-catalog safeguards:
+
+- Keep the 300 catalog fetch limit.
+- Keep the 200 initial visible track window.
+- Keep 100-track load-more increments.
+- Keep debounced Library/Search input.
+- Keep memoized search/filter caches.
+- Keep bounded `ListView.builder` surfaces.
+- Keep Smart Downloads no-startup-storm protection.
+- Do not render all 1,374 tracks for curated shelves.
+
+### Behavior intentionally unchanged
+
+- Playback callbacks and queue semantics are unchanged.
+- Seek behavior is unchanged.
+- Shuffle, repeat, sleep timer, and native notification behavior are unchanged.
+- Rust playback, API, catalog serving, Android playback internals, and local content-server behavior are unchanged.
+- No auth/accounts/cloud sync/uploads/payments/DRM/P2P/Web3 claims are added.
+
+### Manual checklist
+
+1. Launch with full FMA 1,374-track local demo catalog.
+2. Confirm app does not freeze on startup.
+3. Confirm Home shows WaveZero Picks when catalog is loaded.
+4. Confirm curated picks skip missing IDs gracefully.
+5. Confirm tapping a curated pick plays the track.
+6. Confirm mini player updates after curated pick playback.
+7. Confirm generated artwork appears where `artworkUrl` is missing.
+8. Confirm generated artwork is stable across rebuilds.
+9. Confirm Library still opens smoothly.
+10. Confirm Load more still works.
+11. Confirm Search remains debounced and smooth.
+12. Confirm Now/player sheet shows artwork fallback cleanly.
+13. Confirm no real external artwork is added.
+14. Confirm no MP3/ZIP/generated local catalog files are committed.
+15. Confirm no raw URLs/debug IDs appear in consumer UI.
+16. Confirm playback/Rust/API/catalog behavior was not changed.
+
+No automated validation was required for #91 unless explicitly requested.

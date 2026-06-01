@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_effects.dart';
 import 'app_config.dart';
+import 'curated_demo_picks.dart';
 import '../catalog/audio_quality.dart';
 import '../catalog/catalog_client.dart';
 import '../catalog/catalog_track_manifest.dart';
@@ -590,6 +591,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   List<CatalogTrackSummary> get _searchableCatalogTracks => _catalog.take(_defaultCatalogLimit).toList(growable: false);
+  List<ResolvedCuratedDemoShelf> get _resolvedCuratedShelves => CuratedDemoPicks.resolveShelves(_catalog);
+  List<ResolvedCuratedDemoPick> get _featuredCuratedPicks => CuratedDemoPicks.resolveFeatured(_catalog, limit: 12);
 
   int _searchIndexKey() => Object.hash(
         _catalog.length,
@@ -3114,6 +3117,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               status: _statusText,
             ),
           const SizedBox(height: WzSpacing.md),
+          _CuratedDemoHomeSection(
+            shelves: _resolvedCuratedShelves,
+            onPlayPick: (pick) => _loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded WaveZero Pick: ${pick.track.title}'),
+            onAddToQueue: (pick) => _addToQueue(pick.track),
+            onOpenLibrary: () => _navigateTo(_AppTab.library),
+          ),
+          const SizedBox(height: WzSpacing.md),
           _HomeHistorySection(
             entries: _listeningHistory,
             continueEntry: _continueListeningEntry,
@@ -3324,6 +3334,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     })
                 : null,
             cacheBytes: _cacheBytes,
+            curatedPicks: _featuredCuratedPicks,
             selectedTrackId: _selectedTrackId,
             status: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
             loading: _operation == PlayerOperation.loadingCatalog,
@@ -3351,6 +3362,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onRefresh: () => _loadCatalog(),
             onImportDeviceMusic: _importDeviceMusic,
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
+            onPlayCuratedPick: (pick) => _loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded featured demo pick: ${pick.track.title}'),
             onAddToQueue: _addToQueue,
             onToggleLike: _toggleLikedTrack,
             onAddToCollection: _showAddToCollectionSheet,
@@ -3436,6 +3448,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         cachedTracks: _cachedCatalogTracks,
         collections: _collections,
         catalogTracks: _searchableCatalogTracks,
+        curatedPicks: _featuredCuratedPicks.take(8).toList(growable: false),
         onFilterChanged: (filter) => setState(() {
           _searchFilter = filter;
           _filteredSearchMemo = null;
@@ -3450,6 +3463,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onOpenCollection: (result) => unawaited(_openSearchCollection(result)),
         onImportDeviceMusic: _importDeviceMusic,
         onLoadCatalog: () => _loadCatalog(),
+        onPlayCuratedPick: (pick) => unawaited(_loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded search pick: ${pick.track.title}')),
       ),
       _ListeningHistoryPage(
         entries: _listeningHistory,
@@ -3996,6 +4010,221 @@ String _formatDuration(int ms) {
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
+
+class _CuratedDemoHomeSection extends StatelessWidget {
+  const _CuratedDemoHomeSection({required this.shelves, required this.onPlayPick, required this.onAddToQueue, required this.onOpenLibrary});
+
+  final List<ResolvedCuratedDemoShelf> shelves;
+  final ValueChanged<ResolvedCuratedDemoPick> onPlayPick;
+  final ValueChanged<ResolvedCuratedDemoPick> onAddToQueue;
+  final VoidCallback onOpenLibrary;
+
+  @override
+  Widget build(BuildContext context) {
+    if (shelves.isEmpty) {
+      return WzPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const WzSectionHeader(title: 'WaveZero Picks', subtitle: 'Curated picks will appear when the demo catalog is loaded.', icon: Icons.auto_awesome),
+            const SizedBox(height: WzSpacing.sm),
+            const Text('Curated picks will appear when the demo catalog is loaded.', style: WzText.body),
+            const SizedBox(height: WzSpacing.sm),
+            OutlinedButton.icon(onPressed: onOpenLibrary, icon: const Icon(Icons.library_music), label: const Text('Open Library')),
+          ],
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const WzSectionHeader(title: 'WaveZero Picks', subtitle: 'Curated shelves for a premium first listen.', icon: Icons.auto_awesome),
+        const SizedBox(height: WzSpacing.xs),
+        const Text(CuratedDemoPicks.consumerCopy, style: WzText.caption),
+        const SizedBox(height: WzSpacing.xxs),
+        const Text(CuratedDemoPicks.artworkCopy, style: WzText.caption),
+        const SizedBox(height: WzSpacing.sm),
+        ...shelves.map((shelf) => Padding(
+              padding: const EdgeInsets.only(bottom: WzSpacing.md),
+              child: _CuratedDemoShelfView(shelf: shelf, onPlayPick: onPlayPick, onAddToQueue: onAddToQueue),
+            )),
+      ],
+    );
+  }
+}
+
+class _CuratedDemoShelfView extends StatelessWidget {
+  const _CuratedDemoShelfView({required this.shelf, required this.onPlayPick, required this.onAddToQueue});
+
+  final ResolvedCuratedDemoShelf shelf;
+  final ValueChanged<ResolvedCuratedDemoPick> onPlayPick;
+  final ValueChanged<ResolvedCuratedDemoPick> onAddToQueue;
+
+  @override
+  Widget build(BuildContext context) => WzPanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(shelf.shelf.title, style: WzText.sectionTitle),
+            const SizedBox(height: WzSpacing.xxs),
+            Text(shelf.shelf.subtitle, style: WzText.caption),
+            const SizedBox(height: WzSpacing.sm),
+            SizedBox(
+              height: 246,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: shelf.picks.length,
+                separatorBuilder: (_, __) => const SizedBox(width: WzSpacing.sm),
+                itemBuilder: (context, index) => _CuratedPickCard(
+                  pick: shelf.picks[index],
+                  onPlay: () => onPlayPick(shelf.picks[index]),
+                  onAddToQueue: () => onAddToQueue(shelf.picks[index]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _CuratedPickCard extends StatelessWidget {
+  const _CuratedPickCard({required this.pick, required this.onPlay, required this.onAddToQueue, this.compact = false});
+
+  final ResolvedCuratedDemoPick pick;
+  final VoidCallback onPlay;
+  final VoidCallback onAddToQueue;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final track = pick.track;
+    final artSize = compact ? 72.0 : 132.0;
+    return SizedBox(
+      width: compact ? 230 : 174,
+      child: InkWell(
+        onTap: onPlay,
+        borderRadius: BorderRadius.circular(WzRadius.lg),
+        child: Container(
+          padding: const EdgeInsets.all(WzSpacing.sm),
+          decoration: BoxDecoration(
+            color: WzColors.surfaceMuted,
+            borderRadius: BorderRadius.circular(WzRadius.lg),
+            border: Border.all(color: WzColors.borderSoft),
+          ),
+          child: compact
+              ? Row(
+                  children: [
+                    _Artwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
+                    const SizedBox(width: WzSpacing.sm),
+                    Expanded(child: _CuratedPickText(pick: pick, onPlay: onPlay, onAddToQueue: onAddToQueue, compact: true)),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Artwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
+                    const SizedBox(height: WzSpacing.sm),
+                    Expanded(child: _CuratedPickText(pick: pick, onPlay: onPlay, onAddToQueue: onAddToQueue)),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CuratedPickText extends StatelessWidget {
+  const _CuratedPickText({required this.pick, required this.onPlay, required this.onAddToQueue, this.compact = false});
+
+  final ResolvedCuratedDemoPick pick;
+  final VoidCallback onPlay;
+  final VoidCallback onAddToQueue;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final track = pick.track;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start,
+      children: [
+        Text(track.title, maxLines: compact ? 1 : 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: compact ? 13 : 14)),
+        const SizedBox(height: WzSpacing.xxs),
+        Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+        const SizedBox(height: WzSpacing.xxs),
+        Text('${pick.pick.shelfLabel} • ${pick.pick.mood}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+        const Spacer(),
+        Wrap(
+          spacing: WzSpacing.xs,
+          children: [
+            SizedBox(height: 32, child: FilledButton.tonalIcon(onPressed: onPlay, icon: const Icon(Icons.play_arrow, size: 16), label: const Text('Play'))),
+            if (!compact) IconButton.outlined(tooltip: 'Add to Queue', onPressed: onAddToQueue, icon: const Icon(Icons.queue_music, size: 16)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _FeaturedDemoLibraryShelf extends StatelessWidget {
+  const _FeaturedDemoLibraryShelf({required this.picks, required this.onPlayPick});
+
+  final List<ResolvedCuratedDemoPick> picks;
+  final ValueChanged<ResolvedCuratedDemoPick> onPlayPick;
+
+  @override
+  Widget build(BuildContext context) {
+    if (picks.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const WzSectionHeader(title: 'Featured from this demo', subtitle: 'A small curated shelf before the full catalog list.', icon: Icons.stars),
+        const SizedBox(height: WzSpacing.sm),
+        SizedBox(
+          height: 104,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: math.min(8, picks.length),
+            separatorBuilder: (_, __) => const SizedBox(width: WzSpacing.sm),
+            itemBuilder: (context, index) => _CuratedPickCard(pick: picks[index], compact: true, onPlay: () => onPlayPick(picks[index]), onAddToQueue: () {}),
+          ),
+        ),
+        const SizedBox(height: WzSpacing.xs),
+        const Text(CuratedDemoPicks.consumerCopy, style: WzText.caption),
+      ],
+    );
+  }
+}
+
+class _CuratedTryPicksPanel extends StatelessWidget {
+  const _CuratedTryPicksPanel({required this.picks, required this.onPlayPick});
+
+  final List<ResolvedCuratedDemoPick> picks;
+  final ValueChanged<ResolvedCuratedDemoPick> onPlayPick;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const WzSectionHeader(title: 'Try these picks', subtitle: 'Curated demo suggestions without searching the full catalog.', icon: Icons.auto_awesome),
+          const SizedBox(height: WzSpacing.sm),
+          WzPanel(
+            child: Wrap(
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
+              children: picks
+                  .map((pick) => ActionChip(
+                        avatar: const Icon(Icons.play_arrow, size: 18),
+                        label: Text('${pick.track.title} • ${pick.pick.mood}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onPressed: () => onPlayPick(pick),
+                      ))
+                  .toList(growable: false),
+            ),
+          ),
+        ],
+      );
+}
+
 class _HomeHistorySection extends StatelessWidget {
   const _HomeHistorySection({
     required this.entries,
@@ -4129,6 +4358,7 @@ class _SearchPage extends StatelessWidget {
     required this.cachedTracks,
     required this.collections,
     required this.catalogTracks,
+    required this.curatedPicks,
     required this.onFilterChanged,
     required this.onClearQuery,
     required this.onRecentSearch,
@@ -4140,6 +4370,7 @@ class _SearchPage extends StatelessWidget {
     required this.onOpenCollection,
     required this.onImportDeviceMusic,
     required this.onLoadCatalog,
+    required this.onPlayCuratedPick,
   });
 
   final TextEditingController controller;
@@ -4152,6 +4383,7 @@ class _SearchPage extends StatelessWidget {
   final List<CatalogTrackSummary> cachedTracks;
   final List<WzCollection> collections;
   final List<CatalogTrackSummary> catalogTracks;
+  final List<ResolvedCuratedDemoPick> curatedPicks;
   final ValueChanged<_SearchFilter> onFilterChanged;
   final VoidCallback onClearQuery;
   final ValueChanged<String> onRecentSearch;
@@ -4163,6 +4395,7 @@ class _SearchPage extends StatelessWidget {
   final ValueChanged<WzSearchResult> onOpenCollection;
   final VoidCallback onImportDeviceMusic;
   final VoidCallback onLoadCatalog;
+  final ValueChanged<ResolvedCuratedDemoPick> onPlayCuratedPick;
 
   @override
   Widget build(BuildContext context) {
@@ -4214,6 +4447,10 @@ class _SearchPage extends StatelessWidget {
         ),
         const SizedBox(height: WzSpacing.md),
         if (!hasQuery) ...[
+          if (curatedPicks.isNotEmpty) ...[
+            _CuratedTryPicksPanel(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
+            const SizedBox(height: WzSpacing.md),
+          ],
           if (recentSearches.isNotEmpty) ...[
             const WzSectionHeader(title: 'Recent searches', subtitle: 'Stored on this device only.', icon: Icons.manage_search),
             Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: onClearRecentSearches, child: const Text('Clear'))),
@@ -5493,7 +5730,7 @@ class _CurrentListeningCard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 340;
-              final art = _Artwork(artworkUrl: manifest?.artworkUrl, size: compact ? 84 : 108);
+              final art = _Artwork(artworkUrl: manifest?.artworkUrl, size: compact ? 84 : 108, trackId: manifest?.trackId, title: manifest?.title, artist: manifest?.artistName);
               final identity = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -6095,7 +6332,7 @@ class _PremiumPlayerSurface extends StatelessWidget {
             builder: (context, constraints) {
               final stacked = constraints.maxWidth < 620;
               final artSize = stacked ? math.min(220.0, constraints.maxWidth) : 280.0;
-              final art = _PlayerArtworkHero(artworkUrl: manifest?.artworkUrl, size: artSize);
+              final art = _PlayerArtworkHero(artworkUrl: manifest?.artworkUrl, size: artSize, trackId: manifest?.trackId, title: manifest?.title, artist: manifest?.artistName);
               final identity = _NowTrackIdentity(title: title, subtitle: subtitle, status: status);
               if (stacked) {
                 return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Center(child: art), const SizedBox(height: WzSpacing.xl), identity]);
@@ -6206,10 +6443,14 @@ class _PlaybackModesCard extends StatelessWidget {
 }
 
 class _PlayerArtworkHero extends StatelessWidget {
-  const _PlayerArtworkHero({this.artworkUrl, required this.size});
+  const _PlayerArtworkHero({this.artworkUrl, required this.size, this.trackId, this.title, this.artist, this.mood});
 
   final String? artworkUrl;
   final double size;
+  final String? trackId;
+  final String? title;
+  final String? artist;
+  final String? mood;
 
   @override
   Widget build(BuildContext context) {
@@ -6222,15 +6463,8 @@ class _PlayerArtworkHero extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(WzRadius.xl), gradient: WzColors.accentGradient, border: Border.all(color: WzColors.border), boxShadow: const [BoxShadow(color: Color(0xAA000000), blurRadius: 36, offset: Offset(0, 24))]),
       child: url == null || url.trim().isEmpty
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [WzColors.accent.withOpacity(0.9), WzColors.surfaceMuted, WzColors.accentAlt.withOpacity(0.55)]))),
-                Positioned(top: -28, right: -20, child: Icon(Icons.graphic_eq, size: size * 0.42, color: Colors.white.withOpacity(0.08))),
-                Center(child: Icon(Icons.album_rounded, size: size * 0.34, color: WzColors.textPrimary.withOpacity(0.9))),
-              ],
-            )
-          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Center(child: Icon(Icons.album_rounded, size: size * 0.34, color: WzColors.textPrimary))),
+          ? _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size)
+          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size)),
     );
   }
 }
@@ -6378,11 +6612,128 @@ class _PlayerSourceCard extends StatelessWidget {
       );
 }
 
+
+
+class _WaveZeroCoverArt extends StatelessWidget {
+  const _WaveZeroCoverArt({this.trackId, this.title, this.artist, this.mood, required this.size, this.compact = false});
+
+  final String? trackId;
+  final String? title;
+  final String? artist;
+  final String? mood;
+  final double size;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final seedText = [trackId, title, artist, mood].whereType<String>().join('|');
+    final seed = _stableArtworkSeed(seedText.isEmpty ? 'wavezero' : seedText);
+    final colors = _coverColors(seed, mood ?? title ?? 'wavezero');
+    final initials = _coverInitials(title, artist);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(child: CustomPaint(painter: _WaveZeroCoverPainter(seed: seed, color: Colors.white.withOpacity(compact ? 0.13 : 0.16)))),
+          Positioned(top: -size * 0.14, right: -size * 0.12, child: Icon(Icons.graphic_eq, size: size * 0.48, color: Colors.white.withOpacity(0.07))),
+          Positioned(left: size * 0.10, top: size * 0.10, child: Text('WZ', style: TextStyle(color: Colors.white.withOpacity(0.42), fontSize: math.max(8, size * 0.09), fontWeight: FontWeight.w900, letterSpacing: 1.2))),
+          Center(
+            child: Container(
+              width: size * (compact ? 0.50 : 0.46),
+              height: size * (compact ? 0.50 : 0.46),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withOpacity(0.22), border: Border.all(color: Colors.white.withOpacity(0.18))),
+              child: Text(initials, maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(color: Colors.white.withOpacity(0.92), fontSize: math.max(13, size * (compact ? 0.20 : 0.16)), fontWeight: FontWeight.w900, letterSpacing: 0.8)),
+            ),
+          ),
+          if (!compact && mood != null && mood!.trim().isNotEmpty)
+            Positioned(
+              left: size * 0.09,
+              right: size * 0.09,
+              bottom: size * 0.08,
+              child: Text(mood!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.72), fontSize: math.max(9, size * 0.08), fontWeight: FontWeight.w700)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WaveZeroCoverPainter extends CustomPainter {
+  const _WaveZeroCoverPainter({required this.seed, required this.color});
+
+  final int seed;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..strokeCap = StrokeCap.round;
+    final bars = 9 + (seed % 7);
+    final width = size.width / (bars * 1.8);
+    for (var i = 0; i < bars; i++) {
+      final value = ((seed >> (i % 16)) & 0x0F) / 15.0;
+      final height = size.height * (0.16 + value * 0.42);
+      final x = size.width * 0.12 + i * width * 1.65;
+      final y = size.height * 0.72;
+      paint.strokeWidth = math.max(2, width * 0.52);
+      canvas.drawLine(Offset(x, y), Offset(x, y - height), paint);
+    }
+    final ringPaint = Paint()
+      ..color = color.withOpacity(0.45)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(1, size.width * 0.012);
+    canvas.drawCircle(Offset(size.width * 0.78, size.height * 0.22), size.width * (0.12 + (seed % 5) * 0.015), ringPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WaveZeroCoverPainter oldDelegate) => oldDelegate.seed != seed || oldDelegate.color != color;
+}
+
+int _stableArtworkSeed(String value) {
+  var hash = 0x811c9dc5;
+  for (final unit in value.codeUnits) {
+    hash ^= unit;
+    hash = (hash * 0x01000193) & 0x7fffffff;
+  }
+  return hash;
+}
+
+List<Color> _coverColors(int seed, String hint) {
+  final normalized = hint.toLowerCase();
+  if (normalized.contains('folk') || normalized.contains('acoustic') || normalized.contains('calm')) return const [Color(0xFF243B30), Color(0xFF0B1019), Color(0xFFB98E54)];
+  if (normalized.contains('hip') || normalized.contains('beat')) return const [Color(0xFF311B52), Color(0xFF070A13), Color(0xFFFF7A59)];
+  if (normalized.contains('ambient') || normalized.contains('focus') || normalized.contains('instrumental')) return const [Color(0xFF102A43), Color(0xFF070A13), Color(0xFF36D7FF)];
+  final palettes = const <List<Color>>[
+    [Color(0xFF2D1B5F), Color(0xFF070A13), Color(0xFF36D7FF)],
+    [Color(0xFF12243D), Color(0xFF070A13), Color(0xFF9A8CFF)],
+    [Color(0xFF3A1935), Color(0xFF080A12), Color(0xFFFF6B8A)],
+    [Color(0xFF18362F), Color(0xFF070A13), Color(0xFF38D996)],
+  ];
+  return palettes[seed % palettes.length];
+}
+
+String _coverInitials(String? title, String? artist) {
+  String firstLetter(String? value) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return '';
+    return String.fromCharCode(trimmed.runes.first).toUpperCase();
+  }
+  final result = '${firstLetter(title)}${firstLetter(artist)}';
+  return result.trim().isEmpty ? 'WZ' : result;
+}
+
 class _Artwork extends StatelessWidget {
-  const _Artwork({this.artworkUrl, this.size = 118});
+  const _Artwork({this.artworkUrl, this.size = 118, this.trackId, this.title, this.artist, this.mood});
 
   final String? artworkUrl;
   final double size;
+  final String? trackId;
+  final String? title;
+  final String? artist;
+  final String? mood;
 
   @override
   Widget build(BuildContext context) {
@@ -6397,11 +6748,11 @@ class _Artwork extends StatelessWidget {
         border: Border.all(color: _WzTokens.borderSoft),
       ),
       child: url == null || url.trim().isEmpty
-          ? Icon(Icons.music_note_rounded, size: size * 0.4, color: _WzTokens.textPrimary)
+          ? _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size, compact: size < 70)
           : Image.network(
               url,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Icon(Icons.music_note_rounded, size: size * 0.4, color: _WzTokens.textPrimary),
+              errorBuilder: (_, __, ___) => _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size, compact: size < 70),
             ),
     );
   }
@@ -7240,7 +7591,7 @@ class _StorageTrackRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              _Artwork(artworkUrl: track.artworkUrl, size: 48),
+              _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
               const SizedBox(width: WzSpacing.sm),
               Expanded(
                 child: Column(
@@ -7376,7 +7727,7 @@ class _DownloadRow extends StatelessWidget {
           children: [
             Row(
               children: [
-                _Artwork(artworkUrl: track.artworkUrl, size: 48),
+                _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -7662,7 +8013,7 @@ class _CollectionTrackRow extends StatelessWidget {
         padding: const EdgeInsets.all(WzSpacing.sm),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            _Artwork(artworkUrl: track.artworkUrl, size: 48),
+            _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
             const SizedBox(width: WzSpacing.sm),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
@@ -7719,6 +8070,7 @@ class _CatalogListCard extends StatelessWidget {
     required this.largeCatalogMode,
     required this.onLoadMore,
     required this.cacheBytes,
+    required this.curatedPicks,
     required this.selectedTrackId,
     required this.status,
     required this.loading,
@@ -7738,6 +8090,7 @@ class _CatalogListCard extends StatelessWidget {
     required this.onRefresh,
     required this.onImportDeviceMusic,
     required this.onSelectTrack,
+    required this.onPlayCuratedPick,
     required this.onAddToQueue,
     required this.onToggleLike,
     required this.onAddToCollection,
@@ -7761,6 +8114,7 @@ class _CatalogListCard extends StatelessWidget {
   final bool largeCatalogMode;
   final VoidCallback? onLoadMore;
   final int cacheBytes;
+  final List<ResolvedCuratedDemoPick> curatedPicks;
   final String? selectedTrackId;
   final String status;
   final bool loading;
@@ -7780,6 +8134,7 @@ class _CatalogListCard extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onImportDeviceMusic;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
+  final ValueChanged<ResolvedCuratedDemoPick> onPlayCuratedPick;
   final ValueChanged<CatalogTrackSummary> onAddToQueue;
   final ValueChanged<CatalogTrackSummary> onToggleLike;
   final ValueChanged<CatalogTrackSummary> onAddToCollection;
@@ -7880,6 +8235,8 @@ class _CatalogListCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(deviceLastError!, style: const TextStyle(color: Color(0xFFFFC46B), fontSize: 12)),
           ],
+          const SizedBox(height: 12),
+          _FeaturedDemoLibraryShelf(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
           const SizedBox(height: 12),
           DropdownButtonFormField<_LibrarySortMode>(
             value: librarySortMode,
@@ -8202,7 +8559,7 @@ class _CatalogRow extends StatelessWidget {
           children: [
             Row(
               children: [
-                _Artwork(artworkUrl: track.artworkUrl, size: 54),
+                _Artwork(artworkUrl: track.artworkUrl, size: 54, trackId: track.trackId, title: track.title, artist: track.artistName),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -8478,7 +8835,7 @@ class _PremiumMiniPlayer extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _MiniArtwork(artworkUrl: manifest?.artworkUrl),
+                _MiniArtwork(artworkUrl: manifest?.artworkUrl, trackId: manifest?.trackId, title: manifest?.title, artist: manifest?.artistName),
                 const SizedBox(width: WzSpacing.sm),
                 Expanded(
                   child: Column(
@@ -8527,9 +8884,13 @@ class _PremiumMiniPlayer extends StatelessWidget {
 }
 
 class _MiniArtwork extends StatelessWidget {
-  const _MiniArtwork({this.artworkUrl});
+  const _MiniArtwork({this.artworkUrl, this.trackId, this.title, this.artist, this.mood});
 
   final String? artworkUrl;
+  final String? trackId;
+  final String? title;
+  final String? artist;
+  final String? mood;
 
   @override
   Widget build(BuildContext context) {
@@ -8540,14 +8901,8 @@ class _MiniArtwork extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(gradient: WzColors.accentGradient, borderRadius: BorderRadius.circular(WzRadius.md), border: Border.all(color: Colors.white.withOpacity(0.16))),
       child: url == null || url.trim().isEmpty
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                Icon(Icons.album_rounded, color: Colors.white.withOpacity(0.88), size: 28),
-                Positioned(right: -7, bottom: -7, child: Icon(Icons.graphic_eq, color: Colors.white.withOpacity(0.14), size: 30)),
-              ],
-            )
-          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.album_rounded, color: Colors.white)),
+          ? _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: 48, compact: true)
+          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: 48, compact: true)),
     );
   }
 }
