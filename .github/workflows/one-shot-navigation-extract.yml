@@ -1,0 +1,75 @@
+name: One-shot navigation extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-flutter-navigation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-flutter-navigation
+          fetch-depth: 0
+      - name: Move navigation vocabulary out of V3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+
+          import_anchor = "import 'smart_queue_policy.dart';\n"
+          navigation_import = "import 'navigation/wavezero_navigation.dart';\n"
+          if text.count(import_anchor) != 1:
+              raise SystemExit('navigation import anchor changed')
+          if navigation_import in text:
+              raise SystemExit('navigation import already present')
+          text = text.replace(import_anchor, import_anchor + navigation_import, 1)
+
+          mode_block = "enum _AppMode { consumer, developer }\n\nenum _AppTab { home, library, now, queue, search, collections, collectionDetail, downloads, storage, history, settings, engine }\n\n"
+          if text.count(mode_block) != 1:
+              raise SystemExit('app mode/tab block changed')
+          text = text.replace(mode_block, '', 1)
+
+          shell_start = 'class _ShellDestination {'
+          shell_end = '\n\nString _catalogModeLabel(String? contentMode, int trackCount) {'
+          if text.count(shell_start) != 1 or text.count(shell_end) != 1:
+              raise SystemExit('shell destination block boundaries changed')
+          start = text.index(shell_start)
+          end = text.index(shell_end, start)
+          text = text[:start] + text[end + 2:]
+
+          replacements = {
+              '_AppMode': 'WzAppMode',
+              '_AppTab': 'WzAppTab',
+              '_consumerShellDestinations': 'wzConsumerShellDestinations',
+              '_developerShellDestinations': 'wzDeveloperShellDestinations',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'expected navigation reference missing before replacement: {old}')
+              text = text.replace(old, new)
+
+          for stale in replacements:
+              if stale in text:
+                  raise SystemExit(f'stale navigation symbol remains: {stale}')
+          if navigation_import not in text:
+              raise SystemExit('navigation import missing after patch')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-navigation-extract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-navigation-extract.yml
+          git commit -m "Use extracted WaveZero navigation module"
+          git push origin HEAD:refactor/extract-flutter-navigation
