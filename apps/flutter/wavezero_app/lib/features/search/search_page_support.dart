@@ -39,7 +39,7 @@ class WzCuratedTryPicksPanel extends StatelessWidget {
           ),
           const SizedBox(height: WzSpacing.sm),
           ...picks.take(5).map(
-                (pick) => Padding(
+                (resolved) => Padding(
                   padding: const EdgeInsets.only(bottom: WzSpacing.xs),
                   child: Row(
                     children: [
@@ -50,13 +50,13 @@ class WzCuratedTryPicksPanel extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              pick.track.title,
+                              resolved.track.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: WzText.body,
                             ),
                             Text(
-                              '${pick.track.subtitle} • ${pick.mood}',
+                              '${resolved.track.subtitle} • ${resolved.pick.mood}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: WzText.caption,
@@ -66,7 +66,7 @@ class WzCuratedTryPicksPanel extends StatelessWidget {
                       ),
                       IconButton(
                         tooltip: 'Play curated pick',
-                        onPressed: () => onPlay(pick),
+                        onPressed: () => onPlay(resolved),
                         icon: const Icon(Icons.play_arrow),
                       ),
                     ],
@@ -77,4 +77,56 @@ class WzCuratedTryPicksPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class WzSearchDiscoveryPanel extends StatelessWidget {
+  const WzSearchDiscoveryPanel({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.children,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          WzSectionHeader(title: title, subtitle: subtitle, icon: icon),
+          WzPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+        ],
+      );
+}
+
+class WzSearchDiscoveryButton extends StatelessWidget {
+  const WzSearchDiscoveryButton({
+    super.key,
+    required this.label,
+    required this.detail,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String detail;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+        leading: Icon(icon),
+        title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis),
+        onTap: onTap,
+      );
 }
