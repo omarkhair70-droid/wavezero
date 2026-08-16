@@ -25,6 +25,7 @@ import '../features/library/library_sources.dart';
 import '../features/search/search_controls.dart';
 import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
+import '../features/search/search_results.dart';
 import '../features/playback/playback_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
@@ -431,7 +432,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final results = <WzSearchResult>[];
     WzSearchResult resultForTrack(CatalogTrackSummary track, WzSearchResultType type, WzSearchSource source, String secondary) {
       final asset = track.primaryAsset;
-      final label = _searchSourceLabel(source);
+      final label = wzSearchSourceLabel(source);
       return WzSearchResult(
         id: '${source.name}:${track.trackId}',
         title: track.title,
@@ -547,11 +548,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final memo = _filteredSearchMemo;
     if (memo != null && _filteredSearchMemoKey == key) return memo;
     final matches = _allSearchResults
-        .where((result) => _searchFilterAllows(_searchFilter, result) && result.searchText.contains(normalized))
+        .where((result) => wzSearchFilterAllows(_searchFilter, result) && result.searchText.contains(normalized))
         .toList(growable: false);
     final indexed = matches.indexed.toList(growable: false);
     indexed.sort((a, b) {
-      final rank = _searchRank(a.$2, query).compareTo(_searchRank(b.$2, query));
+      final rank = wzSearchRank(a.$2, query).compareTo(wzSearchRank(b.$2, query));
       if (rank != 0) return rank;
       final title = a.$2.searchText.compareTo(b.$2.searchText);
       if (title != 0) return title;
@@ -3549,75 +3550,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
 enum QueueAdvanceSource { manual, next, previous, auto, shuffle }
 
-enum WzSearchResultType { track, deviceTrack, downloadedTrack, cloudTrack, collection, historyEntry, artistLike, unknown }
-
-enum WzSearchSource { apiCatalog, deviceMusic, downloads, cloudVault, collections, history, legalDemo }
-
-class WzSearchResult {
-  const WzSearchResult({
-    required this.id,
-    required this.title,
-    required this.subtitle,
-    required this.type,
-    required this.source,
-    this.artworkUrl,
-    this.trackId,
-    this.collectionId,
-    this.historyTrackId,
-    this.qualityLabel,
-    this.codec,
-    this.license,
-    this.available = true,
-    required this.secondaryLabel,
-    required this.searchText,
-    this.track,
-    this.collection,
-    this.historyEntry,
-  });
-
-  final String id;
-  final String title;
-  final String subtitle;
-  final WzSearchResultType type;
-  final WzSearchSource source;
-  final String? artworkUrl;
-  final String? trackId;
-  final String? collectionId;
-  final String? historyTrackId;
-  final String? qualityLabel;
-  final String? codec;
-  final LicenseMetadata? license;
-  final bool available;
-  final String secondaryLabel;
-  final String searchText;
-  final CatalogTrackSummary? track;
-  final WzCollection? collection;
-  final WzListeningHistoryEntry? historyEntry;
-
-  bool get isTrackLike => track != null || historyEntry != null;
-}
-
-String _searchSourceLabel(WzSearchSource source) => switch (source) {
-      WzSearchSource.apiCatalog => 'Catalog',
-      WzSearchSource.deviceMusic => 'Device music',
-      WzSearchSource.downloads => 'Downloads',
-      WzSearchSource.cloudVault => 'Cloud Vault',
-      WzSearchSource.collections => 'Collections',
-      WzSearchSource.history => 'History',
-      WzSearchSource.legalDemo => 'Legal demo catalog',
-    };
-
-String _searchTypeLabel(WzSearchResultType type) => switch (type) {
-      WzSearchResultType.track => 'Song',
-      WzSearchResultType.deviceTrack => 'Device song',
-      WzSearchResultType.downloadedTrack => 'Offline song',
-      WzSearchResultType.cloudTrack => 'Cloud track',
-      WzSearchResultType.collection => 'Collection',
-      WzSearchResultType.historyEntry => 'Recent play',
-      WzSearchResultType.artistLike => 'Artist',
-      WzSearchResultType.unknown => 'Result',
-    };
-
 IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
       WzSearchResultType.deviceTrack => Icons.phone_android,
       WzSearchResultType.downloadedTrack => Icons.download_done,
@@ -3627,35 +3559,6 @@ IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
       WzSearchResultType.artistLike => Icons.person,
       WzSearchResultType.track || WzSearchResultType.unknown => Icons.music_note,
     };
-
-bool _searchFilterAllows(WzSearchFilter filter, WzSearchResult result) => switch (filter) {
-      WzSearchFilter.all => true,
-      WzSearchFilter.songs => result.type == WzSearchResultType.track || result.type == WzSearchResultType.deviceTrack || result.type == WzSearchResultType.downloadedTrack || result.type == WzSearchResultType.cloudTrack,
-      WzSearchFilter.device => result.source == WzSearchSource.deviceMusic,
-      WzSearchFilter.downloads => result.source == WzSearchSource.downloads,
-      WzSearchFilter.cloud => result.source == WzSearchSource.cloudVault,
-      WzSearchFilter.collections => result.type == WzSearchResultType.collection || result.source == WzSearchSource.collections,
-      WzSearchFilter.history => result.source == WzSearchSource.history,
-      WzSearchFilter.legalDemo => result.source == WzSearchSource.legalDemo || result.license?.needsRightsWarning == true,
-    };
-
-int _searchRank(WzSearchResult result, String query) {
-  final q = normalizeWzSearch(query);
-  final title = normalizeWzSearch(result.title);
-  final subtitle = normalizeWzSearch(result.subtitle);
-  final source = normalizeWzSearch(_searchSourceLabel(result.source));
-  final license = normalizeWzSearch(result.license?.badgeLabel ?? '');
-  if (title == q) return 0;
-  if (title.startsWith(q)) return 10;
-  if (title.contains(q)) return 20;
-  if (subtitle.contains(q)) return 30;
-  if (result.type == WzSearchResultType.collection && result.searchText.contains(q)) return 40;
-  if (result.source == WzSearchSource.history || result.source == WzSearchSource.downloads || result.source == WzSearchSource.deviceMusic) return 50;
-  if (source.contains(q) || license.contains(q)) return 60;
-  return 80;
-}
-
-
 
 bool _isDeviceTrackId(String? trackId) => trackId != null && trackId.startsWith('device-audio-');
 
@@ -4227,8 +4130,8 @@ class _SearchResultCard extends StatelessWidget {
             ),
             const SizedBox(height: WzSpacing.sm),
             Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-              WzStatusPill(label: _searchSourceLabel(result.source), active: true, icon: Icons.label_outline),
-              WzStatusPill(label: _searchTypeLabel(result.type), icon: _searchResultIcon(result)),
+              WzStatusPill(label: wzSearchSourceLabel(result.source), active: true, icon: Icons.label_outline),
+              WzStatusPill(label: wzSearchTypeLabel(result.type), icon: _searchResultIcon(result)),
               if (result.qualityLabel != null) WzStatusPill(label: _productQualityLabel(result.qualityLabel!), icon: Icons.high_quality),
               if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component),
               if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy),
