@@ -21,6 +21,8 @@ import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
 import '../features/library/library_controls.dart';
 import '../features/search/search_controls.dart';
+import '../features/search/recent_searches_store.dart';
+import '../features/search/search_text.dart';
 import '../features/playback/playback_preferences.dart';
 import '../cache/cache_service.dart';
 import '../cloud_vault/cloud_vault_models.dart';
@@ -159,7 +161,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _autoAdvanceThresholdMs = 1200;
   static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
   static const _appModePreferenceKey = 'wavezero.app_mode';
-  static const _recentSearchesPreferenceKey = 'wavezero.recent_searches.v1';
   static const int _defaultCatalogLimit = 300;
   static const int _initialVisibleTrackCount = 200;
   static const int _libraryPageSize = 100;
@@ -288,6 +289,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
   WzSearchFilter _searchFilter = WzSearchFilter.all;
+  final WzRecentSearchesStore _recentSearchesStore = const WzRecentSearchesStore();
   List<String> _recentSearches = const <String>[];
   String _queueStatus = 'Queue is ready.';
   String _sessionStatus = 'Session recovery pending.';
@@ -439,7 +441,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         license: _isDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
         available: asset?.manifestUrl.trim().isNotEmpty == true,
         secondaryLabel: secondary,
-        searchText: _normalizeWzSearch([
+        searchText: normalizeWzSearch([
           track.title,
           track.subtitle,
           track.artistName ?? '',
@@ -483,7 +485,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         collectionId: collection.id,
         available: true,
         secondaryLabel: collection.type == WzCollectionType.liked ? 'Liked Tracks' : 'Collection',
-        searchText: _normalizeWzSearch([
+        searchText: normalizeWzSearch([
           collection.name,
           collection.description ?? '',
           'Collections',
@@ -510,7 +512,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         license: entry.license,
         available: resolved != null,
         secondaryLabel: 'Recently played • ${entry.playCount} play${entry.playCount == 1 ? '' : 's'}',
-        searchText: _normalizeWzSearch([
+        searchText: normalizeWzSearch([
           entry.title,
           entry.subtitle,
           entry.albumName ?? '',
@@ -535,7 +537,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   List<WzSearchResult> get _filteredSearchResults {
     final query = _debouncedFullSearchQuery;
-    final normalized = _normalizeWzSearch(query);
+    final normalized = normalizeWzSearch(query);
     if (normalized.isEmpty) return const <WzSearchResult>[];
     final key = _filteredSearchKey();
     final memo = _filteredSearchMemo;
@@ -836,25 +838,22 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _loadRecentSearches() async {
-    final prefs = await SharedPreferences.getInstance();
-    final searches = prefs.getStringList(_recentSearchesPreferenceKey) ?? const <String>[];
+    final searches = await _recentSearchesStore.load();
     if (!mounted) return;
-    setState(() => _recentSearches = searches.take(10).toList(growable: false));
+    setState(() => _recentSearches = searches);
   }
 
   Future<void> _rememberSearchQuery(String query) async {
-    final normalized = query.trim().replaceAll(RegExp(r'\s+'), ' ');
-    if (normalized.isEmpty) return;
-    final next = <String>[normalized, ..._recentSearches.where((item) => _normalizeWzSearch(item) != _normalizeWzSearch(normalized))].take(10).toList(growable: false);
+    final canonical = canonicalizeWzRecentSearch(query);
+    if (canonical.isEmpty) return;
+    final next = buildWzRecentSearches(current: _recentSearches, query: canonical);
     setState(() => _recentSearches = next);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_recentSearchesPreferenceKey, next);
+    await _recentSearchesStore.save(next);
   }
 
   Future<void> _clearRecentSearches() async {
     setState(() => _recentSearches = const <String>[]);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_recentSearchesPreferenceKey);
+    await _recentSearchesStore.clear();
   }
 
   void _openSearch({String? query}) {
@@ -3679,15 +3678,6 @@ class WzSearchResult {
   bool get isTrackLike => track != null || historyEntry != null;
 }
 
-String _normalizeWzSearch(String value) {
-  final withoutDiacritics = value
-      .replaceAll(RegExp(r'[\u064B-\u065F\u0670]'), '')
-      .replaceAll(RegExp('[إأآا]'), 'ا')
-      .replaceAll('ى', 'ي')
-      .replaceAll('ة', 'ه');
-  return withoutDiacritics.toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
-}
-
 String _searchSourceLabel(WzSearchSource source) => switch (source) {
       WzSearchSource.apiCatalog => 'Catalog',
       WzSearchSource.deviceMusic => 'Device music',
@@ -3731,11 +3721,11 @@ bool _searchFilterAllows(WzSearchFilter filter, WzSearchResult result) => switch
     };
 
 int _searchRank(WzSearchResult result, String query) {
-  final q = _normalizeWzSearch(query);
-  final title = _normalizeWzSearch(result.title);
-  final subtitle = _normalizeWzSearch(result.subtitle);
-  final source = _normalizeWzSearch(_searchSourceLabel(result.source));
-  final license = _normalizeWzSearch(result.license?.badgeLabel ?? '');
+  final q = normalizeWzSearch(query);
+  final title = normalizeWzSearch(result.title);
+  final subtitle = normalizeWzSearch(result.subtitle);
+  final source = normalizeWzSearch(_searchSourceLabel(result.source));
+  final license = normalizeWzSearch(result.license?.badgeLabel ?? '');
   if (title == q) return 0;
   if (title.startsWith(q)) return 10;
   if (title.contains(q)) return 20;
