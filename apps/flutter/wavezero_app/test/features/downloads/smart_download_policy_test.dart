@@ -48,13 +48,11 @@ void main() {
     expect(result.reason, isNull);
   });
 
-  test('cache state preserves cached, caching, in-flight, and limit reasons', () {
+  test('cache state preserves cached, caching, and in-flight reasons', () {
     expect(
       evaluateWzSmartDownloadCacheState(
         status: TrackCacheStatus.cached,
         alreadyInFlight: false,
-        cachedTrackCount: 0,
-        maxCachedTracks: 12,
       ).reason,
       'already cached',
     );
@@ -62,8 +60,6 @@ void main() {
       evaluateWzSmartDownloadCacheState(
         status: TrackCacheStatus.caching,
         alreadyInFlight: false,
-        cachedTrackCount: 0,
-        maxCachedTracks: 12,
       ).reason,
       'already caching',
     );
@@ -71,28 +67,32 @@ void main() {
       evaluateWzSmartDownloadCacheState(
         status: TrackCacheStatus.notCached,
         alreadyInFlight: true,
-        cachedTrackCount: 0,
-        maxCachedTracks: 12,
       ).reason,
       'already in-flight',
     );
+  });
+
+  test('capacity preserves the existing cache-limit boundary', () {
     expect(
-      evaluateWzSmartDownloadCacheState(
-        status: TrackCacheStatus.notCached,
-        alreadyInFlight: false,
+      evaluateWzSmartDownloadCapacity(
         cachedTrackCount: 12,
         maxCachedTracks: 12,
       ).reason,
       'smart download cache limit reached',
     );
+    expect(
+      evaluateWzSmartDownloadCapacity(
+        cachedTrackCount: 11,
+        maxCachedTracks: 12,
+      ).allowed,
+      isTrue,
+    );
   });
 
-  test('uncached state below the limit is admitted', () {
+  test('uncached non-flight cache state is admitted', () {
     final result = evaluateWzSmartDownloadCacheState(
       status: TrackCacheStatus.notCached,
       alreadyInFlight: false,
-      cachedTrackCount: 3,
-      maxCachedTracks: 12,
     );
     expect(result.allowed, isTrue);
     expect(result.reason, isNull);
