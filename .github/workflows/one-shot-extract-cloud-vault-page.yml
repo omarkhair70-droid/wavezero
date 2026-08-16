@@ -1,0 +1,29 @@
+name: One-shot extract Cloud Vault page
+
+on:
+  push:
+    branches:
+      - refactor/extract-cloud-vault-page
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-cloud-vault-page
+          fetch-depth: 0
+      - name: Move Cloud Vault UI out of V3
+        shell: bash
+        run: |
+          python tools/patch_extract_cloud_vault_page.py
+          rm tools/patch_extract_cloud_vault_page.py
+          rm .github/workflows/one-shot-extract-cloud-vault-page.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Extract Cloud Vault page from Flutter V3'
+          git push origin HEAD:refactor/extract-cloud-vault-page
