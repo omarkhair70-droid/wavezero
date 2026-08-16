@@ -35,6 +35,7 @@ import '../features/device_music/device_music_service.dart';
 import '../features/device_music/device_music_track.dart';
 import '../features/device_music/device_music_projection.dart';
 import '../features/collections/collections_service.dart';
+import '../features/collections/collection_resolution.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
@@ -879,7 +880,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _saveCollections() => _collectionsService.save(_collections);
 
-  bool _isLiked(String trackId) => _likedCollection.tracks.any((track) => track.trackId == trackId);
+  bool _isLiked(String trackId) => wzCollectionContainsTrack(_likedCollection, trackId);
 
   WzCollectionTrackSnapshot _snapshotForTrack(CatalogTrackSummary track) {
     final source = _isDeviceCatalogTrack(track)
@@ -922,12 +923,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               ),
       );
 
-  CatalogTrackSummary? _resolveCollectionTrack(WzCollectionTrackSnapshot snapshot) {
-    for (final track in _libraryTracks) {
-      if (track.trackId == snapshot.trackId) return track;
-    }
-    return null;
-  }
+  CatalogTrackSummary? _resolveCollectionTrack(WzCollectionTrackSnapshot snapshot) =>
+      wzResolveCollectionTrack(libraryTracks: _libraryTracks, snapshot: snapshot);
 
   CatalogTrackSummary? _resolveHistoryEntry(WzListeningHistoryEntry entry) {
     for (final track in _libraryTracks) {
