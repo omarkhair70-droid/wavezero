@@ -42,11 +42,6 @@ class WaveZeroMediaSessionService : MediaSessionService() {
         return START_STICKY
     }
 
-    override fun onDestroy() {
-        WaveZeroPlaybackSession.release()
-        super.onDestroy()
-    }
-
     private fun showForegroundMediaNotification(manager: AudioPlayerManager) {
         val snapshot = manager.metricsSnapshotMap()
         val isPlaying = snapshot["isPlaying"] as? Boolean ?: false
