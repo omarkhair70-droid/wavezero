@@ -50,140 +50,234 @@ class WzLibrarySourceOverview extends StatelessWidget {
   final bool showCloudSource;
 
   @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Library', style: WzText.title),
-                    SizedBox(height: 4),
-                    Text('Everything you can listen to, kept in one calm place.', style: WzText.body),
-                  ],
-                ),
-              ),
-              WzSculptedIconButton(
-                tooltip: 'Refresh Library',
-                onPressed: refreshDisabled ? null : onRefresh,
-                icon: Icons.refresh,
-                size: 44,
-                iconSize: 19,
-              ),
-            ],
-          ),
-          if (loading) ...[
-            const SizedBox(height: WzSpacing.xs),
-            const LinearProgressIndicator(minHeight: 2),
-          ],
-          const SizedBox(height: WzSpacing.md),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final cardWidth = constraints.maxWidth >= 360 ? (constraints.maxWidth - 10) / 2 : constraints.maxWidth;
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
+  Widget build(BuildContext context) {
+    final statusLower = status.toLowerCase();
+    final catalogProblem = statusLower.contains('unavailable') || statusLower.contains('error') || statusLower.contains('failed');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'All', detail: '$combinedTrackCount tracks', status: 'Unified library', icon: Icons.library_music_rounded, active: librarySourceFilter == WzLibrarySourceFilter.all)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue_rounded, active: librarySourceFilter == WzLibrarySourceFilter.api)),
-                  SizedBox(
-                    width: cardWidth,
-                    child: _LibrarySourceSummaryCard(
-                      title: 'Device music',
-                      detail: '$deviceTrackCount imported',
-                      status: devicePermissionStatus == 'granted' ? 'Device access ready • $deviceScanStatus' : 'Device access optional • $deviceScanStatus',
-                      icon: Icons.phone_android_rounded,
-                      active: librarySourceFilter == WzLibrarySourceFilter.device,
-                    ),
+                  Text('Library', style: WzText.pageTitle.copyWith(fontSize: 30)),
+                  const SizedBox(height: 5),
+                  Text(
+                    combinedTrackCount == 0 ? 'Your music will collect here.' : '$combinedTrackCount tracks, all in one place.',
+                    style: WzText.body,
                   ),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done_rounded, active: librarySourceFilter == WzLibrarySourceFilter.downloads)),
-                  if (showCloudSource) SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Developer preview source', icon: Icons.cloud_done_outlined, active: librarySourceFilter == WzLibrarySourceFilter.cloud)),
                 ],
-              );
-            },
+              ),
+            ),
+            WzSculptedIconButton(
+              tooltip: 'Search Library',
+              onPressed: onOpenFullSearch,
+              icon: Icons.search_rounded,
+              size: 46,
+              iconSize: 20,
+            ),
+            const SizedBox(width: 8),
+            WzSculptedIconButton(
+              tooltip: 'Refresh Library',
+              onPressed: refreshDisabled ? null : onRefresh,
+              icon: Icons.refresh_rounded,
+              size: 46,
+              iconSize: 19,
+            ),
+          ],
+        ),
+        if (loading) ...[
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: const LinearProgressIndicator(minHeight: 2),
           ),
-          const SizedBox(height: WzSpacing.md),
-          Wrap(
-            spacing: WzSpacing.xs,
-            runSpacing: WzSpacing.xs,
+        ],
+        const SizedBox(height: 22),
+        _PrimaryLibraryTile(
+          icon: Icons.library_music_rounded,
+          title: 'All music',
+          subtitle: combinedTrackCount == 0 ? 'Nothing here yet' : '$combinedTrackCount tracks',
+          selected: librarySourceFilter == WzLibrarySourceFilter.all,
+          onTap: () => onSourceFilterChanged(WzLibrarySourceFilter.all),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _LibraryDestinationTile(
+                icon: Icons.phone_android_rounded,
+                title: 'Device Music',
+                subtitle: deviceTrackCount == 0 ? 'Add music from this phone' : '$deviceTrackCount tracks',
+                selected: librarySourceFilter == WzLibrarySourceFilter.device,
+                onTap: deviceTrackCount == 0 ? onImportDeviceMusic : () => onSourceFilterChanged(WzLibrarySourceFilter.device),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _LibraryDestinationTile(
+                icon: Icons.download_done_rounded,
+                title: 'Downloads',
+                subtitle: cachedTrackCount == 0 ? 'Nothing saved yet' : '$cachedTrackCount offline',
+                selected: librarySourceFilter == WzLibrarySourceFilter.downloads,
+                onTap: () => onSourceFilterChanged(WzLibrarySourceFilter.downloads),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _PrimaryLibraryTile(
+          icon: Icons.playlist_play_rounded,
+          title: 'Collections',
+          subtitle: 'Liked tracks and playlists',
+          selected: false,
+          onTap: onOpenCollections,
+        ),
+        if (deviceTrackCount > 0) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: refreshDisabled ? null : onImportDeviceMusic,
+              icon: const Icon(Icons.sync_rounded, size: 17),
+              label: const Text('Rescan device music'),
+            ),
+          ),
+        ],
+        if (catalogProblem && apiTrackCount == 0 && deviceTrackCount == 0 && cachedTrackCount == 0) ...[
+          const SizedBox(height: 8),
+          Text('Online music is unavailable right now. Device Music still works.', style: WzText.caption.copyWith(color: WzColors.warning)),
+        ],
+        if (deviceLastError != null) ...[
+          const SizedBox(height: 6),
+          Text(deviceLastError!, style: WzText.caption.copyWith(color: WzColors.warning)),
+        ],
+        if (showCloudSource) ...[
+          const SizedBox(height: 10),
+          _PrimaryLibraryTile(
+            icon: Icons.cloud_outlined,
+            title: 'Cloud preview',
+            subtitle: '$cloudTrackCount developer entries',
+            selected: librarySourceFilter == WzLibrarySourceFilter.cloud,
+            onTap: onOpenCloudVault,
+          ),
+        ],
+        const SizedBox(height: 18),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
             children: WzLibrarySourceFilter.values
                 .where((filter) => showCloudSource || filter != WzLibrarySourceFilter.cloud)
                 .map(
-                  (filter) => ChoiceChip(
-                    avatar: Icon(wzLibrarySourceFilterIcon(filter), size: 16),
-                    label: Text(wzLibrarySourceFilterShortLabel(filter), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    selected: librarySourceFilter == filter,
-                    onSelected: (_) => onSourceFilterChanged(filter),
+                  (filter) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      avatar: Icon(wzLibrarySourceFilterIcon(filter), size: 15),
+                      label: Text(wzLibrarySourceFilterShortLabel(filter)),
+                      selected: librarySourceFilter == filter,
+                      onSelected: (_) => onSourceFilterChanged(filter),
+                    ),
                   ),
                 )
                 .toList(growable: false),
           ),
-          const SizedBox(height: WzSpacing.sm),
-          Wrap(
-            spacing: WzSpacing.sm,
-            runSpacing: WzSpacing.sm,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              FilledButton.tonalIcon(onPressed: refreshDisabled ? null : onImportDeviceMusic, icon: const Icon(Icons.perm_media_rounded), label: Text(deviceTrackCount == 0 ? 'Import Device music' : 'Rescan Device music')),
-              OutlinedButton.icon(onPressed: onOpenCollections, icon: const Icon(Icons.playlist_play_rounded), label: const Text('Collections / Playlists')),
-              OutlinedButton.icon(onPressed: onOpenFullSearch, icon: const Icon(Icons.search_rounded), label: const Text('Open full search')),
-              if (showCloudSource) OutlinedButton.icon(onPressed: onOpenCloudVault, icon: const Icon(Icons.cloud_done_outlined), label: const Text('Cloud Vault')),
-              WzStatusPill(label: devicePermissionStatus == 'granted' ? 'Device access ready' : 'Device access optional', active: devicePermissionStatus == 'granted', icon: Icons.phone_android_rounded),
-              WzStatusPill(label: 'Device music • $deviceScanStatus • $deviceTrackCount tracks', active: deviceTrackCount > 0, icon: Icons.library_music_rounded),
-            ],
-          ),
-          if (deviceLastError != null) ...[
-            const SizedBox(height: WzSpacing.xs),
-            Text(deviceLastError!, style: WzText.caption.copyWith(color: WzColors.warning)),
-          ],
-        ],
-      );
+        ),
+      ],
+    );
+  }
 }
 
 IconData wzLibrarySourceFilterIcon(WzLibrarySourceFilter filter) => switch (filter) {
       WzLibrarySourceFilter.all => Icons.library_music_rounded,
-      WzLibrarySourceFilter.api => Icons.cloud_queue_rounded,
+      WzLibrarySourceFilter.api => Icons.public_rounded,
       WzLibrarySourceFilter.device => Icons.phone_android_rounded,
       WzLibrarySourceFilter.downloads => Icons.download_done_rounded,
-      WzLibrarySourceFilter.cloud => Icons.cloud_done_outlined,
+      WzLibrarySourceFilter.cloud => Icons.cloud_outlined,
     };
 
 String wzLibrarySourceFilterShortLabel(WzLibrarySourceFilter filter) => switch (filter) {
       WzLibrarySourceFilter.all => 'All',
-      WzLibrarySourceFilter.api => 'Catalog',
+      WzLibrarySourceFilter.api => 'Online',
       WzLibrarySourceFilter.device => 'Device',
       WzLibrarySourceFilter.downloads => 'Downloads',
       WzLibrarySourceFilter.cloud => 'Cloud',
     };
 
-class _LibrarySourceSummaryCard extends StatelessWidget {
-  const _LibrarySourceSummaryCard({required this.title, required this.detail, required this.status, required this.icon, required this.active});
+class _PrimaryLibraryTile extends StatelessWidget {
+  const _PrimaryLibraryTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
 
-  final String title;
-  final String detail;
-  final String status;
   final IconData icon;
-  final bool active;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => AnimatedContainer(
-        duration: WzMotion.normal,
-        curve: WzMotion.curve,
-        constraints: const BoxConstraints(minWidth: 132, maxWidth: 240),
-        padding: const EdgeInsets.all(WzSpacing.sm),
-        decoration: WzSurface.sculpted(selected: active),
+  Widget build(BuildContext context) => WzPressableSurface(
+        onTap: onTap,
+        radius: 30,
+        decoration: WzSurface.sculpted(selected: selected),
+        padding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
+        child: Row(
+          children: [
+            WzSculptedIcon(icon: icon, size: 46, iconSize: 20, color: selected ? WzColors.accent : WzColors.textPrimary),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: WzText.sectionTitle),
+                  const SizedBox(height: 3),
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 15, color: WzColors.textSubtle),
+          ],
+        ),
+      );
+}
+
+class _LibraryDestinationTile extends StatelessWidget {
+  const _LibraryDestinationTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => WzPressableSurface(
+        onTap: onTap,
+        radius: 28,
+        decoration: WzSurface.sculpted(selected: selected),
+        padding: const EdgeInsets.all(13),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            WzSculptedIcon(icon: icon, size: 42, iconSize: 18, color: active ? WzColors.accent : WzColors.textMuted),
-            const SizedBox(height: WzSpacing.xs),
-            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-            const SizedBox(height: 4),
-            Text(detail, style: WzText.caption.copyWith(color: WzColors.textPrimary, fontWeight: FontWeight.w700)),
+            WzSculptedIcon(icon: icon, size: 42, iconSize: 18, color: selected ? WzColors.accent : WzColors.textPrimary),
+            const SizedBox(height: 12),
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 14)),
             const SizedBox(height: 3),
-            Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+            Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
           ],
         ),
       );
