@@ -27,11 +27,8 @@ import 'listening_history_service.dart';
 import 'player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
+import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
-
-enum _AppMode { consumer, developer }
-
-enum _AppTab { home, library, now, queue, search, collections, collectionDetail, downloads, storage, history, settings, engine }
 
 enum WzRepeatMode { off, one, all }
 
@@ -74,27 +71,6 @@ extension _SleepTimerPresetLabel on _SleepTimerPreset {
         _SleepTimerPreset.minutes60 => const Duration(minutes: 60),
       };
 }
-
-class _ShellDestination {
-  const _ShellDestination({required this.tab, required this.label, required this.icon});
-
-  final _AppTab tab;
-  final String label;
-  final IconData icon;
-}
-
-const _consumerShellDestinations = <_ShellDestination>[
-  _ShellDestination(tab: _AppTab.home, label: 'Home', icon: Icons.home_filled),
-  _ShellDestination(tab: _AppTab.library, label: 'Library', icon: Icons.library_music),
-  _ShellDestination(tab: _AppTab.now, label: 'Now', icon: Icons.play_circle_fill),
-  _ShellDestination(tab: _AppTab.queue, label: 'Queue', icon: Icons.queue_music),
-  _ShellDestination(tab: _AppTab.downloads, label: 'Downloads', icon: Icons.download_done),
-];
-
-const _developerShellDestinations = <_ShellDestination>[
-  ..._consumerShellDestinations,
-  _ShellDestination(tab: _AppTab.engine, label: 'Engine', icon: Icons.engineering),
-];
 
 String _catalogModeLabel(String? contentMode, int trackCount) {
   final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
@@ -269,8 +245,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   PlayerOperation _operation = PlayerOperation.idle;
   bool _refreshingMetrics = false;
   bool _showMetrics = false;
-  _AppMode _appMode = _AppMode.consumer;
-  _AppTab _selectedTab = _AppTab.home;
+  WzAppMode _appMode = WzAppMode.consumer;
+  WzAppTab _selectedTab = WzAppTab.home;
   bool _autoAdvanceEnabled = true;
   bool _shuffleEnabled = false;
   WzRepeatMode _repeatMode = WzRepeatMode.off;
@@ -663,7 +639,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool get _catalogRefreshDisabled => _operation.disablesCatalogRefresh;
   bool get _queueDisabled => _operation.disablesQueueControls;
   bool get _manualDisabled => _operation.disablesManualTrackControls;
-  bool get _developerMode => _appMode == _AppMode.developer;
+  bool get _developerMode => _appMode == WzAppMode.developer;
   bool get _showDeveloperControls => widget.appConfig.showDeveloperEntry || _developerMode;
   bool get _allowManualApiSetup => widget.appConfig.allowManualApiSetup && _developerMode;
 
@@ -919,7 +895,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   void _openSearch({String? query}) {
     if (query != null) _fullSearchController.text = query;
-    setState(() => _selectedTab = _AppTab.search);
+    setState(() => _selectedTab = WzAppTab.search);
   }
 
   Future<void> _loadCollections() async {
@@ -1274,14 +1250,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (!mounted) return;
     setState(() {
       _selectedCollectionId = collection.id;
-      _selectedTab = _AppTab.collectionDetail;
+      _selectedTab = WzAppTab.collectionDetail;
     });
   }
 
   void _openCollection(WzCollection collection) {
     setState(() {
       _selectedCollectionId = collection.id;
-      _selectedTab = _AppTab.collectionDetail;
+      _selectedTab = WzAppTab.collectionDetail;
     });
   }
 
@@ -1337,31 +1313,31 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final savedMode = prefs.getString(_appModePreferenceKey);
     if (!mounted) return;
     setState(() {
-      _appMode = savedMode == _AppMode.developer.name && widget.appConfig.showDeveloperEntry ? _AppMode.developer : _AppMode.consumer;
-      if (_appMode == _AppMode.consumer && _selectedTab == _AppTab.engine) {
-        _selectedTab = _AppTab.home;
+      _appMode = savedMode == WzAppMode.developer.name && widget.appConfig.showDeveloperEntry ? WzAppMode.developer : WzAppMode.consumer;
+      if (_appMode == WzAppMode.consumer && _selectedTab == WzAppTab.engine) {
+        _selectedTab = WzAppTab.home;
       }
     });
   }
 
-  Future<void> _setAppMode(_AppMode mode) async {
+  Future<void> _setAppMode(WzAppMode mode) async {
     final messenger = ScaffoldMessenger.of(context);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_appModePreferenceKey, mode.name);
     if (!mounted) return;
     setState(() {
       _appMode = mode;
-      if (mode == _AppMode.consumer && _selectedTab == _AppTab.engine) {
-        _selectedTab = _AppTab.home;
+      if (mode == WzAppMode.consumer && _selectedTab == WzAppTab.engine) {
+        _selectedTab = WzAppTab.home;
       }
     });
     messenger.showSnackBar(
-      SnackBar(content: Text(mode == _AppMode.developer ? 'Developer mode enabled' : 'Consumer mode enabled')),
+      SnackBar(content: Text(mode == WzAppMode.developer ? 'Developer mode enabled' : 'Consumer mode enabled')),
     );
   }
 
   Future<void> _toggleAppMode() {
-    return _setAppMode(_developerMode ? _AppMode.consumer : _AppMode.developer);
+    return _setAppMode(_developerMode ? WzAppMode.consumer : WzAppMode.developer);
   }
 
   Future<void> _setShuffleEnabled(bool enabled) async {
@@ -1459,8 +1435,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer ended')));
   }
 
-  void _navigateTo(_AppTab tab) {
-    if (tab == _AppTab.engine && !_developerMode) return;
+  void _navigateTo(WzAppTab tab) {
+    if (tab == WzAppTab.engine && !_developerMode) return;
     setState(() => _selectedTab = tab);
   }
 
@@ -2988,7 +2964,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           onAddToQueue: currentTrack == null ? null : () => _addToQueue(currentTrack),
           onOpenQueue: () {
             Navigator.of(sheetContext).maybePop();
-            _navigateTo(_AppTab.queue);
+            _navigateTo(WzAppTab.queue);
           },
         ),
       ),
@@ -3024,7 +3000,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               subtitle: _manifest?.subtitle ?? 'Playback continues in the mini player.',
               sourceLabel: isDevicePlayback ? 'Device music' : _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
               isPlaying: _metrics.isPlaying,
-              onOpenNow: () => _navigateTo(_AppTab.now),
+              onOpenNow: () => _navigateTo(WzAppTab.now),
             )
           else
             _CurrentListeningCard(
@@ -3043,7 +3019,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             shelves: _resolvedCuratedShelves,
             onPlayPick: (pick) => _loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded WaveZero Pick: ${pick.track.title}'),
             onAddToQueue: (pick) => _addToQueue(pick.track),
-            onOpenLibrary: () => _navigateTo(_AppTab.library),
+            onOpenLibrary: () => _navigateTo(WzAppTab.library),
           ),
           const SizedBox(height: WzSpacing.md),
           _HomeHistorySection(
@@ -3055,15 +3031,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onAddToQueue: (entry) => unawaited(_addHistoryEntryToQueue(entry)),
             onAddToCollection: (entry) => unawaited(_addHistoryEntryToCollection(entry)),
             onRemove: (entry) => unawaited(_removeHistoryEntry(entry)),
-            onViewAll: () => _navigateTo(_AppTab.history),
+            onViewAll: () => _navigateTo(WzAppTab.history),
           ),
           const SizedBox(height: WzSpacing.md),
           _HomeCollectionsOfflineSection(
             collections: _collections,
             offlineTrackCount: _offlineCachedTrackCount,
             cacheBytes: _cacheBytes,
-            onOpenCollections: () => _navigateTo(_AppTab.collections),
-            onOpenDownloads: () => _navigateTo(_AppTab.downloads),
+            onOpenCollections: () => _navigateTo(WzAppTab.collections),
+            onOpenDownloads: () => _navigateTo(WzAppTab.downloads),
           ),
           const SizedBox(height: WzSpacing.md),
           _SmartEngineCards(
@@ -3124,7 +3100,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onToggleLike: _currentKnownTrack == null ? null : () => _toggleLikedTrack(_currentKnownTrack!),
             onAddToCollection: _currentKnownTrack == null ? null : () => _showAddToCollectionSheet(_currentKnownTrack!),
             onAddToQueue: _currentKnownTrack == null ? null : () => _addToQueue(_currentKnownTrack!),
-            onOpenQueue: () => _navigateTo(_AppTab.queue),
+            onOpenQueue: () => _navigateTo(WzAppTab.queue),
             offlineReady: _offlineLibraryAvailable,
             shuffleEnabled: _shuffleEnabled,
             repeatMode: _repeatMode,
@@ -3289,7 +3265,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onToggleLike: _toggleLikedTrack,
             onAddToCollection: _showAddToCollectionSheet,
             isLiked: (track) => _isLiked(track.trackId),
-            onOpenCollections: () => _navigateTo(_AppTab.collections),
+            onOpenCollections: () => _navigateTo(WzAppTab.collections),
             onCache: (track) => _toggleCache(track),
             onDeleteCachedTrack: (track) {
               final cached = _cachedMetadataForTrack(track);
@@ -3305,7 +3281,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       _CollectionsPage(
         collections: _collections,
-        onBack: () => _navigateTo(_AppTab.home),
+        onBack: () => _navigateTo(WzAppTab.home),
         onOpen: _openCollection,
         onCreate: _createCollectionFromPage,
         onRename: _showRenameCollectionDialog,
@@ -3313,7 +3289,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       _CollectionDetailPage(
         collection: _selectedCollection ?? _likedCollection,
-        onBack: () => _navigateTo(_AppTab.collections),
+        onBack: () => _navigateTo(WzAppTab.collections),
         onPlayFirst: (collection) {
           if (collection.tracks.isNotEmpty) unawaited(_playCollectionSnapshot(collection.tracks.first));
         },
@@ -3340,13 +3316,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onPlay: (track) => _loadCatalogTrack(trackId: track.trackId, autoPlay: true),
             onDelete: _deleteCachedTrack,
             onClearAll: _clearCache,
-            onManageStorage: () => _navigateTo(_AppTab.storage),
+            onManageStorage: () => _navigateTo(WzAppTab.storage),
           ),
         ],
       ),
       _StorageManagerPage(
         downloads: _cachedLibrary,
-        onBack: () => _navigateTo(_AppTab.downloads),
+        onBack: () => _navigateTo(WzAppTab.downloads),
         cacheBytes: _cacheBytes,
         trackBytes: _cachedTrackBytes,
         manualDownloadedCount: _manualDownloadedCount,
@@ -3361,7 +3337,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       _SearchPage(
         controller: _fullSearchController,
-        onBack: () => _navigateTo(_AppTab.home),
+        onBack: () => _navigateTo(WzAppTab.home),
         filter: _searchFilter,
         results: _filteredSearchResults,
         allResultCount: _allSearchResults.length,
@@ -3389,7 +3365,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       _ListeningHistoryPage(
         entries: _listeningHistory,
-        onBack: () => _navigateTo(_AppTab.home),
+        onBack: () => _navigateTo(WzAppTab.home),
         mostPlayedEntry: _mostPlayedHistoryEntry,
         resolver: _resolveHistoryEntry,
         onPlay: (entry) => unawaited(_playHistoryEntry(entry)),
@@ -3406,7 +3382,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             subtitle: 'Advanced playback, preload, cache, quality, and effects diagnostics remain available.',
           ),
           const SizedBox(height: WzSpacing.md),
-          _DeveloperModePanel(enabled: _developerMode, onChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer)),
+          _DeveloperModePanel(enabled: _developerMode, onChanged: (enabled) => _setAppMode(enabled ? WzAppMode.developer : WzAppMode.consumer)),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(
             title: 'Content Server',
@@ -3578,47 +3554,47 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       catalogStatusLabel: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
       showDeveloperEntry: _showDeveloperControls,
       appMode: _appMode,
-      onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? _AppMode.developer : _AppMode.consumer),
-      onOpenEngine: _developerMode ? () => _navigateTo(_AppTab.engine) : null,
-      onManageStorage: () => _navigateTo(_AppTab.storage),
+      onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? WzAppMode.developer : WzAppMode.consumer),
+      onOpenEngine: _developerMode ? () => _navigateTo(WzAppTab.engine) : null,
+      onManageStorage: () => _navigateTo(WzAppTab.storage),
       cloudVaultCount: _cloudVaultTracks.length,
       onOpenCloudVault: _openCloudVaultPage,
       onClearCloudVault: _cloudVaultTracks.isEmpty ? null : () => unawaited(_clearCloudVaultTracks()),
       listeningHistoryCount: _listeningHistory.length,
       mostPlayedHistoryTitle: _mostPlayedHistoryEntry?.title,
-      onOpenHistory: () => _navigateTo(_AppTab.history),
+      onOpenHistory: () => _navigateTo(WzAppTab.history),
       onOpenSearch: () => _openSearch(),
       onClearRecentSearches: _recentSearches.isEmpty ? null : () => unawaited(_clearRecentSearches()),
       onClearListeningHistory: _listeningHistory.isEmpty ? null : () => unawaited(_clearListeningHistory()),
       legalTracks: _libraryTracks,
     );
 
-    final destinations = _developerMode ? _developerShellDestinations : _consumerShellDestinations;
-    final currentTab = _selectedTab == _AppTab.engine && !_developerMode ? _AppTab.home : _selectedTab;
+    final destinations = _developerMode ? wzDeveloperShellDestinations : wzConsumerShellDestinations;
+    final currentTab = _selectedTab == WzAppTab.engine && !_developerMode ? WzAppTab.home : _selectedTab;
     final currentIndex = destinations.indexWhere((destination) => destination.tab == currentTab);
     final selectedDestination = destinations[currentIndex < 0 ? 0 : currentIndex];
     final selectedTabLabel = switch (_selectedTab) {
-      _AppTab.settings => 'Settings',
-      _AppTab.storage => 'Storage Manager',
-      _AppTab.history => 'Listening History',
-      _AppTab.search => 'Search',
-      _AppTab.collections => 'Collections',
-      _AppTab.collectionDetail => _selectedCollection?.name ?? 'Collection',
+      WzAppTab.settings => 'Settings',
+      WzAppTab.storage => 'Storage Manager',
+      WzAppTab.history => 'Listening History',
+      WzAppTab.search => 'Search',
+      WzAppTab.collections => 'Collections',
+      WzAppTab.collectionDetail => _selectedCollection?.name ?? 'Collection',
       _ => selectedDestination.label,
     };
     final currentPage = switch (currentTab) {
-      _AppTab.home => pages[0],
-      _AppTab.now => pages[1],
-      _AppTab.queue => pages[2],
-      _AppTab.library => pages[3],
-      _AppTab.collections => pages[4],
-      _AppTab.collectionDetail => pages[5],
-      _AppTab.search => pages[8],
-      _AppTab.downloads => pages[6],
-      _AppTab.storage => pages[7],
-      _AppTab.history => pages[9],
-      _AppTab.settings => settingsPage,
-      _AppTab.engine => pages[10],
+      WzAppTab.home => pages[0],
+      WzAppTab.now => pages[1],
+      WzAppTab.queue => pages[2],
+      WzAppTab.library => pages[3],
+      WzAppTab.collections => pages[4],
+      WzAppTab.collectionDetail => pages[5],
+      WzAppTab.search => pages[8],
+      WzAppTab.downloads => pages[6],
+      WzAppTab.storage => pages[7],
+      WzAppTab.history => pages[9],
+      WzAppTab.settings => settingsPage,
+      WzAppTab.engine => pages[10],
     };
 
     return Scaffold(
@@ -3639,7 +3615,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   appMode: _appMode,
                   themeConfig: widget.themeConfig,
                   onLogoLongPress: _toggleAppMode,
-                  onOpenSettings: () => _navigateTo(_AppTab.settings),
+                  onOpenSettings: () => _navigateTo(WzAppTab.settings),
                 ),
                 Expanded(child: currentPage),
               ],
@@ -4983,7 +4959,7 @@ class _SettingsPage extends StatelessWidget {
   final String contentModeLabel;
   final String catalogStatusLabel;
   final bool showDeveloperEntry;
-  final _AppMode appMode;
+  final WzAppMode appMode;
   final ValueChanged<bool> onDeveloperModeChanged;
   final VoidCallback? onOpenEngine;
   final VoidCallback onManageStorage;
@@ -5293,11 +5269,11 @@ class _SettingsPage extends StatelessWidget {
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Developer Mode'),
-                    subtitle: Text(appMode == _AppMode.developer ? 'On — Engine diagnostics are available in the bottom navigation.' : 'Off — consumer navigation stays clean.'),
-                    value: appMode == _AppMode.developer,
+                    subtitle: Text(appMode == WzAppMode.developer ? 'On — Engine diagnostics are available in the bottom navigation.' : 'Off — consumer navigation stays clean.'),
+                    value: appMode == WzAppMode.developer,
                     onChanged: onDeveloperModeChanged,
                   ),
-                  if (appMode == _AppMode.developer) ...[
+                  if (appMode == WzAppMode.developer) ...[
                     const SizedBox(height: WzSpacing.xs),
                     const Text('Engine diagnostics remain in the Engine tab and are not shown as raw metrics on consumer Settings.', style: WzText.caption),
                     const SizedBox(height: WzSpacing.sm),
@@ -5470,7 +5446,7 @@ class _ProductShellHeader extends StatelessWidget {
   final String libraryStatus;
   final bool libraryStatusActive;
   final bool libraryStatusWarning;
-  final _AppMode appMode;
+  final WzAppMode appMode;
   final WzThemeConfig themeConfig;
   final VoidCallback onLogoLongPress;
   final VoidCallback onOpenSettings;
@@ -5513,7 +5489,7 @@ class _ProductShellHeader extends StatelessWidget {
                         ),
                         const SizedBox(height: WzSpacing.xxs),
                         Text(
-                          appMode == _AppMode.developer
+                          appMode == WzAppMode.developer
                               ? '$selectedTabLabel • Developer mode • $engineSummary'
                               : '$selectedTabLabel • $libraryStatus',
                           maxLines: 1,
@@ -5816,7 +5792,7 @@ class _SmartEngineCards extends StatelessWidget {
 class _HomeQuickActions extends StatelessWidget {
   const _HomeQuickActions({required this.onNavigate, required this.showDeveloperTools});
 
-  final ValueChanged<_AppTab> onNavigate;
+  final ValueChanged<WzAppTab> onNavigate;
   final bool showDeveloperTools;
 
   @override
@@ -5829,14 +5805,14 @@ class _HomeQuickActions extends StatelessWidget {
               spacing: WzSpacing.sm,
               runSpacing: WzSpacing.sm,
               children: [
-                WzPrimaryAction(label: 'Search music', icon: Icons.search, onPressed: () => onNavigate(_AppTab.search)),
-                WzPrimaryAction(label: 'Library', icon: Icons.library_music, onPressed: () => onNavigate(_AppTab.library)),
-                WzPrimaryAction(label: 'Collections', icon: Icons.playlist_play, onPressed: () => onNavigate(_AppTab.collections)),
-                WzPrimaryAction(label: 'Now Playing', icon: Icons.play_circle_fill, onPressed: () => onNavigate(_AppTab.now)),
-                WzPrimaryAction(label: 'Queue', icon: Icons.queue_music, onPressed: () => onNavigate(_AppTab.queue)),
-                WzPrimaryAction(label: 'Downloads', icon: Icons.download_done, onPressed: () => onNavigate(_AppTab.downloads)),
-                WzPrimaryAction(label: 'Settings', icon: Icons.settings, onPressed: () => onNavigate(_AppTab.settings)),
-                if (showDeveloperTools) WzPrimaryAction(label: 'Engine', icon: Icons.engineering, onPressed: () => onNavigate(_AppTab.engine)),
+                WzPrimaryAction(label: 'Search music', icon: Icons.search, onPressed: () => onNavigate(WzAppTab.search)),
+                WzPrimaryAction(label: 'Library', icon: Icons.library_music, onPressed: () => onNavigate(WzAppTab.library)),
+                WzPrimaryAction(label: 'Collections', icon: Icons.playlist_play, onPressed: () => onNavigate(WzAppTab.collections)),
+                WzPrimaryAction(label: 'Now Playing', icon: Icons.play_circle_fill, onPressed: () => onNavigate(WzAppTab.now)),
+                WzPrimaryAction(label: 'Queue', icon: Icons.queue_music, onPressed: () => onNavigate(WzAppTab.queue)),
+                WzPrimaryAction(label: 'Downloads', icon: Icons.download_done, onPressed: () => onNavigate(WzAppTab.downloads)),
+                WzPrimaryAction(label: 'Settings', icon: Icons.settings, onPressed: () => onNavigate(WzAppTab.settings)),
+                if (showDeveloperTools) WzPrimaryAction(label: 'Engine', icon: Icons.engineering, onPressed: () => onNavigate(WzAppTab.engine)),
               ],
             ),
           ],
@@ -8309,7 +8285,7 @@ class _LegalLicensesPage extends StatelessWidget {
   const _LegalLicensesPage({required this.tracks, required this.appMode});
 
   final List<CatalogTrackSummary> tracks;
-  final _AppMode appMode;
+  final WzAppMode appMode;
 
   @override
   Widget build(BuildContext context) {
@@ -8360,7 +8336,7 @@ class _LegalLicensesPage extends StatelessWidget {
                 if (uniqueTracks.isEmpty)
                   const WzPanel(child: Text('No license entries yet. Load the Catalog or import Device music to review rights labels.', style: WzText.body))
                 else
-                  ...uniqueTracks.values.map((track) => _LegalTrackCard(track: track, developerMode: appMode == _AppMode.developer)),
+                  ...uniqueTracks.values.map((track) => _LegalTrackCard(track: track, developerMode: appMode == WzAppMode.developer)),
               ],
             ),
           ),
