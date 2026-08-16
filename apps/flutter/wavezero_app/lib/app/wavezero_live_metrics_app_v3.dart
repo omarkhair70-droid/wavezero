@@ -795,6 +795,26 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool get _showDeveloperControls => widget.appConfig.showDeveloperEntry || _developerMode;
   bool get _allowManualApiSetup => widget.appConfig.allowManualApiSetup && _developerMode;
 
+  String get _consumerLibraryHeaderStatus {
+    if (_offlineLibraryAvailable) return 'Offline Ready';
+    if (_deviceMusicTracks.isNotEmpty) return 'Device music ready';
+    if (_catalog.isNotEmpty) return _contentStatus?.friendlyLabel ?? 'Catalog ready';
+
+    final normalized = _catalogStatus.toLowerCase();
+    if (normalized.contains('loading')) return 'Loading library';
+    if (normalized.contains('unavailable') ||
+        normalized.contains('error') ||
+        normalized.contains('exception') ||
+        normalized.contains('failed')) {
+      return 'Catalog unavailable';
+    }
+    return 'Library ready';
+  }
+
+  bool get _consumerLibraryHeaderWarning => _consumerLibraryHeaderStatus == 'Catalog unavailable';
+  bool get _consumerLibraryHeaderActive =>
+      !_consumerLibraryHeaderWarning && _consumerLibraryHeaderStatus != 'Loading library';
+
   String get _statusText {
     if ((_lastError ?? _metrics.playbackError) != null) return 'Error';
     if (_operation != PlayerOperation.idle) return _operation.displayName;
@@ -2146,7 +2166,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   ))
               .toList(growable: false);
           setState(() {
-            _lastError = error.toString();
+            _lastError = null;
             _contentStatus = null;
             _catalog = offlineTracks;
             _catalogTrackIds = offlineTracks.map((track) => track.trackId).toSet();
@@ -2166,7 +2186,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           });
         } else {
           setState(() {
-            _lastError = error.toString();
+            _lastError = null;
             _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track.' : WaveZeroReleaseCopy.catalogUnavailable;
             _contentStatus = null;
             _offlineCachedTrackCount = 0;
@@ -3711,7 +3731,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   selectedTabLabel: selectedTabLabel,
                   status: _statusText,
                   engineSummary: engineSummary,
-                  offlineReady: _offlineLibraryAvailable,
+                  libraryStatus: _consumerLibraryHeaderStatus,
+                  libraryStatusActive: _consumerLibraryHeaderActive,
+                  libraryStatusWarning: _consumerLibraryHeaderWarning,
                   appMode: _appMode,
                   themeConfig: widget.themeConfig,
                   onLogoLongPress: _toggleAppMode,
@@ -5531,7 +5553,9 @@ class _ProductShellHeader extends StatelessWidget {
     required this.selectedTabLabel,
     required this.status,
     required this.engineSummary,
-    required this.offlineReady,
+    required this.libraryStatus,
+    required this.libraryStatusActive,
+    required this.libraryStatusWarning,
     required this.appMode,
     required this.themeConfig,
     required this.onLogoLongPress,
@@ -5541,7 +5565,9 @@ class _ProductShellHeader extends StatelessWidget {
   final String selectedTabLabel;
   final String status;
   final String engineSummary;
-  final bool offlineReady;
+  final String libraryStatus;
+  final bool libraryStatusActive;
+  final bool libraryStatusWarning;
   final _AppMode appMode;
   final WzThemeConfig themeConfig;
   final VoidCallback onLogoLongPress;
@@ -5587,7 +5613,7 @@ class _ProductShellHeader extends StatelessWidget {
                         Text(
                           appMode == _AppMode.developer
                               ? '$selectedTabLabel • Developer mode • $engineSummary'
-                              : '$selectedTabLabel • ${offlineReady ? 'Offline listening ready' : 'Music library ready'}',
+                              : '$selectedTabLabel • $libraryStatus',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: WzText.caption,
@@ -5608,7 +5634,16 @@ class _ProductShellHeader extends StatelessWidget {
                 runSpacing: WzSpacing.xs,
                 children: [
                   WzStatusPill(label: status, active: status == 'Playing', warning: status == 'Error', icon: Icons.radio_button_checked),
-                  WzStatusPill(label: offlineReady ? 'Offline Ready' : 'Catalog ready', active: offlineReady, icon: Icons.offline_pin),
+                  WzStatusPill(
+                    label: libraryStatus,
+                    active: libraryStatusActive,
+                    warning: libraryStatusWarning,
+                    icon: libraryStatus == 'Offline Ready'
+                        ? Icons.offline_pin
+                        : libraryStatus == 'Device music ready'
+                            ? Icons.phone_android
+                            : Icons.library_music,
+                  ),
                 ],
               ),
             ],
