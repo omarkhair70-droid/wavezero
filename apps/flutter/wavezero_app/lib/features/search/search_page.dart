@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../../app/curated_demo_picks.dart';
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../../shared/media/media_presentation.dart';
@@ -10,6 +13,7 @@ import '../history/history_presentation.dart';
 import '../history/listening_history_service.dart';
 import 'search_controls.dart';
 import 'search_results.dart';
+import 'search_page_support.dart';
 
 class WzSearchPage extends StatelessWidget {
   const WzSearchPage({
@@ -113,7 +117,7 @@ class WzSearchPage extends StatelessWidget {
         const SizedBox(height: WzSpacing.md),
         if (!hasQuery) ...[
           if (curatedPicks.isNotEmpty) ...[
-            _CuratedTryPicksPanel(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
+            WzCuratedTryPicksPanel(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
             const SizedBox(height: WzSpacing.md),
           ],
           if (recentSearches.isNotEmpty) ...[
@@ -189,7 +193,7 @@ class _SearchResultCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(backgroundColor: const Color(0xFF20283A), child: Icon(_searchResultIcon(result), color: WzColors.textPrimary)),
+                CircleAvatar(backgroundColor: const Color(0xFF20283A), child: Icon(wzSearchResultIcon(result), color: WzColors.textPrimary)),
                 const SizedBox(width: WzSpacing.sm),
                 Expanded(
                   child: Column(
@@ -206,7 +210,7 @@ class _SearchResultCard extends StatelessWidget {
             const SizedBox(height: WzSpacing.sm),
             Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
               WzStatusPill(label: wzSearchSourceLabel(result.source), active: true, icon: Icons.label_outline),
-              WzStatusPill(label: wzSearchTypeLabel(result.type), icon: _searchResultIcon(result)),
+              WzStatusPill(label: wzSearchTypeLabel(result.type), icon: wzSearchResultIcon(result)),
               if (result.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(result.qualityLabel!), icon: Icons.high_quality),
               if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component),
               if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy),

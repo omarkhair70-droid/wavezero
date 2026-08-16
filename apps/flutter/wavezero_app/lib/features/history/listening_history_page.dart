@@ -58,7 +58,7 @@ class WzListeningHistoryPage extends StatelessWidget {
                 if (entries.isEmpty)
                   const Text('No listening history yet. Play a track to start.', style: WzText.body)
                 else
-                  ...entries.map((entry) => _HistoryEntryTile(
+                  ...entries.map((entry) => WzHistoryEntryTile(
                         entry: entry,
                         available: resolver(entry) != null,
                         onPlay: () => onPlay(entry),
@@ -75,8 +75,8 @@ class WzListeningHistoryPage extends StatelessWidget {
       );
 }
 
-class _HistoryEntryTile extends StatelessWidget {
-  const _HistoryEntryTile({
+class WzHistoryEntryTile extends StatelessWidget {
+  const WzHistoryEntryTile({
     required this.entry,
     required this.available,
     required this.onPlay,

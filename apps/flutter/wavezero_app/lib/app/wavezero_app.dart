@@ -3691,7 +3691,7 @@ class _HomeHistorySection extends StatelessWidget {
               if (recent.isEmpty)
                 const Text('No listening history yet. Play a track to start.', style: WzText.body)
               else
-                ...recent.map((entry) => _HistoryEntryTile(
+                ...recent.map((entry) => WzHistoryEntryTile(
                       entry: entry,
                       available: resolver(entry) != null,
                       compact: true,
