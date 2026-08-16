@@ -77,7 +77,10 @@ void main() {
     await tester.tap(find.byIcon(Icons.favorite_border_rounded));
     expect(liked, isTrue);
 
-    await tester.tap(find.text('Up next'));
+    final upNext = find.text('Up next');
+    await tester.ensureVisible(upNext);
+    await tester.pumpAndSettle();
+    await tester.tap(upNext);
     expect(queueOpened, isTrue);
   });
 }
