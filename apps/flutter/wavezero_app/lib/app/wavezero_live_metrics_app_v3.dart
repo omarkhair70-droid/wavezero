@@ -20,6 +20,7 @@ import '../playback/test_track.dart';
 import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
 import '../features/library/library_controls.dart';
+import '../features/search/search_controls.dart';
 import '../features/playback/playback_preferences.dart';
 import '../cache/cache_service.dart';
 import '../cloud_vault/cloud_vault_models.dart';
@@ -286,7 +287,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   ContentStatus? _contentStatus;
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
-  _SearchFilter _searchFilter = _SearchFilter.all;
+  WzSearchFilter _searchFilter = WzSearchFilter.all;
   List<String> _recentSearches = const <String>[];
   String _queueStatus = 'Queue is ready.';
   String _sessionStatus = 'Session recovery pending.';
@@ -3634,21 +3635,6 @@ enum WzSearchResultType { track, deviceTrack, downloadedTrack, cloudTrack, colle
 
 enum WzSearchSource { apiCatalog, deviceMusic, downloads, cloudVault, collections, history, legalDemo }
 
-enum _SearchFilter { all, songs, device, downloads, cloud, collections, history, legalDemo }
-
-extension _SearchFilterLabel on _SearchFilter {
-  String get label => switch (this) {
-        _SearchFilter.all => 'All',
-        _SearchFilter.songs => 'Songs',
-        _SearchFilter.device => 'Device',
-        _SearchFilter.downloads => 'Downloads',
-        _SearchFilter.cloud => 'Cloud',
-        _SearchFilter.collections => 'Collections',
-        _SearchFilter.history => 'History',
-        _SearchFilter.legalDemo => 'Legal / Demo',
-      };
-}
-
 class WzSearchResult {
   const WzSearchResult({
     required this.id,
@@ -3733,15 +3719,15 @@ IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
       WzSearchResultType.track || WzSearchResultType.unknown => Icons.music_note,
     };
 
-bool _searchFilterAllows(_SearchFilter filter, WzSearchResult result) => switch (filter) {
-      _SearchFilter.all => true,
-      _SearchFilter.songs => result.type == WzSearchResultType.track || result.type == WzSearchResultType.deviceTrack || result.type == WzSearchResultType.downloadedTrack || result.type == WzSearchResultType.cloudTrack,
-      _SearchFilter.device => result.source == WzSearchSource.deviceMusic,
-      _SearchFilter.downloads => result.source == WzSearchSource.downloads,
-      _SearchFilter.cloud => result.source == WzSearchSource.cloudVault,
-      _SearchFilter.collections => result.type == WzSearchResultType.collection || result.source == WzSearchSource.collections,
-      _SearchFilter.history => result.source == WzSearchSource.history,
-      _SearchFilter.legalDemo => result.source == WzSearchSource.legalDemo || result.license?.needsRightsWarning == true,
+bool _searchFilterAllows(WzSearchFilter filter, WzSearchResult result) => switch (filter) {
+      WzSearchFilter.all => true,
+      WzSearchFilter.songs => result.type == WzSearchResultType.track || result.type == WzSearchResultType.deviceTrack || result.type == WzSearchResultType.downloadedTrack || result.type == WzSearchResultType.cloudTrack,
+      WzSearchFilter.device => result.source == WzSearchSource.deviceMusic,
+      WzSearchFilter.downloads => result.source == WzSearchSource.downloads,
+      WzSearchFilter.cloud => result.source == WzSearchSource.cloudVault,
+      WzSearchFilter.collections => result.type == WzSearchResultType.collection || result.source == WzSearchSource.collections,
+      WzSearchFilter.history => result.source == WzSearchSource.history,
+      WzSearchFilter.legalDemo => result.source == WzSearchSource.legalDemo || result.license?.needsRightsWarning == true,
     };
 
 int _searchRank(WzSearchResult result, String query) {
@@ -4209,7 +4195,7 @@ class _SearchPage extends StatelessWidget {
 
   final TextEditingController controller;
   final VoidCallback onBack;
-  final _SearchFilter filter;
+  final WzSearchFilter filter;
   final List<WzSearchResult> results;
   final int allResultCount;
   final List<String> recentSearches;
@@ -4218,7 +4204,7 @@ class _SearchPage extends StatelessWidget {
   final List<WzCollection> collections;
   final List<CatalogTrackSummary> catalogTracks;
   final List<ResolvedCuratedDemoPick> curatedPicks;
-  final ValueChanged<_SearchFilter> onFilterChanged;
+  final ValueChanged<WzSearchFilter> onFilterChanged;
   final VoidCallback onClearQuery;
   final ValueChanged<String> onRecentSearch;
   final VoidCallback? onClearRecentSearches;
@@ -4263,7 +4249,7 @@ class _SearchPage extends StatelessWidget {
               Wrap(
                 spacing: WzSpacing.xs,
                 runSpacing: WzSpacing.xs,
-                children: _SearchFilter.values
+                children: WzSearchFilter.values
                     .map((item) => ChoiceChip(
                           label: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
                           selected: filter == item,
