@@ -17,6 +17,7 @@ import '../catalog/catalog_track_manifest.dart';
 import '../playback/playback_bridge.dart';
 import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
+import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
 import '../features/playback/playback_preferences.dart';
 import '../cache/cache_service.dart';
@@ -1667,19 +1668,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {
-    if (!_autoAdvanceEnabled || _operation != PlayerOperation.idle) return;
-    final durationMs = metrics.durationMs ?? _manifest?.durationMs;
-    if (durationMs == null || durationMs <= 0) return;
-    final remainingMs = durationMs - metrics.currentPositionMs;
-    final nearEnd = metrics.currentPositionMs > 0 && remainingMs <= _autoAdvanceThresholdMs;
-    final ended = metrics.lastEvent == 'ended' || metrics.lastEvent == 'playback_ended';
-    if (!nearEnd && !ended) {
-      if (metrics.currentPositionMs < durationMs - (_autoAdvanceThresholdMs * 2)) _lastAutoAdvanceTrackId = null;
-      return;
-    }
-    final id = _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
-    if (id == null || id == _lastAutoAdvanceTrackId) return;
-    _lastAutoAdvanceTrackId = id;
+    final trigger = evaluateWzAutoAdvanceTrigger(
+      enabled: _autoAdvanceEnabled,
+      operation: _operation,
+      currentPositionMs: metrics.currentPositionMs,
+      metricsDurationMs: metrics.durationMs,
+      manifestDurationMs: _manifest?.durationMs,
+      lastEvent: metrics.lastEvent,
+      currentTrackId: _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId,
+      lastAutoAdvanceTrackId: _lastAutoAdvanceTrackId,
+      thresholdMs: _autoAdvanceThresholdMs,
+    );
+    if (trigger.clearLastTrackGuard) _lastAutoAdvanceTrackId = null;
+    if (!trigger.shouldAdvance) return;
+    _lastAutoAdvanceTrackId = trigger.trackId;
 
     if (_repeatMode == WzRepeatMode.one) {
       setState(() => _queueStatus = 'Repeat one: replaying current track.');
