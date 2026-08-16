@@ -13,7 +13,7 @@ void main() {
           onBack: () {},
           onOpen: (_) {},
           onCreate: () {},
-          onRename: (_, __) {},
+          onRename: (_) {},
           onDelete: (_) {},
         ),
       ),
