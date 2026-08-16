@@ -18,6 +18,7 @@ import '../playback/playback_bridge.dart';
 import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
 import '../features/playback/playback_modes.dart';
+import '../features/playback/playback_preferences.dart';
 import '../cache/cache_service.dart';
 import '../cloud_vault/cloud_vault_models.dart';
 import '../cloud_vault/cloud_vault_service.dart';
@@ -153,9 +154,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
   static const _appModePreferenceKey = 'wavezero.app_mode';
   static const _recentSearchesPreferenceKey = 'wavezero.recent_searches.v1';
-  static const _shufflePreferenceKey = 'wavezero.shuffle_enabled';
-  static const _repeatModePreferenceKey = 'wavezero.repeat_mode';
-  static const _sleepTimerPresetPreferenceKey = 'wavezero.sleep_timer_preset';
   static const int _defaultCatalogLimit = 300;
   static const int _initialVisibleTrackCount = 200;
   static const int _libraryPageSize = 100;
@@ -201,6 +199,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int? _deviceMusicImportedAtMs;
   _LibrarySourceFilter _librarySourceFilter = _LibrarySourceFilter.all;
   _LibrarySortMode _librarySortMode = _LibrarySortMode.recentlyAdded;
+
+  final WzPlaybackPreferences _playbackPreferences = const WzPlaybackPreferences();
 
   PlayerOperation _operation = PlayerOperation.idle;
   bool _refreshingMetrics = false;
@@ -819,14 +819,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _loadPlaybackModePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
+    final snapshot = await _playbackPreferences.load();
     if (!mounted) return;
-    final repeatName = prefs.getString(_repeatModePreferenceKey);
-    final presetName = prefs.getString(_sleepTimerPresetPreferenceKey);
     setState(() {
-      _shuffleEnabled = prefs.getBool(_shufflePreferenceKey) ?? false;
-      _repeatMode = WzRepeatMode.values.firstWhere((mode) => mode.name == repeatName, orElse: () => WzRepeatMode.off);
-      _sleepTimerPreset = WzSleepTimerPreset.values.firstWhere((preset) => preset.name == presetName, orElse: () => WzSleepTimerPreset.off);
+      _shuffleEnabled = snapshot.shuffleEnabled;
+      _repeatMode = snapshot.repeatMode;
+      _sleepTimerPreset = snapshot.sleepTimerPreset;
       _sleepTimerDeadline = null;
     });
   }
@@ -1301,8 +1299,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _setShuffleEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_shufflePreferenceKey, enabled);
+    await _playbackPreferences.setShuffleEnabled(enabled);
     if (!mounted) return;
     setState(() {
       _shuffleEnabled = enabled;
@@ -1315,8 +1312,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _cycleRepeatMode() => _setRepeatMode(_repeatMode.next);
 
   Future<void> _setRepeatMode(WzRepeatMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_repeatModePreferenceKey, mode.name);
+    await _playbackPreferences.setRepeatMode(mode);
     if (!mounted) return;
     setState(() {
       _repeatMode = mode;
@@ -1358,8 +1354,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sleepTimerPresetPreferenceKey, preset.name);
+    await _playbackPreferences.setSleepTimerPreset(preset);
     _sleepTimer?.cancel();
     final duration = preset.duration;
     if (!mounted) return;
