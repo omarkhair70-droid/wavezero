@@ -61,7 +61,7 @@ def find_matching_brace(text: str, opening: int) -> int:
                     continue
                 i += 1
                 continue
-n            if ch == "\\":
+            if ch == "\\":
                 i += 2
                 continue
             if ch == quote:
