@@ -85,12 +85,15 @@ class WzStorageManagerPage extends StatelessWidget {
         const SizedBox(height: WzSpacing.md),
         const WzSectionHeader(title: 'Smart Downloads', subtitle: 'Keep likely next tracks ready without changing playback behavior.', icon: Icons.auto_awesome),
         WzPanel(
-          child: SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Smart Downloads'),
-            subtitle: const Text('WaveZero can cache the current and up-next tracks for faster offline-ready playback.'),
-            value: smartDownloadsEnabled,
-            onChanged: controlsDisabled ? null : onSmartDownloadsChanged,
+          child: Material(
+            type: MaterialType.transparency,
+            child: SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Smart Downloads'),
+              subtitle: const Text('WaveZero can cache the current and up-next tracks for faster offline-ready playback.'),
+              value: smartDownloadsEnabled,
+              onChanged: controlsDisabled ? null : onSmartDownloadsChanged,
+            ),
           ),
         ),
         const SizedBox(height: WzSpacing.md),
