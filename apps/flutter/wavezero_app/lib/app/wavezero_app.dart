@@ -53,6 +53,7 @@ import '../features/collections/collection_resolution.dart';
 import '../features/collections/collection_mutations.dart';
 import '../features/collections/collections_pages.dart';
 import '../features/home/home_sections.dart';
+import '../features/home/consumer_home.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/history/history_selection.dart';
 import '../features/history/history_resolution.dart';
@@ -2700,31 +2701,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final pages = <Widget>[
       WzPageScaffold(
         children: [
-          WzHomeHero(themeConfig: widget.themeConfig),
-          const SizedBox(height: WzSpacing.md),
-          if (hasPlayerTrack)
-            WzHomeContinueListeningSummary(
-              title: _metrics.trackTitle ?? _manifest?.title ?? 'Current track',
-              subtitle: _manifest?.subtitle ?? 'Playback continues in the mini player.',
-              sourceLabel: isDevicePlayback
-                  ? 'Device music'
-                  : wzPlayerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
-              isPlaying: _metrics.isPlaying,
-              onOpenNow: _showPremiumPlayerSheet,
-            )
-          else
-            WzHomeCurrentListeningCard(
-              metrics: _metrics,
-              manifest: _manifest,
-              qualityLabel: qualityLabel,
-              playingFromCache: isPlayingFromCache,
-              devicePlayback: isDevicePlayback,
-              offlineReady: _offlineLibraryAvailable,
-              deviceTrackCount: _deviceMusicTracks.length,
-              devicePermissionStatus: _deviceMusicPermissionStatus.status,
-              status: _statusText,
-            ),
-          const SizedBox(height: WzSpacing.md),
+          WzConsumerHomeHero(themeConfig: widget.themeConfig),
+          const SizedBox(height: WzSpacing.xl),
+          WzConsumerNowCard(
+            metrics: _metrics,
+            manifest: _manifest,
+            progressValue: progress,
+            onOpen: _showPremiumPlayerSheet,
+            onPlayPause: _playPause,
+            controlsDisabled: _playerDisabled,
+          ),
+          const SizedBox(height: WzSpacing.xl),
           WzHomeCuratedDemoSection(
             shelves: _resolvedCuratedShelves,
             onPlayPick: (pick) => _loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded WaveZero Pick: ${pick.track.title}'),

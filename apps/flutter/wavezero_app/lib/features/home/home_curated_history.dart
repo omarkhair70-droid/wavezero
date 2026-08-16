@@ -352,14 +352,9 @@ class _RecentListeningRow extends StatelessWidget {
                   tooltip: 'More',
                   icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
                   onSelected: (value) {
-                    switch (value) {
-                      case 'queue':
-                        onAddToQueue();
-                      case 'collection':
-                        onAddToCollection();
-                      case 'remove':
-                        onRemove();
-                    }
+                    if (value == 'queue') onAddToQueue();
+                    if (value == 'collection') onAddToCollection();
+                    if (value == 'remove') onRemove();
                   },
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'queue', child: Text('Add to queue')),
