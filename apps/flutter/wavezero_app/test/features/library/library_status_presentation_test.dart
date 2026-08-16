@@ -3,7 +3,6 @@ import 'package:wavezero_app/app/app_config.dart';
 import 'package:wavezero_app/features/library/library_status_presentation.dart';
 
 void main() {
-  // Regression coverage for release-safe Library status presentation.
   test('catalog mode labels preserve demo, production, and count fallback', () {
     expect(wzCatalogModeLabel('demo', 0), 'Demo catalog');
     expect(wzCatalogModeLabel('prod', 0), 'Catalog ready');
