@@ -1,0 +1,29 @@
+name: One-shot fix stacked Smart Downloads stale helper
+
+on:
+  push:
+    branches:
+      - refactor/extract-media-presentation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-media-presentation
+          fetch-depth: 0
+      - name: Remove stale Smart Downloads helper body
+        shell: bash
+        run: |
+          python tools/fix_smart_download_stale_helper.py
+          rm tools/fix_smart_download_stale_helper.py
+          rm .github/workflows/one-shot-fix-smart-download-stale-helper.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Carry Smart Downloads cleanup through stack'
+          git push origin HEAD:refactor/extract-media-presentation
