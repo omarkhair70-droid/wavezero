@@ -45,6 +45,7 @@ import '../features/collections/collections_service.dart';
 import '../features/collections/collection_resolution.dart';
 import '../features/collections/collection_mutations.dart';
 import '../features/collections/collections_pages.dart';
+import '../features/home/home_sections.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/history/history_selection.dart';
 import '../features/history/history_resolution.dart';
@@ -447,7 +448,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _filteredSearchMemo = limited;
     return limited;
   }
-
 
   WzQueuePosition get _queuePosition => resolveWzQueuePosition(
         queue: _queue,
@@ -1569,14 +1569,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
   }
 
-  // Predictive Smart Downloads helpers
   void _recordSmartDownloadSkip(String reason) {
     _lastSmartDownloadReason = reason;
     if (mounted) setState(() => _smartDownloadSkippedCount += 1);
   }
 
   Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto', String downloadSource = 'unknown', String qualityLabel = 'unknown', String? codec, int? bitrateKbps}) async {
-    // Gatekeeper checks: preserve the existing reason precedence before I/O.
     final preflight = evaluateWzSmartDownloadPreflight(
       enabled: _smartDownloadsEnabled,
       trackId: trackId,
@@ -1698,7 +1696,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ));
       return;
     }
-    // fallback: try to fetch manifest to find a streamUrl
     final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
     try {
       final manifest = await client.fetchTrackManifest(trackId: next.trackId);
@@ -1707,7 +1704,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         unawaited(_autoCacheTrack(trackId: manifest.trackId, url: url2, title: manifest.title, artistName: manifest.artistName, durationMs: manifest.durationMs, artworkUrl: manifest.artworkUrl, reason: 'up_next_fetched', downloadSource: 'smart_up_next', qualityLabel: manifest.qualityLabel ?? 'unknown', codec: manifest.codec, bitrateKbps: manifest.bitrateKbps));
       }
     } catch (_) {
-      // manifest fetch failed — mark skip reason once
       _lastSmartDownloadReason = 'up-next manifest unavailable';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
     } finally {
@@ -1906,8 +1902,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return null;
   }
 
-
-
   Future<void> _loadDeviceMusicTrack(DeviceMusicTrack track, {bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status}) {
     return _runOperation(operation, () async {
       await _clearNativeNextPrebuffer();
@@ -2076,7 +2070,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       });
     }
     unawaited(_updatePredictivePreloadCandidate());
-    // Smart Downloads only follows active playback/queue context; avoid startup cache storms.
     if (autoPlay || _metrics.isPlaying) {
       unawaited(_maybeAutoCacheCurrentTrack(manifest));
       unawaited(_maybeAutoCacheNextQueuedTrack());
@@ -2568,7 +2561,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     await _loadCatalogTrack(trackId: track.trackId, autoPlay: autoStart, operation: operation, status: status, prefetchedManifest: prefetchedManifest);
   }
 
-
   Future<void> _finishPreparedQueueHandoff({required CatalogTrackManifest manifest, required String status}) async {
     if (!mounted) return;
     _titleController.text = manifest.title;
@@ -2708,14 +2700,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         '${_offlineLibraryAvailable ? 'Offline Ready' : 'Offline empty'} • '
         'Library $_libraryCombinedTrackCount • Device ${_deviceMusicTracks.length} • Cached ${_cachedLibrary.length}';
 
-    // Build per-tab pages using existing widgets — keep behavior unchanged.
     final pages = <Widget>[
       WzPageScaffold(
         children: [
-          _HomeHero(engineSummary: engineSummary, themeConfig: widget.themeConfig),
+          WzHomeHero(themeConfig: widget.themeConfig),
           const SizedBox(height: WzSpacing.md),
           if (hasPlayerTrack)
-            _HomeContinueListeningSummary(
+            WzHomeContinueListeningSummary(
               title: _metrics.trackTitle ?? _manifest?.title ?? 'Current track',
               subtitle: _manifest?.subtitle ?? 'Playback continues in the mini player.',
               sourceLabel: isDevicePlayback ? 'Device music' : _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
@@ -2723,7 +2714,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               onOpenNow: () => _navigateTo(WzAppTab.now),
             )
           else
-            _CurrentListeningCard(
+            WzHomeCurrentListeningCard(
               metrics: _metrics,
               manifest: _manifest,
               qualityLabel: qualityLabel,
@@ -2754,7 +2745,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onViewAll: () => _navigateTo(WzAppTab.history),
           ),
           const SizedBox(height: WzSpacing.md),
-          _HomeCollectionsOfflineSection(
+          WzHomeCollectionsOfflineSection(
             collections: _collections,
             offlineTrackCount: _offlineCachedTrackCount,
             cacheBytes: _cacheBytes,
@@ -2762,7 +2753,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onOpenDownloads: () => _navigateTo(WzAppTab.downloads),
           ),
           const SizedBox(height: WzSpacing.md),
-          _SmartEngineCards(
+          WzHomeSmartListeningCards(
             smartDownloadsEnabled: _smartDownloadsEnabled,
             smartDownloadsCompleted: _smartDownloadCompletedCount,
             prefetchEnabled: _prefetchEnabled,
@@ -2772,7 +2763,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             qualityLabel: qualityLabel,
           ),
           const SizedBox(height: WzSpacing.md),
-          _HomeQuickActions(onNavigate: _navigateTo, showDeveloperTools: _developerMode),
+          WzHomeQuickActions(onNavigate: _navigateTo, showDeveloperTools: _developerMode),
           const SizedBox(height: WzSpacing.md),
           if (_developerMode) ...[
             _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
@@ -3400,14 +3391,12 @@ IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
       WzSearchResultType.track || WzSearchResultType.unknown => Icons.music_note,
     };
 
-
 String _formatDuration(int ms) {
   final totalSeconds = (ms / 1000).floor();
   final minutes = totalSeconds ~/ 60;
   final seconds = totalSeconds % 60;
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
-
 
 class _CuratedDemoHomeSection extends StatelessWidget {
   const _CuratedDemoHomeSection({required this.shelves, required this.onPlayPick, required this.onAddToQueue, required this.onOpenLibrary});
@@ -3742,7 +3731,6 @@ class _ContinueListeningCard extends StatelessWidget {
         ],
       );
 }
-
 
 class _DiscoveryPanel extends StatelessWidget {
   const _DiscoveryPanel({required this.title, required this.subtitle, required this.icon, required this.children});
@@ -4215,7 +4203,6 @@ class _SettingsPage extends StatelessWidget {
       );
 }
 
-
 Map<String, int> _cachedTrackSizeMap(List<CachedTrackMetadata> tracks) {
   final sizes = <String, int>{};
   for (final track in tracks) {
@@ -4228,7 +4215,6 @@ Map<String, int> _cachedTrackSizeMap(List<CachedTrackMetadata> tracks) {
   }
   return sizes;
 }
-
 
 class _WzTokens {
   const _WzTokens._();
@@ -4312,7 +4298,6 @@ class _TopBar extends StatelessWidget {
         ],
       );
 }
-
 
 class _HomeHero extends StatelessWidget {
   const _HomeHero({required this.engineSummary, required this.themeConfig});
@@ -4474,7 +4459,6 @@ class _CurrentListeningCard extends StatelessWidget {
     );
   }
 }
-
 
 class _HomeCollectionsOfflineSection extends StatelessWidget {
   const _HomeCollectionsOfflineSection({
@@ -4704,7 +4688,6 @@ class _AudioQualityPanel extends StatelessWidget {
         ]),
       );
 }
-
 
 class _DeviceMusicDiagnosticsPanel extends StatelessWidget {
   const _DeviceMusicDiagnosticsPanel({
@@ -5074,7 +5057,6 @@ class _PremiumPlayerSurface extends StatelessWidget {
   }
 }
 
-
 class _PlaybackModesCard extends StatelessWidget {
   const _PlaybackModesCard({
     required this.shuffleEnabled,
@@ -5308,8 +5290,6 @@ class _PlayerSourceCard extends StatelessWidget {
         ),
       );
 }
-
-
 
 class _PerformanceBaselinePanel extends StatelessWidget {
   const _PerformanceBaselinePanel({
@@ -5936,7 +5916,6 @@ class _QueueRow extends StatelessWidget {
   }
 }
 
-
 class _DownloadsCard extends StatelessWidget {
   const _DownloadsCard({
     required this.downloads,
@@ -6058,8 +6037,6 @@ class _DownloadRow extends StatelessWidget {
         ),
       );
 }
-
-
 
 class _LibrarySourceSummaryCard extends StatelessWidget {
   const _LibrarySourceSummaryCard({
@@ -6397,7 +6374,6 @@ class _SourceBadge extends StatelessWidget {
       );
 }
 
-
 class _LicenseBadge extends StatelessWidget {
   const _LicenseBadge({required this.label, this.warning = false});
 
@@ -6539,7 +6515,6 @@ class _CatalogRow extends StatelessWidget {
     );
   }
 }
-
 
 class _ContentServerDiagnosticsPanel extends StatelessWidget {
   const _ContentServerDiagnosticsPanel({
@@ -6847,7 +6822,6 @@ class _MiniBadge extends StatelessWidget {
       );
 }
 
-
 class _Panel extends StatelessWidget {
   const _Panel({required this.child, this.padding = const EdgeInsets.all(18)});
 
@@ -6874,4 +6848,3 @@ String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': c
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
 const _timeStyle = TextStyle(color: Color(0xFF9BA3B4), fontSize: 12);
-
