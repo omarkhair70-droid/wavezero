@@ -8,6 +8,8 @@ void main() {
     trackId: 'track-2',
     title: 'Two',
     subtitle: 'Artist',
+    source: WzCollectionTrackSource.unknown,
+    addedAtMs: 1,
   );
 
   test('collection membership is determined by track id', () {
