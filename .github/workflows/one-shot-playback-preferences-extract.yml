@@ -1,0 +1,128 @@
+name: One-shot playback preferences extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-playback-preferences
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-playback-preferences
+          fetch-depth: 0
+      - name: Move playback preference ownership out of V3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+
+          import_anchor = "import '../features/playback/playback_modes.dart';\n"
+          preferences_import = "import '../features/playback/playback_preferences.dart';\n"
+          if text.count(import_anchor) != 1:
+              raise SystemExit('playback mode import anchor changed')
+          if preferences_import not in text:
+              text = text.replace(import_anchor, import_anchor + preferences_import, 1)
+
+          constants = "  static const _shufflePreferenceKey = 'wavezero.shuffle_enabled';\n  static const _repeatModePreferenceKey = 'wavezero.repeat_mode';\n  static const _sleepTimerPresetPreferenceKey = 'wavezero.sleep_timer_preset';\n"
+          if text.count(constants) != 1:
+              raise SystemExit('playback preference constants changed')
+          text = text.replace(constants, '', 1)
+
+          state_anchor = "  PlayerOperation _operation = PlayerOperation.idle;\n"
+          state_insert = "  final WzPlaybackPreferences _playbackPreferences = const WzPlaybackPreferences();\n\n"
+          if text.count(state_anchor) != 1:
+              raise SystemExit('playback state anchor changed')
+          if state_insert not in text:
+              text = text.replace(state_anchor, state_insert + state_anchor, 1)
+
+          old_load = """  Future<void> _loadPlaybackModePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final repeatName = prefs.getString(_repeatModePreferenceKey);
+    final presetName = prefs.getString(_sleepTimerPresetPreferenceKey);
+    setState(() {
+      _shuffleEnabled = prefs.getBool(_shufflePreferenceKey) ?? false;
+      _repeatMode = WzRepeatMode.values.firstWhere((mode) => mode.name == repeatName, orElse: () => WzRepeatMode.off);
+      _sleepTimerPreset = WzSleepTimerPreset.values.firstWhere((preset) => preset.name == presetName, orElse: () => WzSleepTimerPreset.off);
+      _sleepTimerDeadline = null;
+    });
+  }
+"""
+          new_load = """  Future<void> _loadPlaybackModePrefs() async {
+    final snapshot = await _playbackPreferences.load();
+    if (!mounted) return;
+    setState(() {
+      _shuffleEnabled = snapshot.shuffleEnabled;
+      _repeatMode = snapshot.repeatMode;
+      _sleepTimerPreset = snapshot.sleepTimerPreset;
+      _sleepTimerDeadline = null;
+    });
+  }
+"""
+          if text.count(old_load) != 1:
+              raise SystemExit('playback preference load block changed')
+          text = text.replace(old_load, new_load, 1)
+
+          old_shuffle = """  Future<void> _setShuffleEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_shufflePreferenceKey, enabled);
+    if (!mounted) return;
+"""
+          new_shuffle = """  Future<void> _setShuffleEnabled(bool enabled) async {
+    await _playbackPreferences.setShuffleEnabled(enabled);
+    if (!mounted) return;
+"""
+          if text.count(old_shuffle) != 1:
+              raise SystemExit('shuffle persistence block changed')
+          text = text.replace(old_shuffle, new_shuffle, 1)
+
+          old_repeat = """  Future<void> _setRepeatMode(WzRepeatMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_repeatModePreferenceKey, mode.name);
+    if (!mounted) return;
+"""
+          new_repeat = """  Future<void> _setRepeatMode(WzRepeatMode mode) async {
+    await _playbackPreferences.setRepeatMode(mode);
+    if (!mounted) return;
+"""
+          if text.count(old_repeat) != 1:
+              raise SystemExit('repeat persistence block changed')
+          text = text.replace(old_repeat, new_repeat, 1)
+
+          old_sleep = """  Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sleepTimerPresetPreferenceKey, preset.name);
+    _sleepTimer?.cancel();
+"""
+          new_sleep = """  Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {
+    await _playbackPreferences.setSleepTimerPreset(preset);
+    _sleepTimer?.cancel();
+"""
+          if text.count(old_sleep) != 1:
+              raise SystemExit('sleep timer persistence block changed')
+          text = text.replace(old_sleep, new_sleep, 1)
+
+          stale = ('_shufflePreferenceKey', '_repeatModePreferenceKey', '_sleepTimerPresetPreferenceKey')
+          for symbol in stale:
+              if symbol in text:
+                  raise SystemExit(f'stale playback preference symbol remains: {symbol}')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-playback-preferences-extract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-playback-preferences-extract.yml
+          git commit -m "Use extracted playback preferences store"
+          git push origin HEAD:refactor/extract-playback-preferences
