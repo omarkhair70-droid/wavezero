@@ -33,7 +33,11 @@ jobs:
           if preferences_import not in text:
               text = text.replace(import_anchor, import_anchor + preferences_import, 1)
 
-          constants = "  static const _shufflePreferenceKey = 'wavezero.shuffle_enabled';\n  static const _repeatModePreferenceKey = 'wavezero.repeat_mode';\n  static const _sleepTimerPresetPreferenceKey = 'wavezero.sleep_timer_preset';\n"
+          constants = (
+              "  static const _shufflePreferenceKey = 'wavezero.shuffle_enabled';\n"
+              "  static const _repeatModePreferenceKey = 'wavezero.repeat_mode';\n"
+              "  static const _sleepTimerPresetPreferenceKey = 'wavezero.sleep_timer_preset';\n"
+          )
           if text.count(constants) != 1:
               raise SystemExit('playback preference constants changed')
           text = text.replace(constants, '', 1)
@@ -45,75 +49,82 @@ jobs:
           if state_insert not in text:
               text = text.replace(state_anchor, state_insert + state_anchor, 1)
 
-          old_load = """  Future<void> _loadPlaybackModePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    final repeatName = prefs.getString(_repeatModePreferenceKey);
-    final presetName = prefs.getString(_sleepTimerPresetPreferenceKey);
-    setState(() {
-      _shuffleEnabled = prefs.getBool(_shufflePreferenceKey) ?? false;
-      _repeatMode = WzRepeatMode.values.firstWhere((mode) => mode.name == repeatName, orElse: () => WzRepeatMode.off);
-      _sleepTimerPreset = WzSleepTimerPreset.values.firstWhere((preset) => preset.name == presetName, orElse: () => WzSleepTimerPreset.off);
-      _sleepTimerDeadline = null;
-    });
-  }
-"""
-          new_load = """  Future<void> _loadPlaybackModePrefs() async {
-    final snapshot = await _playbackPreferences.load();
-    if (!mounted) return;
-    setState(() {
-      _shuffleEnabled = snapshot.shuffleEnabled;
-      _repeatMode = snapshot.repeatMode;
-      _sleepTimerPreset = snapshot.sleepTimerPreset;
-      _sleepTimerDeadline = null;
-    });
-  }
-"""
+          old_load = (
+              "  Future<void> _loadPlaybackModePrefs() async {\n"
+              "    final prefs = await SharedPreferences.getInstance();\n"
+              "    if (!mounted) return;\n"
+              "    final repeatName = prefs.getString(_repeatModePreferenceKey);\n"
+              "    final presetName = prefs.getString(_sleepTimerPresetPreferenceKey);\n"
+              "    setState(() {\n"
+              "      _shuffleEnabled = prefs.getBool(_shufflePreferenceKey) ?? false;\n"
+              "      _repeatMode = WzRepeatMode.values.firstWhere((mode) => mode.name == repeatName, orElse: () => WzRepeatMode.off);\n"
+              "      _sleepTimerPreset = WzSleepTimerPreset.values.firstWhere((preset) => preset.name == presetName, orElse: () => WzSleepTimerPreset.off);\n"
+              "      _sleepTimerDeadline = null;\n"
+              "    });\n"
+              "  }\n"
+          )
+          new_load = (
+              "  Future<void> _loadPlaybackModePrefs() async {\n"
+              "    final snapshot = await _playbackPreferences.load();\n"
+              "    if (!mounted) return;\n"
+              "    setState(() {\n"
+              "      _shuffleEnabled = snapshot.shuffleEnabled;\n"
+              "      _repeatMode = snapshot.repeatMode;\n"
+              "      _sleepTimerPreset = snapshot.sleepTimerPreset;\n"
+              "      _sleepTimerDeadline = null;\n"
+              "    });\n"
+              "  }\n"
+          )
           if text.count(old_load) != 1:
               raise SystemExit('playback preference load block changed')
           text = text.replace(old_load, new_load, 1)
 
-          old_shuffle = """  Future<void> _setShuffleEnabled(bool enabled) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_shufflePreferenceKey, enabled);
-    if (!mounted) return;
-"""
-          new_shuffle = """  Future<void> _setShuffleEnabled(bool enabled) async {
-    await _playbackPreferences.setShuffleEnabled(enabled);
-    if (!mounted) return;
-"""
+          old_shuffle = (
+              "  Future<void> _setShuffleEnabled(bool enabled) async {\n"
+              "    final prefs = await SharedPreferences.getInstance();\n"
+              "    await prefs.setBool(_shufflePreferenceKey, enabled);\n"
+              "    if (!mounted) return;\n"
+          )
+          new_shuffle = (
+              "  Future<void> _setShuffleEnabled(bool enabled) async {\n"
+              "    await _playbackPreferences.setShuffleEnabled(enabled);\n"
+              "    if (!mounted) return;\n"
+          )
           if text.count(old_shuffle) != 1:
               raise SystemExit('shuffle persistence block changed')
           text = text.replace(old_shuffle, new_shuffle, 1)
 
-          old_repeat = """  Future<void> _setRepeatMode(WzRepeatMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_repeatModePreferenceKey, mode.name);
-    if (!mounted) return;
-"""
-          new_repeat = """  Future<void> _setRepeatMode(WzRepeatMode mode) async {
-    await _playbackPreferences.setRepeatMode(mode);
-    if (!mounted) return;
-"""
+          old_repeat = (
+              "  Future<void> _setRepeatMode(WzRepeatMode mode) async {\n"
+              "    final prefs = await SharedPreferences.getInstance();\n"
+              "    await prefs.setString(_repeatModePreferenceKey, mode.name);\n"
+              "    if (!mounted) return;\n"
+          )
+          new_repeat = (
+              "  Future<void> _setRepeatMode(WzRepeatMode mode) async {\n"
+              "    await _playbackPreferences.setRepeatMode(mode);\n"
+              "    if (!mounted) return;\n"
+          )
           if text.count(old_repeat) != 1:
               raise SystemExit('repeat persistence block changed')
           text = text.replace(old_repeat, new_repeat, 1)
 
-          old_sleep = """  Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sleepTimerPresetPreferenceKey, preset.name);
-    _sleepTimer?.cancel();
-"""
-          new_sleep = """  Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {
-    await _playbackPreferences.setSleepTimerPreset(preset);
-    _sleepTimer?.cancel();
-"""
+          old_sleep = (
+              "  Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {\n"
+              "    final prefs = await SharedPreferences.getInstance();\n"
+              "    await prefs.setString(_sleepTimerPresetPreferenceKey, preset.name);\n"
+              "    _sleepTimer?.cancel();\n"
+          )
+          new_sleep = (
+              "  Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {\n"
+              "    await _playbackPreferences.setSleepTimerPreset(preset);\n"
+              "    _sleepTimer?.cancel();\n"
+          )
           if text.count(old_sleep) != 1:
               raise SystemExit('sleep timer persistence block changed')
           text = text.replace(old_sleep, new_sleep, 1)
 
-          stale = ('_shufflePreferenceKey', '_repeatModePreferenceKey', '_sleepTimerPresetPreferenceKey')
-          for symbol in stale:
+          for symbol in ('_shufflePreferenceKey', '_repeatModePreferenceKey', '_sleepTimerPresetPreferenceKey'):
               if symbol in text:
                   raise SystemExit(f'stale playback preference symbol remains: {symbol}')
 
