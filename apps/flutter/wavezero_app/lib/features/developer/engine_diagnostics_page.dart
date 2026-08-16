@@ -754,3 +754,31 @@ String _prefetchResultLabel(bool? value) {
   if (value == null) return 'none';
   return value ? 'hit' : 'miss';
 }
+
+class WzDeveloperSessionStrip extends StatelessWidget {
+  const WzDeveloperSessionStrip({super.key, required this.status});
+  final String status;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: WzSurface.panel(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: WzSpacing.md, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(Icons.restore, color: WzColors.accent, size: 17),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: WzText.caption,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+

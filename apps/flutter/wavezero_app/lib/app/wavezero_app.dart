@@ -19,6 +19,7 @@ import '../playback/test_track.dart';
 import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
 import '../features/library/library_controls.dart';
+import '../features/library/library_manual_setup_card.dart';
 import '../features/library/library_catalog_panel.dart';
 import '../features/library/library_sort.dart';
 import '../features/library/library_sources.dart';
@@ -2669,7 +2670,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           if (_developerMode) ...[
             WzDeveloperStatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
             const SizedBox(height: WzSpacing.sm),
-            _SessionStrip(status: _sessionStatus),
+            WzDeveloperSessionStrip(status: _sessionStatus),
           ],
         ],
       ),
@@ -2873,7 +2874,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
           if (_allowManualApiSetup) ...[
             const SizedBox(height: WzSpacing.md),
-            _TrackSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
+            WzLibraryManualSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
           ],
         ],
       ),
@@ -3279,19 +3280,7 @@ class _NowContextPanel extends StatelessWidget {
 
 
 
-class _SessionStrip extends StatelessWidget {
-  const _SessionStrip({required this.status});
-  final String status;
-  @override
-  Widget build(BuildContext context) => _Panel(
-        padding: const EdgeInsets.symmetric(horizontal: _WzTokens.space4, vertical: 10),
-        child: Row(children: [
-          const Icon(Icons.restore, color: _WzTokens.accent, size: 17),
-          const SizedBox(width: 10),
-          Expanded(child: Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption)),
-        ]),
-      );
-}
+
 
 class _PremiumPlayerSheet extends StatelessWidget {
   const _PremiumPlayerSheet({required this.child});
@@ -3643,34 +3632,7 @@ String _playerSourceLabel({required bool isPlayingFromCache, required bool offli
 
 
 
-class _TrackSetupCard extends StatelessWidget {
-  const _TrackSetupCard({required this.titleController, required this.urlController, required this.apiBaseUrlController, required this.catalogStatus, required this.loading, required this.onLoadCatalog, required this.onLoadTrack});
-  final TextEditingController titleController;
-  final TextEditingController urlController;
-  final TextEditingController apiBaseUrlController;
-  final String catalogStatus;
-  final bool loading;
-  final VoidCallback onLoadCatalog;
-  final VoidCallback onLoadTrack;
-  @override
-  Widget build(BuildContext context) => _Panel(child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        title: const Text('Manual / API setup'),
-        subtitle: Text(catalogStatus, maxLines: 2, overflow: TextOverflow.ellipsis),
-        children: [
-          TextField(controller: apiBaseUrlController, decoration: const InputDecoration(labelText: 'API base URL')),
-          const SizedBox(height: 12),
-          TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Manual title')),
-          const SizedBox(height: 12),
-          TextField(controller: urlController, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Manual audio URL')),
-          const SizedBox(height: 16),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            FilledButton.tonalIcon(onPressed: loading ? null : onLoadCatalog, icon: loading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_download), label: const Text('Reload selected/API')),
-            OutlinedButton.icon(onPressed: loading ? null : onLoadTrack, icon: const Icon(Icons.bolt), label: const Text('Load manual track')),
-          ]),
-        ],
-      ));
-}
+
 
 
 
@@ -3769,16 +3731,7 @@ class _MiniBadge extends StatelessWidget {
       );
 }
 
-class _Panel extends StatelessWidget {
-  const _Panel({required this.child, this.padding = const EdgeInsets.all(18)});
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(color: _WzTokens.surface, borderRadius: BorderRadius.circular(_WzTokens.radiusXl), border: Border.all(color: _WzTokens.border), boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 30, offset: Offset(0, 18))]),
-        child: Padding(padding: padding, child: child),
-      );
-}
+
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
