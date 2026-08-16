@@ -11,6 +11,7 @@ void main() {
         trackId: id,
         title: id,
         source: source,
+        license: const LicenseMetadata(status: LicenseStatus.verified),
         primaryAsset: CatalogTrackAssetSummary(
           assetId: 'asset-$id',
           manifestUrl: 'https://example.test/$id.mp3',
