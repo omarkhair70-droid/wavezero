@@ -31,85 +31,109 @@ class WaveZeroProductHeader extends StatelessWidget {
   final VoidCallback onOpenSettings;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-        child: WzPanel(
-          padding: const EdgeInsets.symmetric(horizontal: WzSpacing.sm, vertical: WzSpacing.xs),
-          gradient: themeConfig.shellGradient,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
+  Widget build(BuildContext context) {
+    final stateColor = status == 'Error'
+        ? WzColors.danger
+        : status == 'Playing'
+            ? WzColors.success
+            : WzColors.accent;
+    final libraryColor = libraryStatusWarning
+        ? WzColors.warning
+        : libraryStatusActive
+            ? WzColors.success
+            : WzColors.textSubtle;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      child: WzGlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+        borderRadius: 30,
+        gradient: themeConfig.shellGradient,
+        child: Row(
+          children: [
+            GestureDetector(
+              onLongPress: onLogoLongPress,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: themeConfig.accentGradient,
+                  border: Border.all(color: Colors.white),
+                  boxShadow: WzSurface.softShadows,
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.graphic_eq_rounded, color: WzColors.textPrimary, size: 21),
+              ),
+            ),
+            const SizedBox(width: WzSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  GestureDetector(
-                    onLongPress: onLogoLongPress,
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: themeConfig.accentGradient,
-                        borderRadius: BorderRadius.circular(WzRadius.md),
-                      ),
-                      child: const Icon(Icons.graphic_eq, color: Colors.white, size: 20),
-                    ),
-                  ),
-                  const SizedBox(width: WzSpacing.sm),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
+                  Row(
+                    children: [
+                      const Flexible(
+                        child: Text(
                           'WaveZero',
                           maxLines: 1,
                           softWrap: false,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.4),
+                          style: TextStyle(
+                            color: WzColors.textPrimary,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.45,
+                          ),
                         ),
-                        const SizedBox(height: WzSpacing.xxs),
-                        Text(
-                          appMode == WzAppMode.developer
-                              ? '$selectedTabLabel • Developer mode • $engineSummary'
-                              : '$selectedTabLabel • $libraryStatus',
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: stateColor),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    appMode == WzAppMode.developer
+                        ? '$selectedTabLabel • Developer • $engineSummary'
+                        : '$selectedTabLabel • $libraryStatus',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: WzText.caption,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(width: 5, height: 5, decoration: BoxDecoration(shape: BoxShape.circle, color: libraryColor)),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          status == 'Playing' ? 'The music is with you' : status,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: WzText.caption,
+                          style: WzText.caption.copyWith(fontSize: 10.5),
                         ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Settings',
-                    onPressed: onOpenSettings,
-                    icon: Icon(Icons.settings, color: themeConfig.accent),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: WzSpacing.xs),
-              Wrap(
-                spacing: WzSpacing.xs,
-                runSpacing: WzSpacing.xs,
-                children: [
-                  WzStatusPill(
-                    label: status,
-                    active: status == 'Playing',
-                    warning: status == 'Error',
-                    icon: Icons.radio_button_checked,
-                  ),
-                  WzStatusPill(
-                    label: libraryStatus,
-                    active: libraryStatusActive,
-                    warning: libraryStatusWarning,
-                    icon: libraryStatus == 'Offline Ready'
-                        ? Icons.offline_pin
-                        : libraryStatus == 'Device music ready'
-                            ? Icons.phone_android
-                            : Icons.library_music,
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(width: WzSpacing.sm),
+            WzSculptedIconButton(
+              tooltip: 'Settings',
+              icon: Icons.tune_rounded,
+              size: 44,
+              iconSize: 19,
+              onPressed: onOpenSettings,
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 }

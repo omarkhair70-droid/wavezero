@@ -5,7 +5,7 @@ import 'package:wavezero_app/app/theme/wavezero_theme.dart';
 import 'package:wavezero_app/features/home/home_sections.dart';
 
 void main() {
-  testWidgets('Home hero preserves the WaveZero product copy', (tester) async {
+  testWidgets('Home hero preserves the Porcelain WaveZero product voice', (tester) async {
     const themeConfig = WzThemeConfig();
     await tester.pumpWidget(
       MaterialApp(
@@ -17,9 +17,9 @@ void main() {
     );
 
     expect(find.text('WaveZero'), findsOneWidget);
-    expect(find.text('A smart music experience engine.'), findsOneWidget);
-    expect(find.text('Native playback'), findsOneWidget);
-    expect(find.text('Music-first playback • offline-aware library'), findsOneWidget);
+    expect(find.text('The voice is close.\nThe music is with you.'), findsOneWidget);
+    expect(find.text('A light, personal place for the music already around you.'), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
   });
 
   testWidgets('Home quick actions preserve navigation targets', (tester) async {

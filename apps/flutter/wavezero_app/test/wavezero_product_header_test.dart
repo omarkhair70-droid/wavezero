@@ -32,15 +32,16 @@ void main() {
     );
   }
 
-  testWidgets('consumer header shows the selected tab and truthful library status', (tester) async {
+  testWidgets('consumer Porcelain header keeps selected tab and truthful library status', (tester) async {
     await tester.pumpWidget(buildHeader(mode: WzAppMode.consumer));
 
+    expect(find.text('WaveZero'), findsOneWidget);
     expect(find.text('Library • Device music ready'), findsOneWidget);
-    expect(find.textContaining('Developer mode'), findsNothing);
-    expect(find.text('Device music ready'), findsOneWidget);
+    expect(find.textContaining('Developer'), findsNothing);
+    expect(find.text('Ready'), findsOneWidget);
   });
 
-  testWidgets('developer header shows engine summary and settings remains interactive', (tester) async {
+  testWidgets('developer Porcelain header shows engine summary and settings remains interactive', (tester) async {
     var settingsTapped = false;
     await tester.pumpWidget(
       buildHeader(
@@ -50,7 +51,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Queue • Developer mode • Instant Next on'), findsOneWidget);
+    expect(find.text('Queue • Developer • Instant Next on'), findsOneWidget);
     await tester.tap(find.byTooltip('Settings'));
     await tester.pump();
     expect(settingsTapped, isTrue);
