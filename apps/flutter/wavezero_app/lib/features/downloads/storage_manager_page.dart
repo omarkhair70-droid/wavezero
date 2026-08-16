@@ -49,13 +49,13 @@ class WzStorageManagerPage extends StatelessWidget {
     return WzPageScaffold(
       children: [
         WzPageHeader(
-          icon: Icons.storage,
+          icon: Icons.storage_rounded,
           title: 'Storage Manager',
-          subtitle: 'Manage downloaded tracks for offline playback.',
-          trailing: IconButton.outlined(tooltip: 'Back to Downloads', onPressed: onBack, icon: const Icon(Icons.arrow_back)),
+          subtitle: 'See what is already here, and keep only what you want.',
+          trailing: WzSculptedIconButton(tooltip: 'Back to Downloads', onPressed: onBack, icon: Icons.arrow_back_rounded, size: 42, iconSize: 18),
         ),
         const SizedBox(height: WzSpacing.md),
-        WzPanel(
+        WzGlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -63,8 +63,8 @@ class WzStorageManagerPage extends StatelessWidget {
                 spacing: WzSpacing.xs,
                 runSpacing: WzSpacing.xs,
                 children: [
-                  WzStatusPill(label: healthLabel, active: downloads.isNotEmpty, icon: downloads.isEmpty ? Icons.inbox_outlined : Icons.offline_pin),
-                  WzStatusPill(label: smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off', active: smartDownloadsEnabled, icon: Icons.auto_awesome),
+                  WzStatusPill(label: healthLabel, active: downloads.isNotEmpty, icon: downloads.isEmpty ? Icons.inbox_outlined : Icons.offline_pin_rounded),
+                  WzStatusPill(label: smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off', active: smartDownloadsEnabled, icon: Icons.auto_awesome_rounded),
                 ],
               ),
               const SizedBox(height: WzSpacing.md),
@@ -72,42 +72,39 @@ class WzStorageManagerPage extends StatelessWidget {
                 spacing: WzSpacing.sm,
                 runSpacing: WzSpacing.sm,
                 children: [
-                  WzMiniMetric(label: 'Cached for offline', value: '${downloads.length}', active: downloads.isNotEmpty, icon: Icons.library_music),
-                  WzMiniMetric(label: 'Device storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
-                  WzMiniMetric(label: 'Manual downloads', value: '$manualDownloadedCount', active: manualDownloadedCount > 0, icon: Icons.download_done),
-                  WzMiniMetric(label: 'Smart downloads', value: '$smartDownloadedCount', active: smartDownloadedCount > 0, icon: Icons.auto_awesome),
-                  WzMiniMetric(label: 'Offline-ready', value: '$offlineReadyCount', active: offlineReadyCount > 0, icon: Icons.offline_pin),
+                  WzMiniMetric(label: 'Cached for offline', value: '${downloads.length}', active: downloads.isNotEmpty, icon: Icons.library_music_rounded),
+                  WzMiniMetric(label: 'Device storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage_rounded),
+                  WzMiniMetric(label: 'Manual downloads', value: '$manualDownloadedCount', active: manualDownloadedCount > 0, icon: Icons.download_done_rounded),
+                  WzMiniMetric(label: 'Smart downloads', value: '$smartDownloadedCount', active: smartDownloadedCount > 0, icon: Icons.auto_awesome_rounded),
+                  WzMiniMetric(label: 'Offline-ready', value: '$offlineReadyCount', active: offlineReadyCount > 0, icon: Icons.offline_pin_rounded),
                 ],
               ),
             ],
           ),
         ),
         const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Smart Downloads', subtitle: 'Keep likely next tracks ready without changing playback behavior.', icon: Icons.auto_awesome),
-        WzPanel(
-          child: Material(
-            type: MaterialType.transparency,
-            child: SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Smart Downloads'),
-              subtitle: const Text('WaveZero can cache the current and up-next tracks for faster offline-ready playback.'),
-              value: smartDownloadsEnabled,
-              onChanged: controlsDisabled ? null : onSmartDownloadsChanged,
-            ),
+        const WzSectionHeader(title: 'Smart Downloads', subtitle: 'Keep likely next tracks ready without changing playback behavior.', icon: Icons.auto_awesome_rounded),
+        WzGlassCard(
+          child: SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Smart Downloads'),
+            subtitle: const Text('WaveZero can keep the current and up-next tracks nearby for offline-ready playback.'),
+            value: smartDownloadsEnabled,
+            onChanged: controlsDisabled ? null : onSmartDownloadsChanged,
           ),
         ),
         const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Categories', subtitle: 'See what kind of downloads are using storage.', icon: Icons.category),
-        WzPanel(
+        const WzSectionHeader(title: 'Categories', subtitle: 'What kind of downloads are using storage.', icon: Icons.category_rounded),
+        WzGlassCard(
           child: Wrap(
             spacing: WzSpacing.sm,
             runSpacing: WzSpacing.sm,
             children: [
-              _StorageCategoryCard(label: 'All cached', count: downloads.length, icon: Icons.all_inbox),
-              _StorageCategoryCard(label: 'Manual downloads', count: manualDownloadedCount, icon: Icons.download_done),
-              _StorageCategoryCard(label: 'Smart downloads', count: smartDownloadedCount, icon: Icons.auto_awesome),
-              _StorageCategoryCard(label: 'Current / recently cached', count: _currentOrRecentCount, icon: Icons.flash_on),
-              _StorageCategoryCard(label: 'Unknown source', count: _unknownCount, icon: Icons.help_outline),
+              _StorageCategoryCard(label: 'All cached', count: downloads.length, icon: Icons.all_inbox_rounded),
+              _StorageCategoryCard(label: 'Manual downloads', count: manualDownloadedCount, icon: Icons.download_done_rounded),
+              _StorageCategoryCard(label: 'Smart downloads', count: smartDownloadedCount, icon: Icons.auto_awesome_rounded),
+              _StorageCategoryCard(label: 'Current / recent', count: _currentOrRecentCount, icon: Icons.flash_on_rounded),
+              _StorageCategoryCard(label: 'Unknown source', count: _unknownCount, icon: Icons.help_outline_rounded),
             ],
           ),
         ),
@@ -115,9 +112,9 @@ class WzStorageManagerPage extends StatelessWidget {
         WzSectionHeader(
           title: 'Downloaded tracks',
           subtitle: downloads.isEmpty ? 'No downloads yet.' : 'Play or remove individual offline-ready tracks.',
-          icon: Icons.playlist_play,
+          icon: Icons.playlist_play_rounded,
         ),
-        WzPanel(
+        WzGlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -189,23 +186,23 @@ class _StorageTrackRow extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: WzSpacing.sm),
       padding: const EdgeInsets.all(WzSpacing.sm),
-      decoration: BoxDecoration(
-        color: WzColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(WzRadius.lg),
-        border: Border.all(color: WzColors.borderSoft),
-      ),
+      decoration: WzSurface.sculpted(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              WzArtwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(WzRadius.md), boxShadow: WzSurface.softShadows),
+                child: WzArtwork(artworkUrl: track.artworkUrl, size: 50, trackId: track.trackId, title: track.title, artist: track.artistName),
+              ),
               const SizedBox(width: WzSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+                    Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
                     const SizedBox(height: WzSpacing.xxs),
                     Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
                   ],
@@ -219,11 +216,11 @@ class _StorageTrackRow extends StatelessWidget {
             runSpacing: WzSpacing.xs,
             children: [
               WzStatusPill(label: wzDownloadSourceLabel(track.downloadSource), active: track.downloadSource != 'unknown', icon: _downloadSourceIcon(track.downloadSource)),
-              if (quality != 'Unknown') WzStatusPill(label: quality, active: true, icon: Icons.high_quality),
-              if (track.codec != null && track.codec!.trim().isNotEmpty) WzStatusPill(label: track.codec!, active: true, icon: Icons.memory),
-              if (track.bitrateKbps != null) WzStatusPill(label: '${track.bitrateKbps}kbps', active: true, icon: Icons.speed),
-              if (sizeBytes != null) WzStatusPill(label: formatWzCacheBytes(sizeBytes!), active: true, icon: Icons.sd_storage),
-              if (details.isEmpty) const WzStatusPill(label: 'Offline-ready', active: true, icon: Icons.offline_pin),
+              if (quality != 'Unknown') WzStatusPill(label: quality, active: true, icon: Icons.high_quality_rounded),
+              if (track.codec != null && track.codec!.trim().isNotEmpty) WzStatusPill(label: track.codec!, active: true, icon: Icons.memory_rounded),
+              if (track.bitrateKbps != null) WzStatusPill(label: '${track.bitrateKbps}kbps', active: true, icon: Icons.speed_rounded),
+              if (sizeBytes != null) WzStatusPill(label: formatWzCacheBytes(sizeBytes!), active: true, icon: Icons.sd_storage_rounded),
+              if (details.isEmpty) const WzStatusPill(label: 'Offline-ready', active: true, icon: Icons.offline_pin_rounded),
             ],
           ),
           const SizedBox(height: WzSpacing.xs),
@@ -232,8 +229,8 @@ class _StorageTrackRow extends StatelessWidget {
             spacing: WzSpacing.xs,
             runSpacing: WzSpacing.xs,
             children: [
-              OutlinedButton.icon(onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
-              OutlinedButton.icon(onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Remove from device')),
+              OutlinedButton.icon(onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play')),
+              OutlinedButton.icon(onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline_rounded), label: const Text('Remove from device')),
             ],
           ),
         ],
@@ -245,12 +242,12 @@ class _StorageTrackRow extends StatelessWidget {
 IconData _downloadSourceIcon(String source) {
   switch (source) {
     case 'manual':
-      return Icons.download_done;
+      return Icons.download_done_rounded;
     case 'smart_current':
-      return Icons.flash_on;
+      return Icons.flash_on_rounded;
     case 'smart_up_next':
-      return Icons.auto_awesome;
+      return Icons.auto_awesome_rounded;
     default:
-      return Icons.help_outline;
+      return Icons.help_outline_rounded;
   }
 }
