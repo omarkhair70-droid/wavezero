@@ -75,7 +75,7 @@ class WzDownloadsPanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (downloads.isEmpty)
-              const WzEmptyCatalogMessage(
+              WzEmptyCatalogMessage(
                 message: 'No downloads yet. Download tracks from Library to listen offline.',
               )
             else
