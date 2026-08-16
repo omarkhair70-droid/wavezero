@@ -4,7 +4,7 @@ import 'package:wavezero_app/features/library/library_catalog_panel.dart';
 import 'package:wavezero_app/features/library/library_controls.dart';
 
 void main() {
-  testWidgets('empty Library catalog panel keeps the existing recovery copy', (tester) async {
+  testWidgets('empty Library catalog panel keeps a human recovery path', (tester) async {
     final searchController = TextEditingController();
     addTearDown(searchController.dispose);
 
@@ -61,7 +61,7 @@ void main() {
     );
 
     expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Your catalog is waiting. Refresh when you are online or import device music to begin.'), findsOneWidget);
-    expect(find.text('Sort library'), findsOneWidget);
+    expect(find.text('Your Library is quiet. Add Device Music or come back when your online music is available.'), findsOneWidget);
+    expect(find.byTooltip('Sort Library'), findsOneWidget);
   });
 }
