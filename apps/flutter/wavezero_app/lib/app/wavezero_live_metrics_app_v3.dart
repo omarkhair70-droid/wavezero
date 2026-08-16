@@ -20,6 +20,7 @@ import '../playback/test_track.dart';
 import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
 import '../features/library/library_controls.dart';
+import '../features/library/library_sort.dart';
 import '../features/search/search_controls.dart';
 import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
@@ -400,7 +401,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         ? _libraryTracks
         : _libraryTracks.where((track) => track.matchesQuery(query)).toList(growable: false);
     _filteredTrackCount = matching.length;
-    final sorted = _sortLibraryTracks(matching);
+    final sorted = sortWzLibraryTracks(
+      matching,
+      mode: _librarySortMode,
+      addedRank: _libraryAddedRank,
+    );
     final visible = sorted.take(_visibleTrackCount).toList(growable: false);
     _filteredCatalogMemoKey = key;
     _filteredCatalogMemo = visible;
@@ -2041,43 +2046,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return snapshot.queueTrackIds.map((id) => byId[id]).whereType<CatalogTrackSummary>().toList(growable: false);
   }
 
-  List<CatalogTrackSummary> _sortLibraryTracks(List<CatalogTrackSummary> tracks) {
-    final indexed = tracks.indexed.toList(growable: false);
-    int compareNullableString(String? a, String? b) {
-      final left = (a == null || a.trim().isEmpty) ? '~' : a.trim().toLowerCase();
-      final right = (b == null || b.trim().isEmpty) ? '~' : b.trim().toLowerCase();
-      return left.compareTo(right);
-    }
-
-    int compareNullableDuration(int? a, int? b, {required bool longestFirst}) {
-      final left = a ?? (longestFirst ? -1 : 1 << 30);
-      final right = b ?? (longestFirst ? -1 : 1 << 30);
-      return longestFirst ? right.compareTo(left) : left.compareTo(right);
-    }
-
-    int addedRank(CatalogTrackSummary track) {
-      final cached = _cachedMetadataForTrack(track);
-      if (cached != null) return cached.cachedAt;
-      if (_isDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
-      return 0;
-    }
-
-    int compare((int, CatalogTrackSummary) a, (int, CatalogTrackSummary) b) {
-      final left = a.$2;
-      final right = b.$2;
-      final result = switch (_librarySortMode) {
-        WzLibrarySortMode.recentlyAdded => addedRank(right).compareTo(addedRank(left)),
-        WzLibrarySortMode.titleAz => compareNullableString(left.title, right.title),
-        WzLibrarySortMode.artistAz => compareNullableString(left.artistName ?? left.albumName, right.artistName ?? right.albumName),
-        WzLibrarySortMode.longestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: true),
-        WzLibrarySortMode.shortestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: false),
-        WzLibrarySortMode.quality => compareNullableString(left.primaryAsset?.qualityLabel, right.primaryAsset?.qualityLabel),
-      };
-      return result == 0 ? a.$1.compareTo(b.$1) : result;
-    }
-
-    indexed.sort(compare);
-    return indexed.map((entry) => entry.$2).toList(growable: false);
+  int _libraryAddedRank(CatalogTrackSummary track) {
+    final cached = _cachedMetadataForTrack(track);
+    if (cached != null) return cached.cachedAt;
+    if (_isDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
+    return 0;
   }
 
   CachedTrackMetadata? _cachedMetadataForTrack(CatalogTrackSummary track) {
