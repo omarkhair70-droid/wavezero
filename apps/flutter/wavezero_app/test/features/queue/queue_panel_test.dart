@@ -35,7 +35,9 @@ void main() {
 
     expect(find.text('Queue'), findsOneWidget);
     expect(find.text('Queue is empty. Add tracks from Library or Search to choose what plays next.'), findsOneWidget);
-    expect(tester.widget<IconButton>(find.byTooltip('Clear queue')).onPressed, isNull);
+    final clearButton = find.descendant(of: find.byTooltip('Clear queue'), matching: find.byType(IconButton));
+    expect(clearButton, findsOneWidget);
+    expect(tester.widget<IconButton>(clearButton).onPressed, isNull);
   });
 
   testWidgets('Queue row preserves play-next and remove callbacks', (tester) async {
