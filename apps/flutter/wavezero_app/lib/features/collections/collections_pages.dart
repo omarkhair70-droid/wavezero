@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
-import '../../shared/media/media_presentation.dart';
 import '../../shared/widgets/wavezero_artwork.dart';
 import 'collections_service.dart';
 
@@ -29,39 +29,47 @@ class WzCollectionsPage extends StatelessWidget {
     final userCollections = collections.where((collection) => collection.type == WzCollectionType.user).toList(growable: false);
     return WzPageScaffold(
       children: [
-        WzPageHeader(
-          icon: Icons.playlist_play_rounded,
-          title: 'Collections',
-          subtitle: 'The music you chose to keep close.',
-          trailing: Wrap(
-            spacing: WzSpacing.xs,
-            runSpacing: WzSpacing.xs,
-            children: [
-              WzSculptedIconButton(tooltip: 'Back to Home', onPressed: onBack, icon: Icons.arrow_back_rounded, size: 42, iconSize: 18),
-              WzPrimaryAction(label: 'Create', icon: Icons.add_rounded, onPressed: onCreate),
-            ],
-          ),
+        Row(
+          children: [
+            WzSculptedIconButton(tooltip: 'Back to Library', onPressed: onBack, icon: Icons.arrow_back_rounded, size: 44, iconSize: 19),
+            const SizedBox(width: 13),
+            Expanded(child: Text('Collections', style: WzText.pageTitle.copyWith(fontSize: 30))),
+            WzSculptedIconButton(tooltip: 'Create collection', onPressed: onCreate, icon: Icons.add_rounded, size: 44, iconSize: 21),
+          ],
         ),
-        const SizedBox(height: WzSpacing.md),
+        const SizedBox(height: 22),
         _CollectionCard(collection: liked, onOpen: () => onOpen(liked), onRename: null, onDelete: null),
-        const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Your collections', subtitle: 'Local playlists stored on this device.', icon: Icons.queue_music_rounded),
+        const SizedBox(height: 24),
+        const Text('Your collections', style: WzText.title),
+        const SizedBox(height: 4),
+        const Text('Playlists that stay with you on this device.', style: WzText.caption),
+        const SizedBox(height: 12),
         if (userCollections.isEmpty)
-          const WzGlassCard(child: Text('No collections yet. Save tracks from Library, Search, or Now Playing.', style: WzText.body))
+          WzGlassCard(
+            borderRadius: 32,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Nothing here yet', style: WzText.sectionTitle),
+                const SizedBox(height: 5),
+                const Text('Save tracks from Library, Search, or Now Playing.', style: WzText.body),
+                const SizedBox(height: 14),
+                WzPrimaryAction(label: 'Create collection', icon: Icons.add_rounded, onPressed: onCreate),
+              ],
+            ),
+          )
         else
-          ...userCollections.map((collection) => Padding(
-                padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-                child: _CollectionCard(
-                  collection: collection,
-                  onOpen: () => onOpen(collection),
-                  onRename: () => onRename(collection),
-                  onDelete: () => onDelete(collection),
-                ),
-              )),
-        const SizedBox(height: WzSpacing.md),
-        const WzGlassCard(
-          child: Text('Collections only store lightweight metadata. Removing tracks or deleting a collection does not delete downloads, cache files, or device music.', style: WzText.caption),
-        ),
+          ...userCollections.map(
+            (collection) => Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: _CollectionCard(
+                collection: collection,
+                onOpen: () => onOpen(collection),
+                onRename: () => onRename(collection),
+                onDelete: () => onDelete(collection),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -77,41 +85,63 @@ class _CollectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final preview = collection.tracks.isEmpty ? 'No tracks yet' : collection.tracks.first.title;
-    return Container(
-      padding: const EdgeInsets.all(WzSpacing.md),
+    final first = collection.tracks.isEmpty ? null : collection.tracks.first;
+    return WzPressableSurface(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onOpen();
+      },
+      radius: 32,
       decoration: WzSurface.sculpted(selected: collection.type == WzCollectionType.liked),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.fromLTRB(11, 11, 8, 11),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(WzRadius.md), boxShadow: WzSurface.softShadows),
-                child: WzArtwork(artworkUrl: collection.tracks.isEmpty ? null : collection.tracks.first.artworkUrl, size: 58),
-              ),
-              const SizedBox(width: WzSpacing.sm),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(collection.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-                  const SizedBox(height: WzSpacing.xxs),
-                  Text('${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'} • Updated ${_friendlyUpdated(collection.updatedAtMs)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-                  Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
-                ]),
-              ),
-            ],
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(28),
+              bottomLeft: Radius.circular(26),
+              bottomRight: Radius.circular(17),
+            ),
+            child: WzArtwork(
+              artworkUrl: first?.artworkUrl,
+              size: 64,
+              trackId: first?.trackId ?? collection.id,
+              title: first?.title ?? collection.name,
+              artist: first?.subtitle,
+              fit: BoxFit.cover,
+            ),
           ),
-          const SizedBox(height: WzSpacing.sm),
-          Wrap(
-            spacing: WzSpacing.sm,
-            runSpacing: WzSpacing.xs,
-            children: [
-              FilledButton.tonalIcon(onPressed: onOpen, icon: const Icon(Icons.open_in_new_rounded), label: const Text('Open')),
-              if (onRename != null) OutlinedButton.icon(onPressed: onRename, icon: const Icon(Icons.edit_rounded), label: const Text('Rename')),
-              if (onDelete != null) OutlinedButton.icon(onPressed: onDelete, icon: const Icon(Icons.delete_outline_rounded), label: const Text('Delete')),
-            ],
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(collection.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                const SizedBox(height: 4),
+                Text('${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'}', style: WzText.caption),
+                if (first != null) ...[
+                  const SizedBox(height: 3),
+                  Text(first.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption.copyWith(color: WzColors.textMuted)),
+                ],
+              ],
+            ),
           ),
+          if (onRename != null || onDelete != null)
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
+              onSelected: (value) {
+                if (value == 'rename') onRename?.call();
+                if (value == 'delete') onDelete?.call();
+              },
+              itemBuilder: (_) => [
+                if (onRename != null) const PopupMenuItem(value: 'rename', child: Text('Rename')),
+                if (onDelete != null) const PopupMenuItem(value: 'delete', child: Text('Delete')),
+              ],
+            )
+          else
+            const Icon(Icons.arrow_forward_ios_rounded, size: 15, color: WzColors.textSubtle),
         ],
       ),
     );
@@ -146,43 +176,72 @@ class WzCollectionDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => WzPageScaffold(
         children: [
-          WzPageHeader(
-            icon: collection.type == WzCollectionType.liked ? Icons.favorite_rounded : Icons.playlist_play_rounded,
-            title: collection.name,
-            subtitle: '${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'} saved locally on this device.',
-            trailing: WzSculptedIconButton(tooltip: 'Back to Collections', onPressed: onBack, icon: Icons.arrow_back_rounded, size: 42, iconSize: 18),
+          Row(
+            children: [
+              WzSculptedIconButton(tooltip: 'Back to Collections', onPressed: onBack, icon: Icons.arrow_back_rounded, size: 44, iconSize: 19),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(collection.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.pageTitle.copyWith(fontSize: 27)),
+                    const SizedBox(height: 3),
+                    Text('${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'}', style: WzText.caption),
+                  ],
+                ),
+              ),
+              if (collection.type == WzCollectionType.user)
+                PopupMenuButton<String>(
+                  tooltip: 'Collection options',
+                  icon: const Icon(Icons.more_horiz_rounded),
+                  onSelected: (value) {
+                    if (value == 'rename') onRename(collection);
+                    if (value == 'delete') onDelete(collection);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'rename', child: Text('Rename')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  ],
+                ),
+            ],
           ),
-          const SizedBox(height: WzSpacing.md),
-          WzGlassCard(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
-                WzStatusPill(label: collection.type == WzCollectionType.liked ? 'Liked' : 'Collection', active: true, icon: collection.type == WzCollectionType.liked ? Icons.favorite_rounded : Icons.playlist_play_rounded),
-                WzStatusPill(label: '${collection.trackCount} tracks', icon: Icons.music_note_rounded),
-                const WzStatusPill(label: 'Local only', icon: Icons.phone_android_rounded),
-              ]),
-              const SizedBox(height: WzSpacing.md),
-              Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
-                FilledButton.tonalIcon(onPressed: collection.tracks.isEmpty ? null : () => onPlayFirst(collection), icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play first')),
-                OutlinedButton.icon(onPressed: collection.tracks.isEmpty ? null : () => onAddAllToQueue(collection), icon: const Icon(Icons.queue_music_rounded), label: const Text('Add all to Queue')),
-                if (collection.type == WzCollectionType.user) OutlinedButton.icon(onPressed: () => onRename(collection), icon: const Icon(Icons.edit_rounded), label: const Text('Rename')),
-                if (collection.type == WzCollectionType.user) OutlinedButton.icon(onPressed: () => onDelete(collection), icon: const Icon(Icons.delete_outline_rounded), label: const Text('Delete')),
-              ]),
-            ]),
-          ),
-          const SizedBox(height: WzSpacing.md),
-          if (collection.tracks.isEmpty)
-            const WzGlassCard(child: Text('This collection is empty. Save tracks from Library, Search, or Now Playing.', style: WzText.body))
-          else
-            ...collection.tracks.map((track) => Padding(
-                  padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-                  child: _CollectionTrackRow(
-                    track: track,
-                    available: resolver(track) != null,
-                    onPlay: () => onPlayTrack(track),
-                    onAddToQueue: () => onAddTrackToQueue(track),
-                    onRemove: () => onRemoveTrack(collection, track),
+          const SizedBox(height: 18),
+          if (collection.tracks.isNotEmpty)
+            Row(
+              children: [
+                Expanded(
+                  child: WzPrimaryAction(
+                    label: 'Play',
+                    icon: Icons.play_arrow_rounded,
+                    onPressed: () => onPlayFirst(collection),
                   ),
-                )),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => onAddAllToQueue(collection),
+                    icon: const Icon(Icons.queue_music_rounded),
+                    label: const Text('Queue all'),
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(height: 18),
+          if (collection.tracks.isEmpty)
+            const WzGlassCard(child: Text('This collection is empty. Add something you want to keep close.', style: WzText.body))
+          else
+            ...collection.tracks.map(
+              (track) => Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: _CollectionTrackRow(
+                  track: track,
+                  available: resolver(track) != null,
+                  onPlay: () => onPlayTrack(track),
+                  onAddToQueue: () => onAddTrackToQueue(track),
+                  onRemove: () => onRemoveTrack(collection, track),
+                ),
+              ),
+            ),
         ],
       );
 }
@@ -197,49 +256,65 @@ class _CollectionTrackRow extends StatelessWidget {
   final VoidCallback onRemove;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(WzSpacing.sm),
-        decoration: WzSurface.sculpted(),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            WzArtwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.subtitle),
-            const SizedBox(width: WzSpacing.sm),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-              Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            ])),
-          ]),
-          const SizedBox(height: WzSpacing.xs),
-          Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-            WzStatusPill(label: _collectionSourceLabel(track.source), active: track.source == WzCollectionTrackSource.device || track.source == WzCollectionTrackSource.cached, icon: Icons.source_rounded),
-            if (track.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(track.qualityLabel!), icon: Icons.high_quality_rounded),
-            WzStatusPill(label: track.source == WzCollectionTrackSource.device ? 'Your device' : track.license.badgeLabel, active: track.source == WzCollectionTrackSource.device || !track.license.needsRightsWarning, warning: track.license.needsRightsWarning && track.source != WzCollectionTrackSource.device, icon: Icons.policy_outlined),
-            if (!available) const WzStatusPill(label: 'Track is not available right now', warning: true, icon: Icons.cloud_off_rounded),
-          ]),
-          const SizedBox(height: WzSpacing.xs),
-          Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-            OutlinedButton.icon(onPressed: available ? onPlay : null, icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play')),
-            OutlinedButton.icon(onPressed: available ? onAddToQueue : null, icon: const Icon(Icons.queue_music_rounded), label: const Text('Add to Queue')),
-            OutlinedButton.icon(onPressed: onRemove, icon: const Icon(Icons.remove_circle_outline_rounded), label: const Text('Remove')),
-          ]),
-        ]),
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: available ? onPlay : null,
+          borderRadius: BorderRadius.circular(28),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(17),
+                    topRight: Radius.circular(23),
+                    bottomLeft: Radius.circular(22),
+                    bottomRight: Radius.circular(14),
+                  ),
+                  child: WzArtwork(
+                    artworkUrl: track.artworkUrl,
+                    size: 54,
+                    trackId: track.trackId,
+                    title: track.title,
+                    artist: track.subtitle,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 14)),
+                      const SizedBox(height: 3),
+                      Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                      if (!available) Text('Unavailable right now', style: WzText.caption.copyWith(fontSize: 10.5, color: WzColors.warning)),
+                    ],
+                  ),
+                ),
+                WzSculptedIconButton(
+                  tooltip: 'Play',
+                  icon: Icons.play_arrow_rounded,
+                  size: 38,
+                  iconSize: 19,
+                  onPressed: available ? onPlay : null,
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'More',
+                  icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
+                  onSelected: (value) {
+                    if (value == 'queue') onAddToQueue();
+                    if (value == 'remove') onRemove();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(enabled: available, value: 'queue', child: const Text('Add to queue')),
+                    const PopupMenuItem(value: 'remove', child: Text('Remove from collection')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       );
-}
-
-String _collectionSourceLabel(WzCollectionTrackSource source) => switch (source) {
-      WzCollectionTrackSource.api => 'Catalog',
-      WzCollectionTrackSource.device => 'Device',
-      WzCollectionTrackSource.cached => 'Downloaded',
-      WzCollectionTrackSource.unknown => 'Unknown',
-    };
-
-String _friendlyUpdated(int updatedAtMs) {
-  final age = DateTime.now().millisecondsSinceEpoch - updatedAtMs;
-  if (age < 60000) return 'just now';
-  final minutes = age ~/ 60000;
-  if (minutes < 60) return '${minutes}m ago';
-  final hours = minutes ~/ 60;
-  if (hours < 24) return '${hours}h ago';
-  final days = hours ~/ 24;
-  return '${days}d ago';
 }
