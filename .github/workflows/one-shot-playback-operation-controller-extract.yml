@@ -1,0 +1,93 @@
+name: One-shot playback operation controller extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-playback-operation-controller
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-playback-operation-controller
+          fetch-depth: 0
+      - name: Move playback operation admission out of V3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+
+          import_anchor = "import '../features/playback/player_operation_state.dart';\n"
+          controller_import = "import '../features/playback/playback_operation_controller.dart';\n"
+          if text.count(import_anchor) != 1:
+              raise SystemExit('player operation state import anchor changed')
+          if controller_import not in text:
+              text = text.replace(import_anchor, controller_import + import_anchor, 1)
+
+          old_field = "  PlayerOperation _operation = PlayerOperation.idle;\n"
+          new_field = (
+              "  final WzPlaybackOperationController _operationController = WzPlaybackOperationController();\n"
+              "  PlayerOperation get _operation => _operationController.current;\n"
+          )
+          if text.count(old_field) != 1:
+              raise SystemExit('player operation field changed')
+          text = text.replace(old_field, new_field, 1)
+
+          old_run = (
+              "  Future<void> _runOperation(PlayerOperation operation, Future<void> Function() body, {bool refreshAfter = true}) async {\n"
+              "    if (_operation != PlayerOperation.idle) return;\n"
+              "    setState(() {\n"
+              "      _operation = operation;\n"
+              "      _lastError = null;\n"
+              "    });\n"
+              "    try {\n"
+              "      await body();\n"
+              "      if (refreshAfter) await _refreshMetrics(allowAutoAdvance: false);\n"
+              "    } catch (error) {\n"
+              "      if (mounted) setState(() => _lastError = error.toString());\n"
+              "    } finally {\n"
+              "      if (mounted) setState(() => _operation = PlayerOperation.idle);\n"
+              "    }\n"
+              "  }\n"
+          )
+          new_run = (
+              "  Future<void> _runOperation(PlayerOperation operation, Future<void> Function() body, {bool refreshAfter = true}) async {\n"
+              "    if (!_operationController.tryBegin(operation)) return;\n"
+              "    setState(() => _lastError = null);\n"
+              "    try {\n"
+              "      await body();\n"
+              "      if (refreshAfter) await _refreshMetrics(allowAutoAdvance: false);\n"
+              "    } catch (error) {\n"
+              "      if (mounted) setState(() => _lastError = error.toString());\n"
+              "    } finally {\n"
+              "      if (mounted) setState(_operationController.end);\n"
+              "    }\n"
+              "  }\n"
+          )
+          if text.count(old_run) != 1:
+              raise SystemExit('run operation block changed')
+          text = text.replace(old_run, new_run, 1)
+
+          if text.count(controller_import) != 1:
+              raise SystemExit('operation controller import missing after patch')
+          if "_operation =" in text:
+              raise SystemExit('direct operation assignment remains')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-playback-operation-controller-extract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-playback-operation-controller-extract.yml
+          git commit -m "Use playback operation controller"
+          git push origin HEAD:refactor/extract-playback-operation-controller
