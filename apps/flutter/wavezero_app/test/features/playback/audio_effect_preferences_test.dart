@@ -10,6 +10,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  // Regression coverage for the extracted persisted profile boundary.
   test('defaults to the original/off profile', () async {
     expect(await store.load(), AudioEffectProfile.off);
   });
