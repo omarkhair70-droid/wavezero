@@ -79,18 +79,7 @@ class WzSearchPage extends StatelessWidget {
 
     return WzPageScaffold(
       children: [
-        Row(
-          children: [
-            Expanded(child: Text('Search', style: WzText.pageTitle.copyWith(fontSize: 31))),
-            WzSculptedIconButton(
-              tooltip: 'Back to Home',
-              icon: Icons.close_rounded,
-              size: 44,
-              iconSize: 19,
-              onPressed: onBack,
-            ),
-          ],
-        ),
+        Text('Search', style: WzText.pageTitle.copyWith(fontSize: 31)),
         const SizedBox(height: 18),
         _SearchField(
           controller: controller,
