@@ -37,6 +37,7 @@ import '../features/device_music/device_music_projection.dart';
 import '../features/collections/collections_service.dart';
 import '../features/collections/collection_resolution.dart';
 import '../features/history/listening_history_service.dart';
+import '../features/history/history_selection.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
@@ -316,16 +317,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   List<WzCollection> get _userCollections => _collections.where((collection) => collection.type == WzCollectionType.user).toList(growable: false);
 
-  WzListeningHistoryEntry? get _continueListeningEntry => _listeningHistory.isEmpty ? null : _listeningHistory.first;
+  WzListeningHistoryEntry? get _continueListeningEntry => wzContinueListeningEntry(_listeningHistory);
 
-  WzListeningHistoryEntry? get _mostPlayedHistoryEntry {
-    if (_listeningHistory.isEmpty) return null;
-    final entries = [..._listeningHistory]..sort((a, b) {
-        final byPlays = b.playCount.compareTo(a.playCount);
-        return byPlays == 0 ? b.lastPlayedAtMs.compareTo(a.lastPlayedAtMs) : byPlays;
-      });
-    return entries.first;
-  }
+  WzListeningHistoryEntry? get _mostPlayedHistoryEntry => wzMostPlayedHistoryEntry(_listeningHistory);
 
   WzCollection? get _selectedCollection {
     final id = _selectedCollectionId;
