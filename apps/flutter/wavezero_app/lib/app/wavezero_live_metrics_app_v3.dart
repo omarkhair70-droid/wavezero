@@ -17,6 +17,7 @@ import '../catalog/catalog_track_manifest.dart';
 import '../playback/playback_bridge.dart';
 import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
+import '../features/playback/playback_modes.dart';
 import '../cache/cache_service.dart';
 import '../cloud_vault/cloud_vault_models.dart';
 import '../cloud_vault/cloud_vault_service.dart';
@@ -30,48 +31,6 @@ import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
-
-enum WzRepeatMode { off, one, all }
-
-enum _SleepTimerPreset { off, minutes15, minutes30, minutes45, minutes60 }
-
-extension _WzRepeatModeLabel on WzRepeatMode {
-  String get label => switch (this) {
-        WzRepeatMode.off => 'Repeat off',
-        WzRepeatMode.one => 'Repeat one',
-        WzRepeatMode.all => 'Repeat all',
-      };
-
-  IconData get icon => switch (this) {
-        WzRepeatMode.off => Icons.repeat,
-        WzRepeatMode.one => Icons.repeat_one,
-        WzRepeatMode.all => Icons.repeat,
-      };
-
-  WzRepeatMode get next => switch (this) {
-        WzRepeatMode.off => WzRepeatMode.one,
-        WzRepeatMode.one => WzRepeatMode.all,
-        WzRepeatMode.all => WzRepeatMode.off,
-      };
-}
-
-extension _SleepTimerPresetLabel on _SleepTimerPreset {
-  String get label => switch (this) {
-        _SleepTimerPreset.off => 'Off',
-        _SleepTimerPreset.minutes15 => '15 minutes',
-        _SleepTimerPreset.minutes30 => '30 minutes',
-        _SleepTimerPreset.minutes45 => '45 minutes',
-        _SleepTimerPreset.minutes60 => '60 minutes',
-      };
-
-  Duration? get duration => switch (this) {
-        _SleepTimerPreset.off => null,
-        _SleepTimerPreset.minutes15 => const Duration(minutes: 15),
-        _SleepTimerPreset.minutes30 => const Duration(minutes: 30),
-        _SleepTimerPreset.minutes45 => const Duration(minutes: 45),
-        _SleepTimerPreset.minutes60 => const Duration(minutes: 60),
-      };
-}
 
 String _catalogModeLabel(String? contentMode, int trackCount) {
   final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
@@ -251,7 +210,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _autoAdvanceEnabled = true;
   bool _shuffleEnabled = false;
   WzRepeatMode _repeatMode = WzRepeatMode.off;
-  _SleepTimerPreset _sleepTimerPreset = _SleepTimerPreset.off;
+  WzSleepTimerPreset _sleepTimerPreset = WzSleepTimerPreset.off;
   DateTime? _sleepTimerDeadline;
   bool _sessionRestored = false;
   int _autoAdvanceCount = 0;
@@ -867,7 +826,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     setState(() {
       _shuffleEnabled = prefs.getBool(_shufflePreferenceKey) ?? false;
       _repeatMode = WzRepeatMode.values.firstWhere((mode) => mode.name == repeatName, orElse: () => WzRepeatMode.off);
-      _sleepTimerPreset = _SleepTimerPreset.values.firstWhere((preset) => preset.name == presetName, orElse: () => _SleepTimerPreset.off);
+      _sleepTimerPreset = WzSleepTimerPreset.values.firstWhere((preset) => preset.name == presetName, orElse: () => WzSleepTimerPreset.off);
       _sleepTimerDeadline = null;
     });
   }
@@ -1382,10 +1341,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               const SizedBox(height: WzSpacing.xs),
               Text(_sleepTimerDeadline == null ? 'Pause playback after a selected time.' : _sleepTimerStatusLabel, style: WzText.caption),
               const SizedBox(height: WzSpacing.md),
-              ..._SleepTimerPreset.values.map((preset) => ListTile(
-                    leading: Icon(preset == _SleepTimerPreset.off ? Icons.timer_off : Icons.bedtime),
-                    title: Text(preset == _SleepTimerPreset.off ? 'Sleep timer off' : preset.label),
-                    trailing: _sleepTimerPreset == preset && (preset == _SleepTimerPreset.off || _sleepTimerDeadline != null) ? const Icon(Icons.check) : null,
+              ...WzSleepTimerPreset.values.map((preset) => ListTile(
+                    leading: Icon(preset == WzSleepTimerPreset.off ? Icons.timer_off : Icons.bedtime),
+                    title: Text(preset == WzSleepTimerPreset.off ? 'Sleep timer off' : preset.label),
+                    trailing: _sleepTimerPreset == preset && (preset == WzSleepTimerPreset.off || _sleepTimerDeadline != null) ? const Icon(Icons.check) : null,
                     onTap: () {
                       Navigator.of(sheetContext).pop();
                       unawaited(_setSleepTimerPreset(preset));
@@ -1398,7 +1357,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     );
   }
 
-  Future<void> _setSleepTimerPreset(_SleepTimerPreset preset) async {
+  Future<void> _setSleepTimerPreset(WzSleepTimerPreset preset) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sleepTimerPresetPreferenceKey, preset.name);
     _sleepTimer?.cancel();
@@ -1406,7 +1365,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (!mounted) return;
     if (duration == null) {
       setState(() {
-        _sleepTimerPreset = _SleepTimerPreset.off;
+        _sleepTimerPreset = WzSleepTimerPreset.off;
         _sleepTimerDeadline = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer off')));
@@ -1424,7 +1383,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _handleSleepTimerEnded() async {
     if (!mounted) return;
     setState(() {
-      _sleepTimerPreset = _SleepTimerPreset.off;
+      _sleepTimerPreset = WzSleepTimerPreset.off;
       _sleepTimerDeadline = null;
       _queueStatus = 'Sleep timer ended.';
     });
