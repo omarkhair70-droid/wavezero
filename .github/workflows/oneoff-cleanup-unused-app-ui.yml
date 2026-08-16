@@ -1,0 +1,31 @@
+name: One-off cleanup unused app UI
+
+on:
+  push:
+    branches:
+      - refactor/cleanup-unused-app-ui
+    paths:
+      - .github/workflows/oneoff-cleanup-unused-app-ui.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/cleanup-unused-app-ui
+      - name: Clean unused app UI
+        run: python3 .github/scripts/cleanup_unused_app_ui.py
+      - name: Remove one-off automation files
+        run: rm .github/scripts/cleanup_unused_app_ui.py .github/workflows/oneoff-cleanup-unused-app-ui.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name "omarkhair70-droid"
+          git config user.email "omar.khair70@gmail.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Remove unused app UI remnants"
+          git push origin HEAD:refactor/cleanup-unused-app-ui
