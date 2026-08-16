@@ -69,8 +69,8 @@ import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
 import 'theme/wavezero_theme_preferences.dart';
 
-class WaveZeroLiveMetricsApp extends StatefulWidget {
-  const WaveZeroLiveMetricsApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
+class WaveZeroApp extends StatefulWidget {
+  const WaveZeroApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
       : _playbackBridge = playbackBridge,
         _sessionStore = sessionStore;
 
@@ -78,10 +78,10 @@ class WaveZeroLiveMetricsApp extends StatefulWidget {
   final QueueSessionStore? _sessionStore;
 
   @override
-  State<WaveZeroLiveMetricsApp> createState() => _WaveZeroLiveMetricsAppState();
+  State<WaveZeroApp> createState() => _WaveZeroAppState();
 }
 
-class _WaveZeroLiveMetricsAppState extends State<WaveZeroLiveMetricsApp> {
+class _WaveZeroAppState extends State<WaveZeroApp> {
   final WzThemePreferences _themePreferences = const WzThemePreferences();
   WzThemeConfig _themeConfig = const WzThemeConfig();
 

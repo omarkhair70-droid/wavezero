@@ -78,7 +78,7 @@ Update README/roadmap/architecture docs to match the real product:
 
 ## Phase 1 — Flutter architecture consolidation
 
-Do not rewrite the UI. Extract behavior from `wavezero_live_metrics_app_v3.dart` in small parity-preserving PRs.
+Do not rewrite the UI. Extract behavior from `wavezero_app.dart` in small parity-preserving PRs.
 
 Target ownership:
 
