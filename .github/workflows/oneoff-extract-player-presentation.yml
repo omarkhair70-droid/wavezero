@@ -1,0 +1,31 @@
+name: One-off extract Player presentation
+
+on:
+  push:
+    branches:
+      - refactor/extract-player-presentation
+    paths:
+      - .github/workflows/oneoff-extract-player-presentation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-player-presentation
+      - name: Extract Player presentation
+        run: python3 .github/scripts/extract_player_presentation.py
+      - name: Remove one-off automation files
+        run: rm .github/scripts/extract_player_presentation.py .github/workflows/oneoff-extract-player-presentation.yml
+      - name: Commit extraction
+        run: |
+          git config user.name "omarkhair70-droid"
+          git config user.email "omar.khair70@gmail.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Extract Player presentation from app orchestrator"
+          git push origin HEAD:refactor/extract-player-presentation
