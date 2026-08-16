@@ -5,6 +5,7 @@ import '../../catalog/audio_quality.dart';
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../../playback/playback_metrics.dart';
+import '../../shared/media/media_presentation.dart';
 
 class WzEngineDiagnosticsPage extends StatelessWidget {
   const WzEngineDiagnosticsPage({
@@ -194,10 +195,10 @@ class WzEngineDiagnosticsPage extends StatelessWidget {
           ),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Playback Engine', subtitle: 'Current player state and operation summary.', icon: Icons.graphic_eq),
-          _StatusStrip(status: playbackStatus, detail: playbackDetail, operation: operationLabel, refreshingMetrics: refreshingMetrics),
+          WzDeveloperStatusStrip(status: playbackStatus, detail: playbackDetail, operation: operationLabel, refreshingMetrics: refreshingMetrics),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Smart Preload', subtitle: 'Instant Next readiness and preload hit/miss telemetry.', icon: Icons.offline_bolt),
-          _SmartPreloadCard(
+          WzSmartPreloadDiagnosticsCard(
             metrics: metrics,
             enabled: prefetchEnabled,
             prefetchedTrackId: prefetchedTrackId,
@@ -217,7 +218,7 @@ class WzEngineDiagnosticsPage extends StatelessWidget {
           ),
           const SizedBox(height: WzSpacing.md),
           const WzSectionHeader(title: 'Smart Downloads', subtitle: 'Predictive cache activity and counters.', icon: Icons.download_for_offline),
-          _SmartDownloadsCard(
+          WzSmartDownloadsDiagnosticsCard(
             enabled: smartDownloadsEnabled,
             lastTrackId: lastSmartDownloadTrackId,
             lastTitle: lastSmartDownloadTitle,
@@ -298,7 +299,7 @@ class WzEngineDiagnosticsPage extends StatelessWidget {
             nextPreparedBeforePlay: nextPreparedBeforePlay,
           ),
           const SizedBox(height: WzSpacing.md),
-          _MetricsToggle(
+          WzDeveloperMetricsToggle(
             showMetrics: showMetrics,
             operationBusy: operationBusy,
             onToggle: onToggleMetrics,
@@ -307,7 +308,7 @@ class WzEngineDiagnosticsPage extends StatelessWidget {
           ),
           if (showMetrics) ...[
             const SizedBox(height: WzSpacing.md),
-            _MetricsPanel(metrics: metrics),
+            WzDeveloperMetricsPanel(metrics: metrics),
           ],
         ],
       );
@@ -422,8 +423,8 @@ class _CacheDiagnosticsPanel extends StatelessWidget {
       );
 }
 
-class _StatusStrip extends StatelessWidget {
-  const _StatusStrip({required this.status, required this.detail, required this.operation, required this.refreshingMetrics});
+class WzDeveloperStatusStrip extends StatelessWidget {
+  const WzDeveloperStatusStrip({required this.status, required this.detail, required this.operation, required this.refreshingMetrics});
   final String status;
   final String detail;
   final String operation;
@@ -512,8 +513,8 @@ class _AudioEffectsPanel extends StatelessWidget {
   }
 }
 
-class _SmartPreloadCard extends StatelessWidget {
-  const _SmartPreloadCard({required this.metrics, required this.enabled, required this.prefetchedTrackId, required this.prefetchedTrackTitle, required this.prefetchInFlight, required this.manifestPrefetched, required this.audioPreparedBeforeNext, required this.lastPrefetchHit, required this.prefetchHitCount, required this.prefetchMissCount, required this.nextTapToAudioMs, required this.nextPreparedBeforePlay, required this.smartQueueCandidateTrackId, required this.smartQueueReason, required this.controlsDisabled, required this.onToggle});
+class WzSmartPreloadDiagnosticsCard extends StatelessWidget {
+  const WzSmartPreloadDiagnosticsCard({required this.metrics, required this.enabled, required this.prefetchedTrackId, required this.prefetchedTrackTitle, required this.prefetchInFlight, required this.manifestPrefetched, required this.audioPreparedBeforeNext, required this.lastPrefetchHit, required this.prefetchHitCount, required this.prefetchMissCount, required this.nextTapToAudioMs, required this.nextPreparedBeforePlay, required this.smartQueueCandidateTrackId, required this.smartQueueReason, required this.controlsDisabled, required this.onToggle});
   final PlaybackMetrics metrics;
   final bool enabled;
   final String? prefetchedTrackId;
@@ -570,8 +571,8 @@ class _SmartPreloadCard extends StatelessWidget {
   }
 }
 
-class _SmartDownloadsCard extends StatelessWidget {
-  const _SmartDownloadsCard({required this.enabled, required this.lastTrackId, required this.lastTitle, required this.lastReason, required this.lastResult, required this.startedCount, required this.completedCount, required this.failedCount, required this.skippedCount, required this.inFlight, required this.onToggle});
+class WzSmartDownloadsDiagnosticsCard extends StatelessWidget {
+  const WzSmartDownloadsDiagnosticsCard({required this.enabled, required this.lastTrackId, required this.lastTitle, required this.lastReason, required this.lastResult, required this.startedCount, required this.completedCount, required this.failedCount, required this.skippedCount, required this.inFlight, required this.onToggle});
   final bool enabled;
   final String? lastTrackId;
   final String? lastTitle;
@@ -707,8 +708,8 @@ class _DeveloperModePanel extends StatelessWidget {
   Widget build(BuildContext context) => _DiagnosticsPanel(child: SwitchListTile(value: enabled, onChanged: onChanged, secondary: const Icon(Icons.admin_panel_settings), title: const Text('Internal developer mode'), subtitle: const Text('Turn off to return to the consumer music shell.')));
 }
 
-class _MetricsToggle extends StatelessWidget {
-  const _MetricsToggle({required this.showMetrics, required this.operationBusy, required this.onToggle, required this.onCopyMetrics, required this.onResetMetrics});
+class WzDeveloperMetricsToggle extends StatelessWidget {
+  const WzDeveloperMetricsToggle({required this.showMetrics, required this.operationBusy, required this.onToggle, required this.onCopyMetrics, required this.onResetMetrics});
   final bool showMetrics;
   final bool operationBusy;
   final VoidCallback onToggle;
@@ -724,8 +725,8 @@ class _MetricsToggle extends StatelessWidget {
       ]);
 }
 
-class _MetricsPanel extends StatelessWidget {
-  const _MetricsPanel({required this.metrics});
+class WzDeveloperMetricsPanel extends StatelessWidget {
+  const WzDeveloperMetricsPanel({required this.metrics});
   final PlaybackMetrics metrics;
   @override
   Widget build(BuildContext context) => _DiagnosticsPanel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

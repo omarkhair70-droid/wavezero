@@ -2667,7 +2667,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           WzHomeQuickActions(onNavigate: _navigateTo, showDeveloperTools: _developerMode),
           const SizedBox(height: WzSpacing.md),
           if (_developerMode) ...[
-            _StatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
+            WzDeveloperStatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
             const SizedBox(height: WzSpacing.sm),
             _SessionStrip(status: _sessionStatus),
           ],
@@ -2734,8 +2734,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
           const SizedBox(height: WzSpacing.md),
           if (_developerMode) ...[
-            _MetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
-            if (_showMetrics) ...[const SizedBox(height: WzSpacing.md), _MetricsPanel(metrics: _metrics)],
+            WzDeveloperMetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
+            if (_showMetrics) ...[const SizedBox(height: WzSpacing.md), WzDeveloperMetricsPanel(metrics: _metrics)],
           ],
         ],
       ),
@@ -2772,7 +2772,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
           if (_developerMode) ...[
             const SizedBox(height: WzSpacing.md),
-            _SmartPreloadCard(
+            WzSmartPreloadDiagnosticsCard(
               metrics: _metrics,
               enabled: _prefetchEnabled,
               prefetchedTrackId: _prefetchedTrackId,
@@ -2791,7 +2791,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               onToggle: _setPrefetchEnabled,
             ),
             const SizedBox(height: WzSpacing.sm),
-            _SmartDownloadsCard(
+            WzSmartDownloadsDiagnosticsCard(
               enabled: _smartDownloadsEnabled,
               lastTrackId: _lastSmartDownloadTrackId,
               lastTitle: _lastSmartDownloadTitle,
@@ -3222,32 +3222,19 @@ class _WzTokens {
   const _WzTokens._();
 
   static const Color surface = WzColors.surface;
-  static const Color surfaceElevated = WzColors.surfaceElevated;
-  static const Color surfaceMuted = WzColors.surfaceMuted;
   static const Color border = WzColors.border;
-  static const Color borderSoft = WzColors.borderSoft;
   static const Color accent = WzColors.accent;
-  static const Color successSoft = WzColors.successSoft;
-  static const Color warning = WzColors.warning;
   static const Color textPrimary = WzColors.textPrimary;
   static const Color textMuted = WzColors.textMuted;
   static const Color textSubtle = WzColors.textSubtle;
 
-  static const double space1 = 4;
-  static const double space2 = 8;
-  static const double space3 = 12;
   static const double space4 = 16;
-  static const double space5 = 20;
-  static const double radiusMd = 18;
-  static const double radiusLg = 26;
   static const double radiusXl = 32;
 
   static const Duration motionNormal = WzMotion.normal;
   static const Duration motionSlow = WzMotion.slow;
   static const Curve motionCurve = WzMotion.curve;
 
-  static const TextStyle title = TextStyle(color: textPrimary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.3);
-  static const TextStyle body = TextStyle(color: textMuted, fontSize: 13, height: 1.35);
   static const TextStyle caption = TextStyle(color: textSubtle, fontSize: 12, height: 1.3);
 }
 
