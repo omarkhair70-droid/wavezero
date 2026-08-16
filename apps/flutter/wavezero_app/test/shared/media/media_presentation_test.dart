@@ -12,4 +12,11 @@ void main() {
     expect(wzProductQualityLabel('unknown'), 'Unknown');
     expect(wzProductQualityLabel('Custom Tier'), 'Custom Tier');
   });
+
+  test('cached source badges preserve download source mapping', () {
+    expect(wzCachedSourceBadgeLabel('manual cached download high'), 'Manual');
+    expect(wzCachedSourceBadgeLabel('smart_current cached download high'), 'Smart Current');
+    expect(wzCachedSourceBadgeLabel('smart_up_next cached download high'), 'Smart Up Next');
+    expect(wzCachedSourceBadgeLabel(null), 'Unknown');
+  });
 }

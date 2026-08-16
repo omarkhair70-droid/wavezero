@@ -17,3 +17,17 @@ String wzProductQualityLabel(String? value) {
       return value!;
   }
 }
+
+String wzCachedSourceBadgeLabel(String? displayName) {
+  final source = displayName?.split(' ').first ?? 'unknown';
+  switch (source) {
+    case 'manual':
+      return 'Manual';
+    case 'smart_current':
+      return 'Smart Current';
+    case 'smart_up_next':
+      return 'Smart Up Next';
+    default:
+      return 'Unknown';
+  }
+}
