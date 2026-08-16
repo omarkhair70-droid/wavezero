@@ -8078,7 +8078,7 @@ class _CollectionTrackRow extends StatelessWidget {
         padding: const EdgeInsets.all(WzSpacing.sm),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
+            _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.subtitle),
             const SizedBox(width: WzSpacing.sm),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
