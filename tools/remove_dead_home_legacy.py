@@ -7,8 +7,6 @@ TARGET = Path("apps/flutter/wavezero_app/lib/app/wavezero_app.dart")
 NAMES = [
     "_CuratedDemoHomeSection",
     "_CuratedDemoShelfView",
-    "_CuratedPickCard",
-    "_CuratedPickText",
     "_CuratedTryPicksPanel",
     "_HomeHistorySection",
     "_ContinueListeningCard",
