@@ -1,0 +1,75 @@
+name: One-shot library controls extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-library-controls
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-library-controls
+          fetch-depth: 0
+      - name: Move library filter and sort vocabulary out of V3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+
+          import_anchor = "import '../features/playback/playback_preferences.dart';\n"
+          library_import = "import '../features/library/library_controls.dart';\n"
+          if text.count(import_anchor) != 1:
+              raise SystemExit('playback preferences import anchor changed')
+          if library_import not in text:
+              text = text.replace(import_anchor, library_import + import_anchor, 1)
+
+          source_start = 'enum _LibrarySourceFilter { all, api, device, downloads, cloud }'
+          source_end = 'enum WzSearchResultType {'
+          if text.count(source_start) != 1 or text.count(source_end) != 1:
+              raise SystemExit('library source block boundaries changed')
+          start = text.index(source_start)
+          end = text.index(source_end, start)
+          text = text[:start] + text[end:]
+
+          sort_start = 'enum _LibrarySortMode { recentlyAdded, titleAz, artistAz, longestDuration, shortestDuration, quality }'
+          sort_end = 'CatalogTrackSummary _catalogSummaryFromCachedTrack('
+          if text.count(sort_start) != 1 or text.count(sort_end) != 1:
+              raise SystemExit('library sort block boundaries changed')
+          start = text.index(sort_start)
+          end = text.index(sort_end, start)
+          text = text[:start] + text[end:]
+
+          replacements = {
+              '_LibrarySourceFilter': 'WzLibrarySourceFilter',
+              '_LibrarySortMode': 'WzLibrarySortMode',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'expected library control reference missing: {old}')
+              text = text.replace(old, new)
+
+          for stale in replacements:
+              if stale in text:
+                  raise SystemExit(f'stale library control symbol remains: {stale}')
+          if text.count(library_import) != 1:
+              raise SystemExit('library controls import missing after patch')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-library-controls-extract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-library-controls-extract.yml
+          git commit -m "Use extracted library control models"
+          git push origin HEAD:refactor/extract-library-controls
