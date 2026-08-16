@@ -30,6 +30,7 @@ import 'collections_service.dart';
 import 'listening_history_service.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
+import '../features/playback/sleep_timer_presentation.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
@@ -587,16 +588,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool get _canShuffleNext => _shuffleEnabled && _queue.length > 1 && _queueIndex >= 0;
   bool get _canPlayNextControl => _canNext || _canShuffleNext;
 
-  String get _sleepTimerStatusLabel {
-    final deadline = _sleepTimerDeadline;
-    if (deadline == null) return 'Sleep timer';
-    final remaining = deadline.difference(DateTime.now());
-    if (remaining.inSeconds <= 0) return 'Sleep timer ending';
-    final minutes = remaining.inMinutes + (remaining.inSeconds % 60 == 0 ? 0 : 1);
-    return 'Sleep in ${minutes}m';
-  }
+  String get _sleepTimerStatusLabel => WzSleepTimerPresentation.statusLabel(
+        deadline: _sleepTimerDeadline,
+        now: DateTime.now(),
+      );
 
-  String get _sleepTimerSettingsLabel => _sleepTimerDeadline == null ? 'Sleep timer off' : _sleepTimerStatusLabel;
+  String get _sleepTimerSettingsLabel => WzSleepTimerPresentation.settingsLabel(
+        deadline: _sleepTimerDeadline,
+        now: DateTime.now(),
+      );
   bool get _playerDisabled => _operation.disablesPlayerControls;
   bool get _catalogRefreshDisabled => _operation.disablesCatalogRefresh;
   bool get _queueDisabled => _operation.disablesQueueControls;
