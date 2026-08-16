@@ -27,6 +27,7 @@ import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
 import '../features/playback/playback_preferences.dart';
 import '../features/downloads/cache_service.dart';
+import '../features/downloads/downloads_presentation.dart';
 import '../features/cloud_vault/cloud_vault_models.dart';
 import '../features/cloud_vault/cloud_vault_service.dart';
 import '../design/wavezero_design_system.dart';
@@ -353,7 +354,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _deviceMusicTracks.map(_catalogSummaryFromDeviceTrack).toList(growable: false);
 
   List<CatalogTrackSummary> get _cachedCatalogTracks =>
-      _cachedLibrary.map(_catalogSummaryFromCachedTrack).toList(growable: false);
+      _cachedLibrary.map(wzCatalogSummaryFromCachedTrack).toList(growable: false);
 
   List<CatalogTrackSummary> get _cloudCatalogTracks =>
       _cloudVaultTracks.map((track) => track.toCatalogSummary()).toList(growable: false);
@@ -3699,26 +3700,6 @@ int _searchRank(WzSearchResult result, String query) {
   return 80;
 }
 
-CatalogTrackSummary _catalogSummaryFromCachedTrack(CachedTrackMetadata track) {
-  return CatalogTrackSummary(
-    trackId: track.trackId,
-    title: track.title,
-    artistId: null,
-    artistName: track.artistName,
-    durationMs: track.durationMs,
-    artworkUrl: track.artworkUrl,
-    displayName: '${track.downloadSource} cached download ${track.qualityLabel} ${track.codec ?? ''}',
-    source: 'cached',
-    license: track.license,
-    primaryAsset: CatalogTrackAssetSummary(
-      assetId: 'cached-${track.trackId}',
-      manifestUrl: track.originalRemoteUrl,
-      qualityLabel: track.qualityLabel,
-      codec: track.codec,
-      bitrateKbps: track.bitrateKbps,
-    ),
-  );
-}
 
 CatalogTrackSummary _catalogSummaryFromDeviceTrack(DeviceMusicTrack track) {
   return CatalogTrackSummary(
@@ -5002,7 +4983,7 @@ class _SettingsPage extends StatelessWidget {
                   runSpacing: WzSpacing.sm,
                   children: [
                     WzMiniMetric(label: 'Cached for offline', value: '$cachedTrackCount', active: cachedTrackCount > 0, icon: Icons.library_music),
-                    WzMiniMetric(label: 'Device storage', value: _formatCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
+                    WzMiniMetric(label: 'Device storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
                     WzMiniMetric(label: 'Manual', value: '$manualDownloadedCount', active: manualDownloadedCount > 0, icon: Icons.download_done),
                     WzMiniMetric(label: 'Smart', value: '$smartDownloadedCount', active: smartDownloadedCount > 0, icon: Icons.auto_awesome),
                   ],
@@ -5195,11 +5176,6 @@ class _SettingsPage extends StatelessWidget {
       );
 }
 
-String _formatCacheBytes(int bytes) {
-  if (bytes >= 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  return '$bytes B';
-}
 
 Map<String, int> _cachedTrackSizeMap(List<CachedTrackMetadata> tracks) {
   final sizes = <String, int>{};
@@ -5492,7 +5468,7 @@ class _HomeCollectionsOfflineSection extends StatelessWidget {
               WzMiniMetric(label: 'Liked Tracks', value: '${liked.trackCount}', active: liked.trackCount > 0, icon: Icons.favorite),
               WzMiniMetric(label: 'Collections', value: '$userCollectionCount', active: userCollectionCount > 0, icon: Icons.playlist_play),
               WzMiniMetric(label: 'Offline Ready', value: offlineTrackCount > 0 ? '$offlineTrackCount tracks' : 'No downloads yet', active: offlineTrackCount > 0, icon: Icons.download_done),
-              WzMiniMetric(label: 'Storage', value: _formatCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
+              WzMiniMetric(label: 'Storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
             ],
           ),
           const SizedBox(height: WzSpacing.md),
@@ -7150,7 +7126,7 @@ class _StorageManagerPage extends StatelessWidget {
                 runSpacing: WzSpacing.sm,
                 children: [
                   WzMiniMetric(label: 'Cached for offline', value: '${downloads.length}', active: downloads.isNotEmpty, icon: Icons.library_music),
-                  WzMiniMetric(label: 'Device storage', value: _formatCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
+                  WzMiniMetric(label: 'Device storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
                   WzMiniMetric(label: 'Manual downloads', value: '$manualDownloadedCount', active: manualDownloadedCount > 0, icon: Icons.download_done),
                   WzMiniMetric(label: 'Smart downloads', value: '$smartDownloadedCount', active: smartDownloadedCount > 0, icon: Icons.auto_awesome),
                   WzMiniMetric(label: 'Offline-ready', value: '$offlineReadyCount', active: offlineReadyCount > 0, icon: Icons.offline_pin),
@@ -7201,7 +7177,7 @@ class _StorageManagerPage extends StatelessWidget {
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text(downloads.isEmpty ? 'Downloads cleared' : '${downloads.length} downloaded • ${_formatCacheBytes(cacheBytes)}', style: WzText.body),
+                  Text(downloads.isEmpty ? 'Downloads cleared' : '${downloads.length} downloaded • ${formatWzCacheBytes(cacheBytes)}', style: WzText.body),
                   OutlinedButton.icon(
                     onPressed: controlsDisabled || downloads.isEmpty ? null : () => unawaited(onClearAll()),
                     icon: const Icon(Icons.clear_all),
@@ -7258,7 +7234,7 @@ class _StorageTrackRow extends StatelessWidget {
       if (quality != 'Unknown') quality,
       if (track.codec != null && track.codec!.trim().isNotEmpty) track.codec!,
       if (track.bitrateKbps != null) '${track.bitrateKbps}kbps',
-      if (sizeBytes != null) _formatCacheBytes(sizeBytes!),
+      if (sizeBytes != null) formatWzCacheBytes(sizeBytes!),
     ];
     return Container(
       margin: const EdgeInsets.only(bottom: WzSpacing.sm),
@@ -7292,11 +7268,11 @@ class _StorageTrackRow extends StatelessWidget {
             spacing: WzSpacing.xs,
             runSpacing: WzSpacing.xs,
             children: [
-              WzStatusPill(label: _downloadSourceLabel(track.downloadSource), active: track.downloadSource != 'unknown', icon: _downloadSourceIcon(track.downloadSource)),
+              WzStatusPill(label: wzDownloadSourceLabel(track.downloadSource), active: track.downloadSource != 'unknown', icon: _downloadSourceIcon(track.downloadSource)),
               if (quality != 'Unknown') WzStatusPill(label: quality, active: true, icon: Icons.high_quality),
               if (track.codec != null && track.codec!.trim().isNotEmpty) WzStatusPill(label: track.codec!, active: true, icon: Icons.memory),
               if (track.bitrateKbps != null) WzStatusPill(label: '${track.bitrateKbps}kbps', active: true, icon: Icons.speed),
-              if (sizeBytes != null) WzStatusPill(label: _formatCacheBytes(sizeBytes!), active: true, icon: Icons.sd_storage),
+              if (sizeBytes != null) WzStatusPill(label: formatWzCacheBytes(sizeBytes!), active: true, icon: Icons.sd_storage),
               if (details.isEmpty) const WzStatusPill(label: 'Offline-ready', active: true, icon: Icons.offline_pin),
             ],
           ),
@@ -7357,7 +7333,7 @@ class _DownloadsCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Text('${downloads.length} • ${_formatCacheBytes(cacheBytes)}', style: _WzTokens.caption),
+                Text('${downloads.length} • ${formatWzCacheBytes(cacheBytes)}', style: _WzTokens.caption),
                 Wrap(
                   spacing: WzSpacing.xs,
                   runSpacing: WzSpacing.xs,
@@ -7417,7 +7393,7 @@ class _DownloadRow extends StatelessWidget {
                     children: [
                       Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text('${track.subtitle} • ${_productQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${_downloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                      Text('${track.subtitle} • ${_productQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
                     ],
                   ),
                 ),
@@ -7438,23 +7414,7 @@ class _DownloadRow extends StatelessWidget {
       );
 }
 
-String _cachedSourceBadgeLabel(String? displayName) {
-  final source = displayName?.split(' ').first ?? 'unknown';
-  return _downloadSourceLabel(source);
-}
 
-String _downloadSourceLabel(String source) {
-  switch (source) {
-    case 'manual':
-      return 'Manual';
-    case 'smart_current':
-      return 'Smart Current';
-    case 'smart_up_next':
-      return 'Smart Up Next';
-    default:
-      return 'Unknown';
-  }
-}
 
 IconData _downloadSourceIcon(String source) {
   switch (source) {
@@ -8207,7 +8167,7 @@ class _CatalogRow extends StatelessWidget {
     final status = CacheService().statusForTrack(track.trackId);
     final isDevice = _isDeviceCatalogTrack(track);
     final isCached = _isCachedCatalogTrack(track);
-    final sourceLabel = isDevice ? 'Device' : isCached ? _cachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'Catalog');
+    final sourceLabel = isDevice ? 'Device' : isCached ? wzCachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'Catalog');
     final licenseLabel = _licenseBadgeLabel(track);
     final asset = track.primaryAsset;
     Icon cacheIcon;
