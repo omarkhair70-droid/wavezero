@@ -1,0 +1,74 @@
+name: One-shot sleep timer presentation extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-sleep-timer-presentation
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-sleep-timer-presentation
+          fetch-depth: 0
+      - name: Move sleep timer presentation out of V3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+
+          import_anchor = "import '../features/playback/playback_status.dart';\n"
+          presentation_import = "import '../features/playback/sleep_timer_presentation.dart';\n"
+          if text.count(import_anchor) != 1:
+              raise SystemExit('playback status import anchor changed')
+          if presentation_import not in text:
+              text = text.replace(import_anchor, import_anchor + presentation_import, 1)
+
+          old = (
+              "  String get _sleepTimerStatusLabel {\n"
+              "    final deadline = _sleepTimerDeadline;\n"
+              "    if (deadline == null) return 'Sleep timer';\n"
+              "    final remaining = deadline.difference(DateTime.now());\n"
+              "    if (remaining.inSeconds <= 0) return 'Sleep timer ending';\n"
+              "    final minutes = remaining.inMinutes + (remaining.inSeconds % 60 == 0 ? 0 : 1);\n"
+              "    return 'Sleep in ${minutes}m';\n"
+              "  }\n\n"
+              "  String get _sleepTimerSettingsLabel => _sleepTimerDeadline == null ? 'Sleep timer off' : _sleepTimerStatusLabel;\n"
+          )
+          new = (
+              "  String get _sleepTimerStatusLabel => WzSleepTimerPresentation.statusLabel(\n"
+              "        deadline: _sleepTimerDeadline,\n"
+              "        now: DateTime.now(),\n"
+              "      );\n\n"
+              "  String get _sleepTimerSettingsLabel => WzSleepTimerPresentation.settingsLabel(\n"
+              "        deadline: _sleepTimerDeadline,\n"
+              "        now: DateTime.now(),\n"
+              "      );\n"
+          )
+          if text.count(old) != 1:
+              raise SystemExit('sleep timer presentation block changed')
+          text = text.replace(old, new, 1)
+
+          if text.count(presentation_import) != 1:
+              raise SystemExit('sleep timer presentation import missing after patch')
+          if "final remaining = deadline.difference(DateTime.now());" in text:
+              raise SystemExit('inline sleep timer presentation remains')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-sleep-timer-presentation-extract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-sleep-timer-presentation-extract.yml
+          git commit -m "Use extracted sleep timer presentation"
+          git push origin HEAD:refactor/extract-sleep-timer-presentation
