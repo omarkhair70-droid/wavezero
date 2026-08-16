@@ -10,6 +10,11 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
   });
 
+  test('recent search persistence contract keeps the existing key and cap', () {
+    expect(WzRecentSearchesStore.preferenceKey, 'wavezero.recent_searches.v1');
+    expect(WzRecentSearchesStore.maxItems, 10);
+  });
+
   test('search normalization preserves the existing Arabic and whitespace rules', () {
     expect(normalizeWzSearch('  أَغْنِيَة   جديدة  '), 'اغنيه جديده');
     expect(normalizeWzSearch('إلى'), 'الي');
