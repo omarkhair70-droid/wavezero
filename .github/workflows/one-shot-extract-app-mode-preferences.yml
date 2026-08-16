@@ -1,0 +1,29 @@
+name: One-shot extract app mode preferences
+
+on:
+  push:
+    branches:
+      - refactor/extract-app-mode-preferences
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-app-mode-preferences
+          fetch-depth: 0
+      - name: Route V3 through Settings-owned app mode preferences
+        shell: bash
+        run: |
+          python tools/patch_extract_app_mode_preferences.py
+          rm tools/patch_extract_app_mode_preferences.py
+          rm .github/workflows/one-shot-extract-app-mode-preferences.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Extract app mode preferences from Flutter V3'
+          git push origin HEAD:refactor/extract-app-mode-preferences
