@@ -1,3 +1,5 @@
+export 'home_curated_history.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../app/navigation/wavezero_navigation.dart';
