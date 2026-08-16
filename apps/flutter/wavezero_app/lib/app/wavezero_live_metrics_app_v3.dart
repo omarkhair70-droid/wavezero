@@ -5,7 +5,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_effects.dart';
 import 'app_config.dart';
@@ -58,6 +57,7 @@ import '../features/queue/queue_position.dart';
 import '../features/queue/smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
+import 'theme/wavezero_theme_preferences.dart';
 
 class WaveZeroLiveMetricsApp extends StatefulWidget {
   const WaveZeroLiveMetricsApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
@@ -72,6 +72,7 @@ class WaveZeroLiveMetricsApp extends StatefulWidget {
 }
 
 class _WaveZeroLiveMetricsAppState extends State<WaveZeroLiveMetricsApp> {
+  final WzThemePreferences _themePreferences = const WzThemePreferences();
   WzThemeConfig _themeConfig = const WzThemeConfig();
 
   @override
@@ -81,16 +82,14 @@ class _WaveZeroLiveMetricsAppState extends State<WaveZeroLiveMetricsApp> {
   }
 
   Future<void> _loadThemeConfig() async {
-    final prefs = await SharedPreferences.getInstance();
+    final config = await _themePreferences.load();
     if (!mounted) return;
-    setState(() => _themeConfig = WzThemeConfig.fromPrefs(prefs));
+    setState(() => _themeConfig = config);
   }
 
   Future<void> _setThemeConfig(WzThemeConfig config) async {
     setState(() => _themeConfig = config);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(WzThemeConfig.themePreferenceKey, config.themePreset.name);
-    await prefs.setString(WzThemeConfig.accentPreferenceKey, config.accentPreset.name);
+    await _themePreferences.save(config);
   }
 
   @override
