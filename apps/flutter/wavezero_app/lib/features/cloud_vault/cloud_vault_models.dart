@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../catalog/catalog_track_manifest.dart';
+import '../../catalog/catalog_track_manifest.dart';
 
 enum CloudVaultProvider {
   googleDrive,
