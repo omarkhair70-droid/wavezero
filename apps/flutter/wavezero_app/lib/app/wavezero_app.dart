@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../audio/audio_effects.dart';
 import 'app_config.dart';
 import 'app_shell/wavezero_product_header.dart';
+import 'app_shell/wavezero_bottom_navigation.dart';
 import 'curated_demo_picks.dart';
 import '../catalog/audio_quality.dart';
 import '../catalog/catalog_client.dart';
@@ -2533,7 +2534,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.62),
+      barrierColor: const Color(0x66788792),
       builder: (sheetContext) => WzPremiumPlayerSheet(
         child: WzPremiumPlayerSurface(
           metrics: _metrics,
@@ -3164,41 +3165,26 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: Container(
-        color: widget.themeConfig.surfaceMuted,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (hasPlayerTrack) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-                child: WzPremiumMiniPlayer(
-                  metrics: _metrics,
-                  manifest: _manifest,
-                  progressValue: progress,
-                  sourceLabel: isDevicePlayback ? 'Device music' : wzPlayerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
-                  offlineReady: _offlineLibraryAvailable,
-                  shuffleEnabled: _shuffleEnabled,
-                  repeatMode: _repeatMode,
-                  sleepTimerBadge: _sleepTimerDeadline == null ? null : _sleepTimerStatusLabel,
-                  controlsDisabled: _playerDisabled,
-                  onTap: _showPremiumPlayerSheet,
-                  onPlayPause: _playPause,
-                ),
-              ),
-              const Divider(height: 1, color: WzColors.border),
-            ],
-            BottomNavigationBar(
-              currentIndex: currentIndex < 0 ? 0 : currentIndex,
-              onTap: (i) => _navigateTo(destinations[i].tab),
-              backgroundColor: widget.themeConfig.surfaceMuted,
-              selectedItemColor: currentIndex < 0 ? WzColors.textMuted : widget.themeConfig.accent,
-              unselectedItemColor: WzColors.textMuted,
-              type: BottomNavigationBarType.fixed,
-              items: destinations.map((destination) => BottomNavigationBarItem(icon: Icon(destination.icon), label: destination.label)).toList(growable: false),
-            ),
-          ],
-        ),
+      bottomNavigationBar: WaveZeroBottomShell(
+        destinations: destinations,
+        currentIndex: currentIndex < 0 ? 0 : currentIndex,
+        onDestinationSelected: (i) => _navigateTo(destinations[i].tab),
+        accent: widget.themeConfig.accent,
+        miniPlayer: hasPlayerTrack
+            ? WzPremiumMiniPlayer(
+                metrics: _metrics,
+                manifest: _manifest,
+                progressValue: progress,
+                sourceLabel: isDevicePlayback ? 'Device music' : wzPlayerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
+                offlineReady: _offlineLibraryAvailable,
+                shuffleEnabled: _shuffleEnabled,
+                repeatMode: _repeatMode,
+                sleepTimerBadge: _sleepTimerDeadline == null ? null : _sleepTimerStatusLabel,
+                controlsDisabled: _playerDisabled,
+                onTap: _showPremiumPlayerSheet,
+                onPlayPause: _playPause,
+              )
+            : null,
       ),
     );
   }
