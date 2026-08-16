@@ -20,6 +20,7 @@ import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
 import '../features/library/library_controls.dart';
 import '../features/library/library_source_overview.dart';
+import '../features/library/library_catalog_items.dart';
 import '../features/library/library_sort.dart';
 import '../features/library/library_sources.dart';
 import '../features/library/library_status_presentation.dart';
@@ -3287,111 +3288,6 @@ String _formatDuration(int ms) {
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
 
-class _CuratedPickCard extends StatelessWidget {
-  const _CuratedPickCard({required this.pick, required this.onPlay, required this.onAddToQueue, this.compact = false});
-
-  final ResolvedCuratedDemoPick pick;
-  final VoidCallback onPlay;
-  final VoidCallback onAddToQueue;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final track = pick.track;
-    final artSize = compact ? 72.0 : 132.0;
-    return SizedBox(
-      width: compact ? 230 : 174,
-      child: InkWell(
-        onTap: onPlay,
-        borderRadius: BorderRadius.circular(WzRadius.lg),
-        child: Container(
-          padding: const EdgeInsets.all(WzSpacing.sm),
-          decoration: BoxDecoration(color: WzColors.surfaceMuted, borderRadius: BorderRadius.circular(WzRadius.lg), border: Border.all(color: WzColors.borderSoft)),
-          child: compact
-              ? Row(
-                  children: [
-                    WzArtwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
-                    const SizedBox(width: WzSpacing.sm),
-                    Expanded(child: _CuratedPickText(pick: pick, onPlay: onPlay, onAddToQueue: onAddToQueue, compact: true)),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    WzArtwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
-                    const SizedBox(height: WzSpacing.sm),
-                    Expanded(child: _CuratedPickText(pick: pick, onPlay: onPlay, onAddToQueue: onAddToQueue)),
-                  ],
-                ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CuratedPickText extends StatelessWidget {
-  const _CuratedPickText({required this.pick, required this.onPlay, required this.onAddToQueue, this.compact = false});
-
-  final ResolvedCuratedDemoPick pick;
-  final VoidCallback onPlay;
-  final VoidCallback onAddToQueue;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final track = pick.track;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start,
-      children: [
-        Text(track.title, maxLines: compact ? 1 : 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: compact ? 13 : 14)),
-        const SizedBox(height: WzSpacing.xxs),
-        Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-        const SizedBox(height: WzSpacing.xxs),
-        Text('${pick.pick.shelfLabel} • ${pick.pick.mood}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-        const Spacer(),
-        Wrap(
-          spacing: WzSpacing.xs,
-          children: [
-            SizedBox(height: 32, child: FilledButton.tonalIcon(onPressed: onPlay, icon: const Icon(Icons.play_arrow, size: 16), label: const Text('Play'))),
-            if (!compact) IconButton.outlined(tooltip: 'Add to Queue', onPressed: onAddToQueue, icon: const Icon(Icons.queue_music, size: 16)),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _FeaturedDemoLibraryShelf extends StatelessWidget {
-  const _FeaturedDemoLibraryShelf({required this.picks, required this.onPlayPick});
-
-  final List<ResolvedCuratedDemoPick> picks;
-  final ValueChanged<ResolvedCuratedDemoPick> onPlayPick;
-
-  @override
-  Widget build(BuildContext context) {
-    if (picks.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const WzSectionHeader(title: 'Featured from this demo', subtitle: 'A small curated shelf before the full catalog list.', icon: Icons.stars),
-        const SizedBox(height: WzSpacing.sm),
-        SizedBox(
-          height: 104,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: math.min(8, picks.length),
-            separatorBuilder: (_, __) => const SizedBox(width: WzSpacing.sm),
-            itemBuilder: (context, index) => _CuratedPickCard(pick: picks[index], compact: true, onPlay: () => onPlayPick(picks[index]), onAddToQueue: () {}),
-          ),
-        ),
-        const SizedBox(height: WzSpacing.xs),
-        const Text(CuratedDemoPicks.consumerCopy, style: WzText.caption),
-      ],
-    );
-  }
-}
-
 class _DiscoveryPanel extends StatelessWidget {
   const _DiscoveryPanel({required this.title, required this.subtitle, required this.icon, required this.children});
   final String title;
@@ -4916,7 +4812,7 @@ class _CatalogListCard extends StatelessWidget {
           onOpenCloudVault: onOpenCloudVault,
         ),
         const SizedBox(height: 12),
-        _FeaturedDemoLibraryShelf(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
+        WzFeaturedDemoLibraryShelf(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
         const SizedBox(height: 12),
         DropdownButtonFormField<WzLibrarySortMode>(
           value: librarySortMode,
@@ -4949,7 +4845,7 @@ class _CatalogListCard extends StatelessWidget {
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
-                return _CatalogRow(
+                return WzLibraryCatalogRow(
                   track: track,
                   selected: track.trackId == selectedTrackId,
                   addDisabled: addToQueueDisabled || (track.source == 'cloud_vault' && track.primaryAsset == null),
@@ -4974,109 +4870,6 @@ class _CatalogListCard extends StatelessWidget {
   }
 }
 
-
-class _SourceBadge extends StatelessWidget {
-  const _SourceBadge({required this.label, required this.active});
-  final String label;
-  final bool active;
-  @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(left: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: active ? const Color(0xFF172A36) : const Color(0xFF171B28), borderRadius: BorderRadius.circular(10)),
-        child: Text(label, style: const TextStyle(color: Color(0xFF9EDBFF), fontSize: 10, fontWeight: FontWeight.w800)),
-      );
-}
-
-class _LicenseBadge extends StatelessWidget {
-  const _LicenseBadge({required this.label, this.warning = false});
-  final String label;
-  final bool warning;
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: warning ? const Color(0xFF332613) : const Color(0xFF15251E), borderRadius: BorderRadius.circular(10), border: Border.all(color: warning ? const Color(0xFFFFC46B) : const Color(0xFF38D996).withOpacity(0.4))),
-        child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: warning ? const Color(0xFFFFC46B) : const Color(0xFF8FF0C0), fontSize: 10, fontWeight: FontWeight.w800)),
-      );
-}
-
-String _licenseBadgeLabel(CatalogTrackSummary track) {
-  if (isWzDeviceCatalogTrack(track)) return 'Device music';
-  if (track.license.status == LicenseStatus.unknown && track.trackId.startsWith('track-local-')) return 'Dev only';
-  return track.license.badgeLabel;
-}
-
-class _CatalogRow extends StatelessWidget {
-  const _CatalogRow({required this.track, required this.selected, required this.addDisabled, required this.onTap, required this.onAdd, required this.onToggleLike, required this.onAddToCollection, required this.liked, required this.onCache, required this.onDeleteCached});
-  final CatalogTrackSummary track;
-  final bool selected;
-  final bool addDisabled;
-  final VoidCallback onTap;
-  final VoidCallback onAdd;
-  final VoidCallback onToggleLike;
-  final VoidCallback onAddToCollection;
-  final bool liked;
-  final VoidCallback? onCache;
-  final VoidCallback? onDeleteCached;
-  @override
-  Widget build(BuildContext context) {
-    final status = CacheService().statusForTrack(track.trackId);
-    final isDevice = isWzDeviceCatalogTrack(track);
-    final isCached = isWzCachedCatalogTrack(track);
-    final sourceLabel = isDevice ? 'Device' : isCached ? wzCachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'Catalog');
-    final licenseLabel = _licenseBadgeLabel(track);
-    final asset = track.primaryAsset;
-    Icon cacheIcon;
-    switch (status) {
-      case TrackCacheStatus.caching: cacheIcon = const Icon(Icons.downloading, color: Color(0xFF98A1B8)); break;
-      case TrackCacheStatus.cached: cacheIcon = const Icon(Icons.check_circle, color: Color(0xFF38D996)); break;
-      case TrackCacheStatus.failed: cacheIcon = const Icon(Icons.error, color: Color(0xFFFFC46B)); break;
-      case TrackCacheStatus.notCached:
-      default: cacheIcon = const Icon(Icons.download, color: Color(0xFF8D7CFF)); break;
-    }
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(WzRadius.lg),
-      child: AnimatedContainer(
-        duration: _WzTokens.motionFast,
-        curve: _WzTokens.motionCurve,
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: selected ? WzColors.accentSoft : WzColors.surfaceMuted, borderRadius: BorderRadius.circular(WzRadius.lg), border: Border.all(color: selected ? WzColors.accent.withOpacity(0.65) : WzColors.borderSoft), boxShadow: selected ? [BoxShadow(color: WzColors.accent.withOpacity(0.14), blurRadius: 22, offset: const Offset(0, 10))] : null),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            WzArtwork(artworkUrl: track.artworkUrl, size: 54, trackId: track.trackId, title: track.title, artist: track.artistName),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [Expanded(child: Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)))]),
-              const SizedBox(height: 4),
-              Wrap(spacing: 6, runSpacing: 4, children: [
-                _SourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
-                _LicenseBadge(label: licenseLabel, warning: track.license.needsRightsWarning),
-              ]),
-              const SizedBox(height: 4),
-              Text(_trackSubtitle(track), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
-              const SizedBox(height: 3),
-              Text('${asset?.qualityLabel ?? 'quality unknown'}${asset?.codec == null ? '' : ' • ${asset!.codec}'}${isDevice ? ' • Already local' : isCached ? ' • Cached locally' : ' • ${status.name}'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-            ])),
-          ]),
-          const SizedBox(height: 6),
-          Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: 4, runSpacing: 4, children: [
-            Text(_formatTime(track.durationMs), style: _timeStyle),
-            if (status == TrackCacheStatus.cached && !isCached) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: const Color(0xFF173626), borderRadius: BorderRadius.circular(10)), child: const Text('Cached', style: TextStyle(color: Color(0xFF38D996), fontSize: 10, fontWeight: FontWeight.w800))),
-            IconButton(tooltip: liked ? 'Unlike' : 'Like', onPressed: onToggleLike, icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? const Color(0xFFFF6B8A) : const Color(0xFF8D7CFF))),
-            IconButton(tooltip: 'Add to queue', onPressed: addDisabled ? null : onAdd, icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF))),
-            IconButton(tooltip: 'Add to collection', onPressed: onAddToCollection, icon: const Icon(Icons.library_add, color: Color(0xFF8D7CFF))),
-            if (onCache != null) IconButton(tooltip: 'Cache/download', onPressed: onCache, icon: cacheIcon),
-            if (onDeleteCached != null) IconButton(tooltip: 'Delete cached file', onPressed: onDeleteCached, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
-            if (onCache == null && onDeleteCached == null) Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Icon(track.source == 'cloud_vault' ? Icons.cloud_done_outlined : Icons.phone_android, color: const Color(0xFF38D996))),
-            Icon(selected ? Icons.check_circle : Icons.play_circle_outline, color: const Color(0xFF8D7CFF)),
-          ]),
-        ]),
-      ),
-    );
-  }
-}
 
 class _ContentServerDiagnosticsPanel extends StatelessWidget {
   const _ContentServerDiagnosticsPanel({required this.apiBaseUrl, required this.status, required this.catalogStatus, required this.catalogTrackCount, required this.visibleTrackCount, required this.filteredTrackCount, required this.catalogLimit, required this.largeCatalogMode});
@@ -5303,7 +5096,6 @@ class _Panel extends StatelessWidget {
 }
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
-String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(isWzDeviceCatalogTrack(track) ? 'Device music' : (track.license.sourceName ?? 'Catalog')); parts.add(track.license.badgeLabel); return parts.join(' • '); }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
