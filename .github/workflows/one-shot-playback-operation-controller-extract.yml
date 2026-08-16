@@ -42,6 +42,21 @@ jobs:
               raise SystemExit('player operation field changed')
           text = text.replace(old_field, new_field, 1)
 
+          old_import_begin = (
+              "  Future<void> _importDeviceMusic() async {\n"
+              "    if (_operation != PlayerOperation.idle) return;\n"
+              "    setState(() {\n"
+              "      _operation = PlayerOperation.loadingCatalog;\n"
+          )
+          new_import_begin = (
+              "  Future<void> _importDeviceMusic() async {\n"
+              "    if (!_operationController.tryBegin(PlayerOperation.loadingCatalog)) return;\n"
+              "    setState(() {\n"
+          )
+          if text.count(old_import_begin) != 1:
+              raise SystemExit('device music operation begin changed')
+          text = text.replace(old_import_begin, new_import_begin, 1)
+
           old_run = (
               "  Future<void> _runOperation(PlayerOperation operation, Future<void> Function() body, {bool refreshAfter = true}) async {\n"
               "    if (_operation != PlayerOperation.idle) return;\n"
@@ -77,10 +92,39 @@ jobs:
               raise SystemExit('run operation block changed')
           text = text.replace(old_run, new_run, 1)
 
+          toggle_assign = "    setState(() => _operation = PlayerOperation.loadingTrack);\n"
+          if text.count(toggle_assign) != 1:
+              raise SystemExit(f'expected one manual loadingTrack assignment, found {text.count(toggle_assign)}')
+          text = text.replace(
+              toggle_assign,
+              "    if (!_operationController.tryBegin(PlayerOperation.loadingTrack)) return;\n    setState(() {});\n",
+              1,
+          )
+
+          catalog_assign = "    setState(() => _operation = PlayerOperation.loadingCatalog);\n"
+          if text.count(catalog_assign) != 2:
+              raise SystemExit(f'expected two manual loadingCatalog assignments, found {text.count(catalog_assign)}')
+          text = text.replace(
+              catalog_assign,
+              "    if (!_operationController.tryBegin(PlayerOperation.loadingCatalog)) return;\n    setState(() {});\n",
+          )
+
+          old_end = "      if (mounted) setState(() => _operation = PlayerOperation.idle);\n"
+          if text.count(old_end) != 4:
+              raise SystemExit(f'expected four remaining manual operation endings, found {text.count(old_end)}')
+          text = text.replace(old_end, "      if (mounted) setState(_operationController.end);\n")
+
           if text.count(controller_import) != 1:
               raise SystemExit('operation controller import missing after patch')
-          if "      _operation = operation;" in text or "setState(() => _operation = PlayerOperation.idle)" in text:
-              raise SystemExit('direct operation assignment remains')
+          for stale in (
+              "PlayerOperation _operation = PlayerOperation.idle;",
+              "_operation = PlayerOperation.loadingCatalog",
+              "_operation = PlayerOperation.loadingTrack",
+              "_operation = operation",
+              "_operation = PlayerOperation.idle",
+          ):
+              if stale in text:
+                  raise SystemExit(f'direct operation assignment remains: {stale}')
 
           path.write_text(text)
           PY
