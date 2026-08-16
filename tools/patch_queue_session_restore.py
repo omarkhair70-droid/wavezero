@@ -55,7 +55,7 @@ replace_once(
   }
 
 """,
-    """,
+    "",
     'old queue snapshot resolver',
 )
 
