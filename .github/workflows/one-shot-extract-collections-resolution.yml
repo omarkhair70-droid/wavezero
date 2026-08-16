@@ -1,0 +1,29 @@
+name: One-shot extract Collections resolution
+
+on:
+  push:
+    branches:
+      - refactor/extract-collections-resolution
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-collections-resolution
+          fetch-depth: 0
+      - name: Route V3 through Collections resolution policy
+        shell: bash
+        run: |
+          python tools/patch_extract_collections_resolution.py
+          rm tools/patch_extract_collections_resolution.py
+          rm .github/workflows/one-shot-extract-collections-resolution.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Extract Collections resolution from Flutter V3'
+          git push origin HEAD:refactor/extract-collections-resolution
