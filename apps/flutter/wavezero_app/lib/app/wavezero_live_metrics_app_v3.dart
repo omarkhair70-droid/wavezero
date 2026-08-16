@@ -26,7 +26,7 @@ import '../features/search/search_controls.dart';
 import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
 import '../features/playback/playback_preferences.dart';
-import '../cache/cache_service.dart';
+import '../features/downloads/cache_service.dart';
 import '../cloud_vault/cloud_vault_models.dart';
 import '../cloud_vault/cloud_vault_service.dart';
 import '../design/wavezero_design_system.dart';
