@@ -38,14 +38,10 @@ class WzCloudVaultPage extends StatelessWidget {
         appBar: AppBar(title: const Text('Cloud Vault')),
         body: WzPageScaffold(
           children: [
-            const WzPageHeader(
-              icon: Icons.cloud_done_outlined,
-              title: 'Cloud Vault',
-              subtitle: 'Play music you own from your private cloud sources.',
-            ),
+            const WzPageHeader(icon: Icons.cloud_done_outlined, title: 'Cloud Vault', subtitle: 'Your own music, from private cloud sources.'),
             const SizedBox(height: WzSpacing.md),
-            const WzSectionHeader(title: 'Privacy-first foundation', subtitle: 'Cloud Vault stores source metadata locally and does not add cloud auth yet.', icon: Icons.privacy_tip),
-            const WzPanel(
+            const WzSectionHeader(title: 'Privacy-first foundation', subtitle: 'Source metadata stays local while provider connections are still being built.', icon: Icons.privacy_tip_outlined),
+            const WzGlassCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -58,7 +54,7 @@ class WzCloudVaultPage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: WzSpacing.md),
-            const WzSectionHeader(title: 'Private source providers', subtitle: 'Provider connections are intentionally coming-soon; no OAuth, tokens, uploads, or account sync are present.', icon: Icons.cloud_queue),
+            const WzSectionHeader(title: 'Private source providers', subtitle: 'Provider connections are coming later; no OAuth tokens or account sync are present yet.', icon: Icons.cloud_queue_rounded),
             LayoutBuilder(
               builder: (context, constraints) {
                 final cardWidth = constraints.maxWidth >= 360 ? (constraints.maxWidth - 10) / 2 : constraints.maxWidth;
@@ -67,19 +63,19 @@ class WzCloudVaultPage extends StatelessWidget {
                   _CloudProviderCard(title: 'Dropbox', status: 'Later', icon: Icons.cloud_outlined),
                   _CloudProviderCard(title: 'OneDrive', status: 'Later', icon: Icons.cloud_circle_outlined),
                   _CloudProviderCard(title: 'Nextcloud / self-hosted', status: 'Later', icon: Icons.dns_outlined),
-                  if (developerMode) _CloudProviderCard(title: 'Manual private URL', status: 'Developer preview', icon: Icons.link),
+                  if (developerMode) _CloudProviderCard(title: 'Manual private URL', status: 'Developer preview', icon: Icons.link_rounded),
                 ];
                 return Wrap(spacing: 10, runSpacing: 10, children: cards.map((card) => SizedBox(width: cardWidth, child: card)).toList(growable: false));
               },
             ),
             if (developerMode) ...[
               const SizedBox(height: WzSpacing.md),
-              const WzSectionHeader(title: 'Developer preview', subtitle: 'Manual seed controls are only visible in Developer Mode and persist locally for test playback.', icon: Icons.developer_mode),
-              WzPanel(
+              const WzSectionHeader(title: 'Developer preview', subtitle: 'Manual seed controls stay deliberately separate from the consumer experience.', icon: Icons.developer_mode_rounded),
+              WzGlassCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Developer preview: add a private URL placeholder for local UI and playback-path testing. Do not add public copyrighted catalog links.', style: WzText.caption),
+                    const Text('Add a private URL placeholder for local UI and playback-path testing. Do not add public copyrighted catalog links.', style: WzText.caption),
                     const SizedBox(height: WzSpacing.sm),
                     TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Title')),
                     const SizedBox(height: WzSpacing.sm),
@@ -89,20 +85,20 @@ class WzCloudVaultPage extends StatelessWidget {
                     const SizedBox(height: WzSpacing.sm),
                     TextField(controller: providerLabelController, decoration: const InputDecoration(labelText: 'Provider label')),
                     const SizedBox(height: WzSpacing.md),
-                    Align(alignment: Alignment.centerLeft, child: WzPrimaryAction(label: 'Add developer preview track', icon: Icons.add_link, onPressed: () => unawaited(onAddDeveloperTrack()))),
+                    Align(alignment: Alignment.centerLeft, child: WzPrimaryAction(label: 'Add developer preview track', icon: Icons.add_link_rounded, onPressed: () => unawaited(onAddDeveloperTrack()))),
                   ],
                 ),
               ),
             ],
             const SizedBox(height: WzSpacing.md),
-            WzPanel(
+            WzGlassCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     children: [
                       const Expanded(child: Text('Cloud music entries', style: WzText.title)),
-                      Text('${tracks.length} tracks', style: WzText.caption),
+                      WzStatusPill(label: '${tracks.length} tracks', active: tracks.isNotEmpty, icon: Icons.cloud_done_outlined),
                     ],
                   ),
                   const SizedBox(height: WzSpacing.sm),
@@ -112,18 +108,14 @@ class WzCloudVaultPage extends StatelessWidget {
                     ...tracks.map((track) => _CloudVaultTrackRow(
                           track: track,
                           developerMode: developerMode,
-                          onPlay: track.isResolvable ? () => onPlay(track) : () => onPlay(track),
+                          onPlay: () => onPlay(track),
                           onAddToQueue: track.isResolvable ? () => onAddToQueue(track) : null,
                           onRemove: () => onRemove(track),
                         )),
                     const SizedBox(height: WzSpacing.sm),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: onClearAll,
-                        icon: const Icon(Icons.delete_sweep),
-                        label: const Text('Clear all Cloud Vault entries from this device'),
-                      ),
+                      child: OutlinedButton.icon(onPressed: onClearAll, icon: const Icon(Icons.delete_sweep_rounded), label: const Text('Clear all Cloud Vault entries from this device')),
                     ),
                   ],
                 ],
@@ -142,17 +134,19 @@ class _CloudProviderCard extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(WzSpacing.md),
+        decoration: WzSurface.sculpted(),
         child: Row(
           children: [
-            Icon(icon, color: WzColors.accentAlt),
+            WzSculptedIcon(icon: icon, size: 44, iconSize: 19, color: WzColors.accent),
             const SizedBox(width: WzSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: WzText.sectionTitle),
-                  const SizedBox(height: WzSpacing.xs),
+                  const SizedBox(height: WzSpacing.xxs),
                   Text(status, style: WzText.caption),
                 ],
               ),
@@ -163,13 +157,7 @@ class _CloudProviderCard extends StatelessWidget {
 }
 
 class _CloudVaultTrackRow extends StatelessWidget {
-  const _CloudVaultTrackRow({
-    required this.track,
-    required this.developerMode,
-    required this.onPlay,
-    required this.onAddToQueue,
-    required this.onRemove,
-  });
+  const _CloudVaultTrackRow({required this.track, required this.developerMode, required this.onPlay, required this.onAddToQueue, required this.onRemove});
 
   final CloudVaultTrack track;
   final bool developerMode;
@@ -181,17 +169,13 @@ class _CloudVaultTrackRow extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(top: WzSpacing.sm),
         padding: const EdgeInsets.all(WzSpacing.sm),
-        decoration: BoxDecoration(
-          color: WzColors.surfaceMuted,
-          borderRadius: BorderRadius.circular(WzRadius.md),
-          border: Border.all(color: WzColors.border),
-        ),
+        decoration: WzSurface.sculpted(selected: track.isResolvable),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                Icon(track.isResolvable ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, color: track.isResolvable ? WzColors.accentAlt : WzColors.textSubtle),
+                WzSculptedIcon(icon: track.isResolvable ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, size: 42, iconSize: 18, color: track.isResolvable ? WzColors.accent : WzColors.textSubtle),
                 const SizedBox(width: WzSpacing.sm),
                 Expanded(
                   child: Column(
@@ -215,9 +199,9 @@ class _CloudVaultTrackRow extends StatelessWidget {
               spacing: WzSpacing.sm,
               runSpacing: WzSpacing.sm,
               children: [
-                FilledButton.tonalIcon(onPressed: onPlay, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
-                OutlinedButton.icon(onPressed: onAddToQueue, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
-                OutlinedButton.icon(onPressed: onRemove, icon: const Icon(Icons.delete_outline), label: const Text('Remove from Vault')),
+                FilledButton.tonalIcon(onPressed: onPlay, icon: const Icon(Icons.play_arrow_rounded), label: const Text('Play')),
+                OutlinedButton.icon(onPressed: onAddToQueue, icon: const Icon(Icons.queue_music_rounded), label: const Text('Add to Queue')),
+                OutlinedButton.icon(onPressed: onRemove, icon: const Icon(Icons.delete_outline_rounded), label: const Text('Remove from Vault')),
               ],
             ),
           ],
