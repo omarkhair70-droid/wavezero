@@ -132,8 +132,14 @@ def main() -> None:
         cleaned = cleaned[:start] + cleaned[end:]
 
     for name in NAMES:
-        if re.search(rf"\b{re.escape(name)}\b", cleaned):
-            raise RuntimeError(f"Refusing cleanup: {name} is still referenced outside its legacy class block")
+        match = re.search(rf"\b{re.escape(name)}\b", cleaned)
+        if match:
+            left = max(0, match.start() - 220)
+            right = min(len(cleaned), match.end() + 220)
+            context = cleaned[left:right].replace("\n", "\\n")
+            raise RuntimeError(
+                f"Refusing cleanup: {name} is still referenced outside its legacy class block. Context: {context}"
+            )
 
     cleaned = re.sub(r"\n{4,}", "\n\n\n", cleaned)
     if cleaned == original:
