@@ -27,13 +27,13 @@ class WzFeaturedDemoLibraryShelf extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const WzSectionHeader(
-          title: 'Featured from this demo',
-          subtitle: 'A small curated shelf before the full catalog list.',
-          icon: Icons.stars,
+          title: 'A few voices to start with',
+          subtitle: 'Small picks from the loaded demo, kept intentionally quiet.',
+          icon: Icons.auto_awesome_rounded,
         ),
-        const SizedBox(height: WzSpacing.sm),
+        const SizedBox(height: WzSpacing.xs),
         SizedBox(
-          height: 104,
+          height: 116,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: math.min(8, picks.length),
@@ -61,31 +61,33 @@ class _LibraryCuratedPickCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final track = pick.track;
     return SizedBox(
-      width: 230,
-      child: InkWell(
+      width: 242,
+      child: WzPressableSurface(
         onTap: onPlay,
-        borderRadius: BorderRadius.circular(WzRadius.lg),
-        child: Container(
-          padding: const EdgeInsets.all(WzSpacing.sm),
-          decoration: BoxDecoration(
-            color: WzColors.surfaceMuted,
-            borderRadius: BorderRadius.circular(WzRadius.lg),
-            border: Border.all(color: WzColors.borderSoft),
-          ),
-          child: Row(
-            children: [
-              WzArtwork(
+        radius: WzRadius.lg,
+        decoration: WzSurface.sculpted(),
+        padding: const EdgeInsets.all(WzSpacing.sm),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(WzRadius.md),
+                boxShadow: WzSurface.softShadows,
+              ),
+              child: WzArtwork(
                 artworkUrl: track.artworkUrl,
-                size: 72,
+                size: 76,
                 trackId: track.trackId,
                 title: track.title,
                 artist: track.artistName,
                 mood: pick.pick.mood,
               ),
-              const SizedBox(width: WzSpacing.sm),
-              Expanded(child: _LibraryCuratedPickText(pick: pick, onPlay: onPlay)),
-            ],
-          ),
+            ),
+            const SizedBox(width: WzSpacing.sm),
+            Expanded(child: _LibraryCuratedPickText(pick: pick, onPlay: onPlay)),
+          ],
         ),
       ),
     );
@@ -105,28 +107,20 @@ class _LibraryCuratedPickText extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          track.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: WzText.sectionTitle.copyWith(fontSize: 13),
-        ),
-        const SizedBox(height: WzSpacing.xxs),
+        Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 13)),
+        const SizedBox(height: 3),
         Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-        const SizedBox(height: WzSpacing.xxs),
-        Text(
-          '${pick.pick.shelfLabel} • ${pick.pick.mood}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: WzText.caption,
-        ),
+        const SizedBox(height: 3),
+        Text('${pick.pick.shelfLabel} • ${pick.pick.mood}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption.copyWith(fontSize: 10.5)),
         const Spacer(),
-        SizedBox(
-          height: 32,
-          child: FilledButton.tonalIcon(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: WzSculptedIconButton(
+            tooltip: 'Play',
+            icon: Icons.play_arrow_rounded,
+            size: 36,
+            iconSize: 18,
             onPressed: onPlay,
-            icon: const Icon(Icons.play_arrow, size: 16),
-            label: const Text('Play'),
           ),
         ),
       ],
@@ -174,132 +168,131 @@ class WzLibraryCatalogRow extends StatelessWidget {
     final asset = track.primaryAsset;
 
     final cacheIcon = switch (status) {
-      TrackCacheStatus.caching => const Icon(Icons.downloading, color: Color(0xFF98A1B8)),
-      TrackCacheStatus.cached => const Icon(Icons.check_circle, color: Color(0xFF38D996)),
-      TrackCacheStatus.failed => const Icon(Icons.error, color: Color(0xFFFFC46B)),
-      TrackCacheStatus.notCached => const Icon(Icons.download, color: Color(0xFF8D7CFF)),
+      TrackCacheStatus.caching => Icons.downloading_rounded,
+      TrackCacheStatus.cached => Icons.check_circle_outline_rounded,
+      TrackCacheStatus.failed => Icons.error_outline_rounded,
+      TrackCacheStatus.notCached => Icons.download_rounded,
     };
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(WzRadius.lg),
-      child: AnimatedContainer(
-        duration: WzMotion.fast,
-        curve: WzMotion.curve,
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: selected ? WzColors.accentSoft : WzColors.surfaceMuted,
-          borderRadius: BorderRadius.circular(WzRadius.lg),
-          border: Border.all(color: selected ? WzColors.accent.withOpacity(0.65) : WzColors.borderSoft),
-          boxShadow: selected
-              ? [BoxShadow(color: WzColors.accent.withOpacity(0.14), blurRadius: 22, offset: const Offset(0, 10))]
-              : null,
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: WzPressableSurface(
+        onTap: onTap,
+        radius: WzRadius.lg,
+        decoration: WzSurface.sculpted(selected: selected),
+        padding: const EdgeInsets.all(11),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                WzArtwork(
-                  artworkUrl: track.artworkUrl,
-                  size: 54,
-                  trackId: track.trackId,
-                  title: track.title,
-                  artist: track.artistName,
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(WzRadius.md),
+                    boxShadow: selected ? WzSurface.softShadows : null,
+                  ),
+                  child: WzArtwork(
+                    artworkUrl: track.artworkUrl,
+                    size: 58,
+                    trackId: track.trackId,
+                    title: track.title,
+                    artist: track.artistName,
+                  ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: WzSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              track.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
+                      Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                      const SizedBox(height: 5),
                       Wrap(
                         spacing: 6,
-                        runSpacing: 4,
+                        runSpacing: 5,
                         children: [
                           _LibrarySourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
                           _LibraryLicenseBadge(label: licenseLabel, warning: track.license.needsRightsWarning),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _trackSubtitle(track),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: _captionStyle,
-                      ),
+                      const SizedBox(height: 5),
+                      Text(_trackSubtitle(track), maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
                       const SizedBox(height: 3),
                       Text(
                         '${asset?.qualityLabel ?? 'quality unknown'}${asset?.codec == null ? '' : ' • ${asset!.codec}'}${isDevice ? ' • Already local' : isCached ? ' • Cached locally' : ' • ${status.name}'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: _captionStyle,
+                        style: WzText.caption.copyWith(fontSize: 10.5),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
-              runSpacing: 4,
+            const SizedBox(height: WzSpacing.sm),
+            Row(
               children: [
-                Text(_formatTime(track.durationMs), style: _timeStyle),
-                if (status == TrackCacheStatus.cached && !isCached)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: const Color(0xFF173626), borderRadius: BorderRadius.circular(10)),
-                    child: const Text(
-                      'Cached',
-                      style: TextStyle(color: Color(0xFF38D996), fontSize: 10, fontWeight: FontWeight.w800),
+                Text(_formatTime(track.durationMs), style: WzText.caption.copyWith(color: WzColors.textMuted)),
+                if (status == TrackCacheStatus.cached && !isCached) ...[
+                  const SizedBox(width: WzSpacing.xs),
+                  const WzStatusPill(label: 'Cached', active: true, icon: Icons.download_done_rounded),
+                ],
+                const Spacer(),
+                Wrap(
+                  spacing: 5,
+                  runSpacing: 5,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    WzSculptedIconButton(
+                      tooltip: liked ? 'Unlike' : 'Like',
+                      icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                      selected: liked,
+                      size: 38,
+                      iconSize: 17,
+                      onPressed: onToggleLike,
                     ),
-                  ),
-                IconButton(
-                  tooltip: liked ? 'Unlike' : 'Like',
-                  onPressed: onToggleLike,
-                  icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? const Color(0xFFFF6B8A) : const Color(0xFF8D7CFF)),
-                ),
-                IconButton(
-                  tooltip: 'Add to queue',
-                  onPressed: addDisabled ? null : onAdd,
-                  icon: const Icon(Icons.playlist_add, color: Color(0xFF8D7CFF)),
-                ),
-                IconButton(
-                  tooltip: 'Add to collection',
-                  onPressed: onAddToCollection,
-                  icon: const Icon(Icons.library_add, color: Color(0xFF8D7CFF)),
-                ),
-                if (onCache != null) IconButton(tooltip: 'Cache/download', onPressed: onCache, icon: cacheIcon),
-                if (onDeleteCached != null)
-                  IconButton(
-                    tooltip: 'Delete cached file',
-                    onPressed: onDeleteCached,
-                    icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F)),
-                  ),
-                if (onCache == null && onDeleteCached == null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Icon(
-                      track.source == 'cloud_vault' ? Icons.cloud_done_outlined : Icons.phone_android,
-                      color: const Color(0xFF38D996),
+                    WzSculptedIconButton(
+                      tooltip: 'Add to queue',
+                      icon: Icons.playlist_add_rounded,
+                      size: 38,
+                      iconSize: 18,
+                      onPressed: addDisabled ? null : onAdd,
                     ),
-                  ),
+                    WzSculptedIconButton(
+                      tooltip: 'Add to collection',
+                      icon: Icons.library_add_rounded,
+                      size: 38,
+                      iconSize: 17,
+                      onPressed: onAddToCollection,
+                    ),
+                    if (onCache != null)
+                      WzSculptedIconButton(
+                        tooltip: 'Cache/download',
+                        icon: cacheIcon,
+                        selected: status == TrackCacheStatus.cached,
+                        size: 38,
+                        iconSize: 17,
+                        onPressed: onCache,
+                      ),
+                    if (onDeleteCached != null)
+                      WzSculptedIconButton(
+                        tooltip: 'Delete cached file',
+                        icon: Icons.delete_outline_rounded,
+                        size: 38,
+                        iconSize: 17,
+                        onPressed: onDeleteCached,
+                      ),
+                    if (onCache == null && onDeleteCached == null)
+                      WzSculptedIcon(
+                        icon: track.source == 'cloud_vault' ? Icons.cloud_done_outlined : Icons.phone_android_rounded,
+                        size: 38,
+                        iconSize: 17,
+                        color: WzColors.success,
+                      ),
+                  ],
+                ),
               ],
             ),
           ],
@@ -317,16 +310,13 @@ class _LibrarySourceBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(left: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: active ? const Color(0xFF172A36) : const Color(0xFF171B28),
-          borderRadius: BorderRadius.circular(10),
+          color: active ? WzColors.accent.withValues(alpha: 0.10) : const Color(0xBFFFFFFF),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: active ? WzColors.accent.withValues(alpha: 0.22) : WzColors.borderSoft),
         ),
-        child: Text(
-          label,
-          style: const TextStyle(color: Color(0xFF9EDBFF), fontSize: 10, fontWeight: FontWeight.w800),
-        ),
+        child: Text(label, style: WzText.caption.copyWith(fontSize: 10, color: WzColors.textMuted, fontWeight: FontWeight.w700)),
       );
 }
 
@@ -338,20 +328,20 @@ class _LibraryLicenseBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: warning ? const Color(0xFF332613) : const Color(0xFF15251E),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: warning ? const Color(0xFFFFC46B) : const Color(0x6638D996)),
+          color: warning ? WzColors.warningSoft : WzColors.successSoft,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: (warning ? WzColors.warning : WzColors.success).withValues(alpha: 0.20)),
         ),
         child: Text(
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: warning ? const Color(0xFFFFC46B) : const Color(0xFF8FF0C0),
+          style: WzText.caption.copyWith(
             fontSize: 10,
-            fontWeight: FontWeight.w800,
+            color: warning ? WzColors.warning : WzColors.textMuted,
+            fontWeight: FontWeight.w700,
           ),
         ),
       );
@@ -381,6 +371,3 @@ String _formatTime(int? valueMs) {
   final seconds = totalSeconds % 60;
   return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }
-
-const _captionStyle = TextStyle(color: Color(0xFF98A1B8), fontSize: 12);
-const _timeStyle = TextStyle(color: Color(0xFF9BA3B4), fontSize: 12);
