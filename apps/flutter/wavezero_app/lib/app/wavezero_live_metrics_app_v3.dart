@@ -49,6 +49,7 @@ import '../features/history/history_presentation.dart';
 import '../features/history/listening_history_page.dart';
 import '../features/settings/app_mode_preferences.dart';
 import '../shared/media/media_presentation.dart';
+import '../shared/media/track_source.dart';
 import '../shared/widgets/wavezero_artwork.dart';
 import '../shared/widgets/wavezero_empty_message.dart';
 import '../features/playback/playback_operation_controller.dart';
@@ -409,7 +410,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       collections: _collections,
       historyEntries: _listeningHistory,
       resolveHistoryEntry: _resolveHistoryEntry,
-      isDeviceTrack: _isDeviceCatalogTrack,
+      isDeviceTrack: isWzDeviceCatalogTrack,
       historySourceLabel: wzHistorySourceLabel,
     );
     _searchIndexMemoKey = key;
@@ -757,9 +758,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _isLiked(String trackId) => wzCollectionContainsTrack(_likedCollection, trackId);
 
   WzCollectionTrackSnapshot _snapshotForTrack(CatalogTrackSummary track) {
-    final source = _isDeviceCatalogTrack(track)
+    final source = isWzDeviceCatalogTrack(track)
         ? WzCollectionTrackSource.device
-        : _isCachedCatalogTrack(track)
+        : isWzCachedCatalogTrack(track)
             ? WzCollectionTrackSource.cached
             : track.source == 'api'
                 ? WzCollectionTrackSource.api
@@ -774,7 +775,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       primaryUrl: track.primaryAsset?.manifestUrl,
       qualityLabel: track.primaryAsset?.qualityLabel,
       codec: track.primaryAsset?.codec,
-      license: _isDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
+      license: isWzDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
       addedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
@@ -1576,8 +1577,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       enabled: _smartDownloadsEnabled,
       trackId: trackId,
       url: url,
-      isDeviceTrack: _isDeviceTrackId(trackId),
-      isDeviceUrl: _isDeviceUrl(url),
+      isDeviceTrack: isWzDeviceTrackId(trackId),
+      isDeviceUrl: isWzDeviceUrl(url),
     );
     if (!preflight.allowed) {
       _recordSmartDownloadSkip(preflight.reason!);
@@ -1646,7 +1647,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _maybeAutoCacheCurrentTrack(CatalogTrackManifest manifest) async {
     if (manifest.trackId.isEmpty) return;
-    if (_isDeviceTrackId(manifest.trackId) || _isDeviceUrl(manifest.streamUrl)) {
+    if (isWzDeviceTrackId(manifest.trackId) || isWzDeviceUrl(manifest.streamUrl)) {
       _lastSmartDownloadReason = 'device local track already local';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
       return;
@@ -1669,7 +1670,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _maybeAutoCacheNextQueuedTrack() async {
     final next = _upNextQueueTrack;
     if (next == null) return;
-    if (_isDeviceCatalogTrack(next)) {
+    if (isWzDeviceCatalogTrack(next)) {
       _lastSmartDownloadReason = 'device local track already local';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
       return;
@@ -1865,7 +1866,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int _libraryAddedRank(CatalogTrackSummary track) {
     final cached = _cachedMetadataForTrack(track);
     if (cached != null) return cached.cachedAt;
-    if (_isDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
+    if (isWzDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
     return 0;
   }
 
@@ -2625,7 +2626,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
     final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
     final qualityLabel = hasPlayerTrack ? (_manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label) : 'unknown';
-    final isDevicePlayback = _isDeviceTrackId(_manifest?.trackId) || _isDeviceUrl(_currentAssetUrl);
+    final isDevicePlayback = isWzDeviceTrackId(_manifest?.trackId) || isWzDeviceUrl(_currentAssetUrl);
     final isPlayingFromCache = !isDevicePlayback && (_currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false));
     final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : _effectStatusLabel(_nativeAudioEffectStatus);
     final sourceLabel = isDevicePlayback ? 'Device' : _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack);
@@ -2695,7 +2696,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
     final qualityLabel = _manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label;
     final nowQualityLabel = hasPlayerTrack ? qualityLabel : 'unknown';
-    final isDevicePlayback = _isDeviceTrackId(_manifest?.trackId) || _isDeviceUrl(_currentAssetUrl);
+    final isDevicePlayback = isWzDeviceTrackId(_manifest?.trackId) || isWzDeviceUrl(_currentAssetUrl);
     final isPlayingFromCache = !isDevicePlayback && (_currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false));
     final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : _effectStatusLabel(_nativeAudioEffectStatus);
     final engineSummary = '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
@@ -3394,14 +3395,6 @@ IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
       WzSearchResultType.artistLike => Icons.person,
       WzSearchResultType.track || WzSearchResultType.unknown => Icons.music_note,
     };
-
-bool _isDeviceTrackId(String? trackId) => trackId != null && trackId.startsWith('device-audio-');
-
-bool _isDeviceUrl(String? url) => url != null && url.startsWith('content://');
-
-bool _isDeviceCatalogTrack(CatalogTrackSummary track) => track.source == 'device' || _isDeviceTrackId(track.trackId) || _isDeviceUrl(track.primaryAsset?.manifestUrl);
-
-bool _isCachedCatalogTrack(CatalogTrackSummary track) => track.source == 'cached' || track.primaryAsset?.assetId.startsWith('cached-') == true;
 
 
 String _formatDuration(int ms) {
@@ -7057,8 +7050,8 @@ class _CatalogListCard extends StatelessWidget {
                     onToggleLike: () => onToggleLike(track),
                     onAddToCollection: () => onAddToCollection(track),
                     liked: isLiked(track),
-                    onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) || track.source == 'cloud_vault' ? null : () => onCache(track),
-                    onDeleteCached: _isCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
+                    onCache: isWzDeviceCatalogTrack(track) || isWzCachedCatalogTrack(track) || track.source == 'cloud_vault' ? null : () => onCache(track),
+                    onDeleteCached: isWzCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
                   );
                 },
               ),
@@ -7207,7 +7200,7 @@ class _LegalTrackCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final license = track.license;
-    final source = license.sourceName ?? (_isDeviceCatalogTrack(track) ? 'Device music' : _isCachedCatalogTrack(track) ? 'Downloaded' : 'Catalog');
+    final source = license.sourceName ?? (isWzDeviceCatalogTrack(track) ? 'Device music' : isWzCachedCatalogTrack(track) ? 'Downloaded' : 'Catalog');
     return Padding(
       padding: const EdgeInsets.only(bottom: WzSpacing.sm),
       child: WzPanel(
@@ -7223,7 +7216,7 @@ class _LegalTrackCard extends StatelessWidget {
               runSpacing: WzSpacing.xs,
               children: [
                 WzStatusPill(label: license.badgeLabel, active: !license.needsRightsWarning, warning: license.needsRightsWarning, icon: Icons.policy),
-                WzStatusPill(label: source, active: _isDeviceCatalogTrack(track), warning: license.status == LicenseStatus.devOnly, icon: Icons.source),
+                WzStatusPill(label: source, active: isWzDeviceCatalogTrack(track), warning: license.status == LicenseStatus.devOnly, icon: Icons.source),
                 if (license.attributionRequired) const WzStatusPill(label: 'Attribution required', active: true, icon: Icons.badge),
               ],
             ),
@@ -7255,7 +7248,7 @@ class _LegalTrackCard extends StatelessWidget {
 }
 
 String _licenseBadgeLabel(CatalogTrackSummary track) {
-  if (_isDeviceCatalogTrack(track)) return 'Device music';
+  if (isWzDeviceCatalogTrack(track)) return 'Device music';
   if (track.license.status == LicenseStatus.unknown && track.trackId.startsWith('track-local-')) return 'Dev only';
   return track.license.badgeLabel;
 }
@@ -7288,8 +7281,8 @@ class _CatalogRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = CacheService().statusForTrack(track.trackId);
-    final isDevice = _isDeviceCatalogTrack(track);
-    final isCached = _isCachedCatalogTrack(track);
+    final isDevice = isWzDeviceCatalogTrack(track);
+    final isCached = isWzCachedCatalogTrack(track);
     final sourceLabel = isDevice ? 'Device' : isCached ? wzCachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'Catalog');
     final licenseLabel = _licenseBadgeLabel(track);
     final asset = track.primaryAsset;
@@ -7707,7 +7700,7 @@ class _Panel extends StatelessWidget {
 }
 
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
-String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(_isDeviceCatalogTrack(track) ? 'Device music' : (track.license.sourceName ?? 'Catalog')); parts.add(track.license.badgeLabel); return parts.join(' • '); }
+String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(isWzDeviceCatalogTrack(track) ? 'Device music' : (track.license.sourceName ?? 'Catalog')); parts.add(track.license.badgeLabel); return parts.join(' • '); }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
