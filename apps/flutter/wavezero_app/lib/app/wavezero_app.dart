@@ -33,6 +33,7 @@ import '../features/playback/playback_preferences.dart';
 import '../features/playback/audio_effect_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
+import '../features/downloads/downloads_panel.dart';
 import '../features/downloads/smart_download_policy.dart';
 import '../features/downloads/storage_manager_page.dart';
 import '../features/cloud_vault/cloud_vault_models.dart';
@@ -2923,7 +2924,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         children: [
           const WzPageHeader(icon: Icons.download_done, title: 'Downloads', subtitle: 'Offline Ready library with manual and smart cached tracks.'),
           const SizedBox(height: WzSpacing.md),
-          _DownloadsCard(
+          WzDownloadsPanel(
             downloads: _cachedLibrary,
             cacheBytes: _cacheBytes,
             controlsDisabled: _queueDisabled,
@@ -4506,69 +4507,6 @@ String _playerSourceLabel({required bool isPlayingFromCache, required bool offli
 String _prefetchResultLabel(bool? value) {
   if (value == null) return 'none';
   return value ? 'hit' : 'miss';
-}
-
-class _DownloadsCard extends StatelessWidget {
-  const _DownloadsCard({required this.downloads, required this.cacheBytes, required this.controlsDisabled, required this.onPlay, required this.onDelete, required this.onClearAll, required this.onManageStorage});
-  final List<CachedTrackMetadata> downloads;
-  final int cacheBytes;
-  final bool controlsDisabled;
-  final ValueChanged<CachedTrackMetadata> onPlay;
-  final ValueChanged<CachedTrackMetadata> onDelete;
-  final VoidCallback onClearAll;
-  final VoidCallback onManageStorage;
-  @override
-  Widget build(BuildContext context) => _Panel(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, alignment: WrapAlignment.spaceBetween, children: [
-            ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Downloads', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              SizedBox(height: 4),
-              Text('Cached tracks available for offline playback.', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13)),
-            ])),
-            Text('${downloads.length} • ${formatWzCacheBytes(cacheBytes)}', style: _WzTokens.caption),
-            Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-              OutlinedButton.icon(onPressed: onManageStorage, icon: const Icon(Icons.storage), label: const Text('Manage Storage')),
-              IconButton.outlined(tooltip: 'Clear all downloads', onPressed: downloads.isEmpty || controlsDisabled ? null : onClearAll, icon: const Icon(Icons.clear_all)),
-            ]),
-          ]),
-          const SizedBox(height: 12),
-          if (downloads.isEmpty)
-            const WzEmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
-          else
-            ...downloads.map((track) => _DownloadRow(track: track, disabled: controlsDisabled, onPlay: () => onPlay(track), onDelete: () => onDelete(track))),
-        ]),
-      );
-}
-
-class _DownloadRow extends StatelessWidget {
-  const _DownloadRow({required this.track, required this.disabled, required this.onPlay, required this.onDelete});
-  final CachedTrackMetadata track;
-  final bool disabled;
-  final VoidCallback onPlay;
-  final VoidCallback onDelete;
-  @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: const Color(0xFF0B0E18), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFF20273A))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            WzArtwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              Text('${track.subtitle} • ${wzProductQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
-            ])),
-          ]),
-          const SizedBox(height: 6),
-          Wrap(alignment: WrapAlignment.end, spacing: 4, runSpacing: 4, children: [
-            IconButton(tooltip: 'Play downloaded track', onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow, color: Color(0xFF8D7CFF))),
-            IconButton(tooltip: 'Remove from device', onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F))),
-          ]),
-        ]),
-      );
 }
 
 
