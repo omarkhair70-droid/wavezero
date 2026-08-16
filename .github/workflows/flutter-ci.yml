@@ -16,6 +16,7 @@ jobs:
   flutter:
     name: Flutter analyze, test, and Android build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: apps/flutter/wavezero_app
