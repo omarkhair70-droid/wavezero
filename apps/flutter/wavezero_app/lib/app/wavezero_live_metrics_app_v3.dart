@@ -846,9 +846,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _rememberSearchQuery(String query) async {
     final canonical = canonicalizeWzRecentSearch(query);
     if (canonical.isEmpty) return;
-    final next = await _recentSearchesStore.remember(current: _recentSearches, query: canonical);
-    if (!mounted) return;
+    final next = buildWzRecentSearches(current: _recentSearches, query: canonical);
     setState(() => _recentSearches = next);
+    await _recentSearchesStore.save(next);
   }
 
   Future<void> _clearRecentSearches() async {
