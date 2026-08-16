@@ -46,6 +46,7 @@ import '../features/history/history_selection.dart';
 import '../features/history/history_resolution.dart';
 import '../features/history/history_presentation.dart';
 import '../features/settings/app_mode_preferences.dart';
+import '../shared/media/media_presentation.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
@@ -2342,7 +2343,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       await _refreshCacheStats();
       if (!mounted) return;
       _lastQualityFallbackReason = 'manual cache: ${selection?.fallbackReason ?? 'quality unknown'}';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Downloaded ${track.title} (${_productQualityLabel(selectedAsset?.qualityLabel ?? 'unknown')})' : 'Download failed for ${track.title}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Downloaded ${track.title} (${wzProductQualityLabel(selectedAsset?.qualityLabel ?? 'unknown')})' : 'Download failed for ${track.title}')));
     } finally {
       if (mounted) setState(_operationController.end);
     }
@@ -3760,7 +3761,7 @@ class _ContinueListeningCard extends StatelessWidget {
           Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
             WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
             WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
-            if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
+            if (entry.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
           ]),
           const SizedBox(height: WzSpacing.sm),
           Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
@@ -3973,7 +3974,7 @@ class _SearchResultCard extends StatelessWidget {
             Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
               WzStatusPill(label: wzSearchSourceLabel(result.source), active: true, icon: Icons.label_outline),
               WzStatusPill(label: wzSearchTypeLabel(result.type), icon: _searchResultIcon(result)),
-              if (result.qualityLabel != null) WzStatusPill(label: _productQualityLabel(result.qualityLabel!), icon: Icons.high_quality),
+              if (result.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(result.qualityLabel!), icon: Icons.high_quality),
               if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component),
               if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy),
               if (!result.available) const WzStatusPill(label: 'Unavailable', warning: true, icon: Icons.block),
@@ -4157,7 +4158,7 @@ class _HistoryEntryTile extends StatelessWidget {
                 Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
                   WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
                   WzStatusPill(label: '${entry.playCount} play${entry.playCount == 1 ? '' : 's'}', icon: Icons.repeat),
-                  if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
+                  if (entry.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
                   WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
                 ]),
                 if (!available) ...[
@@ -4615,14 +4616,14 @@ class _SettingsPage extends StatelessWidget {
                   runSpacing: WzSpacing.xs,
                   children: [AudioQualityTier.standard, AudioQualityTier.high, AudioQualityTier.original]
                       .map((tier) => ChoiceChip(
-                            label: Text(_productQualityLabel(tier.label)),
+                            label: Text(wzProductQualityLabel(tier.label)),
                             selected: preferredAudioQuality == tier,
                             onSelected: controlsDisabled ? null : (_) => onQualityChanged(tier),
                           ))
                       .toList(growable: false),
                 ),
                 const SizedBox(height: WzSpacing.xs),
-                Text('Current selected quality: ${_productQualityLabel(preferredAudioQuality.label)}. If a track does not include that asset, WaveZero chooses the closest available quality.', style: WzText.caption),
+                Text('Current selected quality: ${wzProductQualityLabel(preferredAudioQuality.label)}. If a track does not include that asset, WaveZero chooses the closest available quality.', style: WzText.caption),
                 const SizedBox(height: WzSpacing.md),
                 Text('Audio effects profile', style: WzText.sectionTitle),
                 const SizedBox(height: WzSpacing.xs),
@@ -5099,7 +5100,7 @@ class _CurrentListeningCard extends StatelessWidget {
             runSpacing: WzSpacing.xs,
             children: [
               WzStatusPill(label: status, active: metrics.isPlaying, warning: status == 'Error', icon: metrics.isPlaying ? Icons.play_arrow : Icons.pause),
-              WzStatusPill(label: 'Quality: ${_productQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
+              WzStatusPill(label: 'Quality: ${wzProductQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
               if (devicePlayback) const WzStatusPill(label: 'Device music', active: true, icon: Icons.phone_android),
               if (playingFromCache) const WzStatusPill(label: 'Downloaded', active: true, icon: Icons.offline_pin),
               if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
@@ -5203,7 +5204,7 @@ class _SmartEngineCards extends StatelessWidget {
                 WzMiniMetric(label: 'Smart Downloads', value: smartDownloadsEnabled ? '$smartDownloadsCompleted cached' : 'Off', active: smartDownloadsEnabled, icon: Icons.download_for_offline),
                 WzMiniMetric(label: 'Next track ready', value: prefetchEnabled ? (prefetchedTrackTitle ?? 'Ready') : 'Off', active: prefetchEnabled, icon: Icons.offline_bolt),
                 WzMiniMetric(label: 'Offline Ready', value: offlineReady ? '$offlineTrackCount tracks' : 'No downloads yet', active: offlineReady, icon: Icons.offline_pin),
-                WzMiniMetric(label: 'Audio Quality', value: _productQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
+                WzMiniMetric(label: 'Audio Quality', value: wzProductQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
               ],
             ),
           ],
@@ -5278,7 +5279,7 @@ class _NowContextPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const WzSectionHeader(title: 'Player context', subtitle: 'Live quality, effects, cache, and queue state.', icon: Icons.dashboard_customize),
-        _PlayerSourceCard(icon: Icons.high_quality, title: 'Audio Quality', primary: _productQualityLabel(qualityLabel), detail: '$codec • $bitrate', active: qualityLabel != 'unknown'),
+        _PlayerSourceCard(icon: Icons.high_quality, title: 'Audio Quality', primary: wzProductQualityLabel(qualityLabel), detail: '$codec • $bitrate', active: qualityLabel != 'unknown'),
         const SizedBox(height: WzSpacing.sm),
         _PlayerSourceCard(icon: Icons.tune, title: 'Audio Effects', primary: selectedEffectProfile.label, detail: 'Native status: ${_effectStatusLabel(nativeAudioEffectStatus)} • Badge: $effectsSummary', active: nativeAudioEffectStatus == NativeAudioEffectStatus.applied),
         const SizedBox(height: WzSpacing.sm),
@@ -5332,8 +5333,8 @@ class _AudioQualityPanel extends StatelessWidget {
                 .toList(growable: false),
           ),
           const SizedBox(height: 10),
-          Text('Preferred quality: ${_productQualityLabel(preferredAudioQuality.label)}', style: _WzTokens.caption),
-          Text('Current track quality: ${_productQualityLabel(manifest?.qualityLabel ?? 'unknown')}', style: _WzTokens.caption),
+          Text('Preferred quality: ${wzProductQualityLabel(preferredAudioQuality.label)}', style: _WzTokens.caption),
+          Text('Current track quality: ${wzProductQualityLabel(manifest?.qualityLabel ?? 'unknown')}', style: _WzTokens.caption),
           Text('Current codec: ${manifest?.codec ?? 'unknown'}', style: _WzTokens.caption),
           Text('Current bitrate: ${manifest?.bitrateKbps == null ? 'unknown' : '${manifest!.bitrateKbps} kbps'}', style: _WzTokens.caption),
           Text('Current asset URL: ${currentAssetUrl ?? manifest?.streamUrl ?? 'none'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
@@ -5840,7 +5841,7 @@ class _PlayerContextBadges extends StatelessWidget {
         runSpacing: WzSpacing.sm,
         children: [
           WzStatusPill(label: status, active: status == 'Playing', icon: status == 'Playing' ? Icons.play_arrow : Icons.pause),
-          WzStatusPill(label: 'Quality: ${_productQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
+          WzStatusPill(label: 'Quality: ${wzProductQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
           WzStatusPill(label: 'Effects: $effectsSummary', active: effectsSummary == 'Applied', warning: effectsSummary == 'Pending' || effectsSummary == 'Failed', icon: Icons.tune),
           WzStatusPill(label: 'Source: $sourceLabel', active: sourceLabel == 'Cache' || sourceLabel == 'Offline Ready' || sourceLabel == 'Device', icon: sourceLabel == 'Device' ? Icons.phone_android : Icons.offline_pin),
           if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
@@ -6493,26 +6494,6 @@ String _playerSourceLabel({required bool isPlayingFromCache, required bool offli
   return 'Not cached';
 }
 
-String _productQualityLabel(String? value) {
-  final normalized = value?.trim().toLowerCase();
-  switch (normalized) {
-    case 'original':
-    case 'lossless':
-      return 'Original';
-    case 'high':
-      return 'High';
-    case 'standard':
-    case 'low':
-      return 'Standard';
-    case null:
-    case '':
-    case 'unknown':
-      return 'Unknown';
-    default:
-      return value!;
-  }
-}
-
 String _prefetchResultLabel(bool? value) {
   if (value == null) return 'none';
   return value ? 'hit' : 'miss';
@@ -6906,7 +6887,7 @@ class _StorageTrackRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final quality = _productQualityLabel(track.qualityLabel);
+    final quality = wzProductQualityLabel(track.qualityLabel);
     final details = <String>[
       if (quality != 'Unknown') quality,
       if (track.codec != null && track.codec!.trim().isNotEmpty) track.codec!,
@@ -7070,7 +7051,7 @@ class _DownloadRow extends StatelessWidget {
                     children: [
                       Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text('${track.subtitle} • ${_productQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                      Text('${track.subtitle} • ${wzProductQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
                     ],
                   ),
                 ),
@@ -7342,7 +7323,7 @@ class _CollectionTrackRow extends StatelessWidget {
           const SizedBox(height: WzSpacing.xs),
           Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
             WzStatusPill(label: _collectionSourceLabel(track.source), active: track.source == WzCollectionTrackSource.device || track.source == WzCollectionTrackSource.cached, icon: Icons.source),
-            if (track.qualityLabel != null) WzStatusPill(label: _productQualityLabel(track.qualityLabel!), icon: Icons.high_quality),
+            if (track.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(track.qualityLabel!), icon: Icons.high_quality),
             WzStatusPill(label: track.source == WzCollectionTrackSource.device ? 'Your device' : track.license.badgeLabel, active: track.source == WzCollectionTrackSource.device || !track.license.needsRightsWarning, warning: track.license.needsRightsWarning && track.source != WzCollectionTrackSource.device, icon: Icons.policy),
             if (!available) const WzStatusPill(label: 'Track is not available right now', warning: true, icon: Icons.cloud_off),
           ]),
