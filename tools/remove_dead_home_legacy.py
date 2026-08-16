@@ -9,6 +9,7 @@ NAMES = [
     "_CuratedDemoShelfView",
     "_CuratedPickCard",
     "_CuratedPickText",
+    "_CuratedTryPicksPanel",
     "_HomeHistorySection",
     "_ContinueListeningCard",
     "_HomeHero",
@@ -126,8 +127,6 @@ def main() -> None:
         start, end = class_span(original, name)
         spans.append((start, end, name))
 
-    # Remove the complete legacy group in one proposal, then prove none of the
-    # removed private symbols are referenced by the remaining production file.
     cleaned = original
     for start, end, _ in sorted(spans, reverse=True):
         cleaned = cleaned[:start] + cleaned[end:]
