@@ -38,7 +38,7 @@ import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
 import '../features/playback/sleep_timer_presentation.dart';
-import 'queue_session_store.dart';
+import '../features/queue/queue_session_store.dart';
 import '../features/queue/smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
