@@ -1120,7 +1120,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     for (final track in _libraryTracks) {
       if (track.trackId == entry.trackId) return track;
     }
-    return null;
+
+    final restoredDeviceTrack = _findDeviceTrack(entry.trackId);
+    return restoredDeviceTrack == null ? null : _catalogSummaryFromDeviceTrack(restoredDeviceTrack);
   }
 
   WzListeningHistoryEntry _historySnapshotForManifest(
@@ -2296,7 +2298,35 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     for (final track in _deviceMusicTracks) {
       if (track.trackId == trackId) return track;
     }
+
+    for (final entry in _listeningHistory) {
+      if (entry.trackId != trackId) continue;
+      final restored = _deviceTrackFromHistory(entry);
+      if (restored != null) return restored;
+    }
     return null;
+  }
+
+  DeviceMusicTrack? _deviceTrackFromHistory(WzListeningHistoryEntry entry) {
+    final contentUri = entry.primaryUrl?.trim();
+    if (entry.source != WzListeningHistorySource.device ||
+        contentUri == null ||
+        contentUri.isEmpty ||
+        !contentUri.startsWith('content://')) {
+      return null;
+    }
+
+    final subtitle = entry.subtitle.trim();
+    return DeviceMusicTrack(
+      trackId: entry.trackId,
+      title: entry.title,
+      contentUri: contentUri,
+      artistName: subtitle.isEmpty || subtitle == 'Device music' ? null : subtitle,
+      albumName: entry.albumName,
+      durationMs: entry.durationMs,
+      codec: entry.codec,
+      artworkUri: entry.artworkUrl,
+    );
   }
 
   CatalogTrackManifest _deviceManifest(DeviceMusicTrack track) {
