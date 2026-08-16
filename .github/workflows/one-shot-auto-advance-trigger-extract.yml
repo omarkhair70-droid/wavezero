@@ -33,41 +33,41 @@ jobs:
           if trigger_import not in text:
               text = text.replace(import_anchor, trigger_import + import_anchor, 1)
 
-          old = """  Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {
-    if (!_autoAdvanceEnabled || _operation != PlayerOperation.idle) return;
-    final durationMs = metrics.durationMs ?? _manifest?.durationMs;
-    if (durationMs == null || durationMs <= 0) return;
-    final remainingMs = durationMs - metrics.currentPositionMs;
-    final nearEnd = metrics.currentPositionMs > 0 && remainingMs <= _autoAdvanceThresholdMs;
-    final ended = metrics.lastEvent == 'ended' || metrics.lastEvent == 'playback_ended';
-    if (!nearEnd && !ended) {
-      if (metrics.currentPositionMs < durationMs - (_autoAdvanceThresholdMs * 2)) _lastAutoAdvanceTrackId = null;
-      return;
-    }
-    final id = _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
-    if (id == null || id == _lastAutoAdvanceTrackId) return;
-    _lastAutoAdvanceTrackId = id;
-
-    if (_repeatMode == WzRepeatMode.one) {
-"""
-          new = """  Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {
-    final trigger = evaluateWzAutoAdvanceTrigger(
-      enabled: _autoAdvanceEnabled,
-      operation: _operation,
-      currentPositionMs: metrics.currentPositionMs,
-      metricsDurationMs: metrics.durationMs,
-      manifestDurationMs: _manifest?.durationMs,
-      lastEvent: metrics.lastEvent,
-      currentTrackId: _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId,
-      lastAutoAdvanceTrackId: _lastAutoAdvanceTrackId,
-      thresholdMs: _autoAdvanceThresholdMs,
-    );
-    if (trigger.clearLastTrackGuard) _lastAutoAdvanceTrackId = null;
-    if (!trigger.shouldAdvance) return;
-    _lastAutoAdvanceTrackId = trigger.trackId;
-
-    if (_repeatMode == WzRepeatMode.one) {
-"""
+          old = (
+              "  Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {\n"
+              "    if (!_autoAdvanceEnabled || _operation != PlayerOperation.idle) return;\n"
+              "    final durationMs = metrics.durationMs ?? _manifest?.durationMs;\n"
+              "    if (durationMs == null || durationMs <= 0) return;\n"
+              "    final remainingMs = durationMs - metrics.currentPositionMs;\n"
+              "    final nearEnd = metrics.currentPositionMs > 0 && remainingMs <= _autoAdvanceThresholdMs;\n"
+              "    final ended = metrics.lastEvent == 'ended' || metrics.lastEvent == 'playback_ended';\n"
+              "    if (!nearEnd && !ended) {\n"
+              "      if (metrics.currentPositionMs < durationMs - (_autoAdvanceThresholdMs * 2)) _lastAutoAdvanceTrackId = null;\n"
+              "      return;\n"
+              "    }\n"
+              "    final id = _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;\n"
+              "    if (id == null || id == _lastAutoAdvanceTrackId) return;\n"
+              "    _lastAutoAdvanceTrackId = id;\n\n"
+              "    if (_repeatMode == WzRepeatMode.one) {\n"
+          )
+          new = (
+              "  Future<void> _maybeAutoAdvance(PlaybackMetrics metrics) async {\n"
+              "    final trigger = evaluateWzAutoAdvanceTrigger(\n"
+              "      enabled: _autoAdvanceEnabled,\n"
+              "      operation: _operation,\n"
+              "      currentPositionMs: metrics.currentPositionMs,\n"
+              "      metricsDurationMs: metrics.durationMs,\n"
+              "      manifestDurationMs: _manifest?.durationMs,\n"
+              "      lastEvent: metrics.lastEvent,\n"
+              "      currentTrackId: _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId,\n"
+              "      lastAutoAdvanceTrackId: _lastAutoAdvanceTrackId,\n"
+              "      thresholdMs: _autoAdvanceThresholdMs,\n"
+              "    );\n"
+              "    if (trigger.clearLastTrackGuard) _lastAutoAdvanceTrackId = null;\n"
+              "    if (!trigger.shouldAdvance) return;\n"
+              "    _lastAutoAdvanceTrackId = trigger.trackId;\n\n"
+              "    if (_repeatMode == WzRepeatMode.one) {\n"
+          )
           if text.count(old) != 1:
               raise SystemExit('auto-advance trigger block changed')
           text = text.replace(old, new, 1)
