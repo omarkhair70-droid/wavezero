@@ -12,7 +12,7 @@ void main() {
               deviceTrackCount: 0,
               cachedTrackCount: 2,
               cloudTrackCount: 1,
-              combinedTrackCount: 7,
+              combinedTrackCount: 6,
               cacheBytes: 2048,
               status: 'Catalog ready',
               loading: false,
@@ -32,7 +32,7 @@ void main() {
         ),
       );
 
-  testWidgets('preserves Library source summary and consumer actions', (tester) async {
+  testWidgets('preserves consumer Library sources without unfinished Cloud controls', (tester) async {
     await tester.pumpWidget(buildSubject());
 
     expect(find.text('Library'), findsOneWidget);
@@ -41,7 +41,8 @@ void main() {
     expect(find.text('Import Device music'), findsOneWidget);
     expect(find.text('Collections / Playlists'), findsOneWidget);
     expect(find.text('Open full search'), findsOneWidget);
-    expect(find.text('Cloud Vault'), findsOneWidget);
+    expect(find.text('Cloud Vault'), findsNothing);
+    expect(find.text('Cloud'), findsNothing);
   });
 
   testWidgets('source filter chips preserve their navigation value', (tester) async {
