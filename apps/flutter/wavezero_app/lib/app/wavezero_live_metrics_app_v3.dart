@@ -39,6 +39,7 @@ import '../features/collections/collections_service.dart';
 import '../features/collections/collection_resolution.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/history/history_selection.dart';
+import '../features/settings/app_mode_preferences.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
@@ -170,7 +171,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   static const _refreshInterval = Duration(milliseconds: 500);
   static const _autoAdvanceThresholdMs = 1200;
   static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
-  static const _appModePreferenceKey = 'wavezero.app_mode';
   static const int _defaultCatalogLimit = 300;
   static const int _initialVisibleTrackCount = 200;
   static const int _libraryPageSize = 100;
@@ -218,6 +218,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   WzLibrarySortMode _librarySortMode = WzLibrarySortMode.recentlyAdded;
 
   final WzPlaybackPreferences _playbackPreferences = const WzPlaybackPreferences();
+  final WzAppModePreferences _appModePreferences = const WzAppModePreferences();
 
   final WzPlaybackOperationController _operationController = WzPlaybackOperationController();
   PlayerOperation get _operation => _operationController.current;
@@ -1266,11 +1267,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _loadAppMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final savedMode = prefs.getString(_appModePreferenceKey);
+    final mode = await _appModePreferences.load(allowDeveloper: widget.appConfig.showDeveloperEntry);
     if (!mounted) return;
     setState(() {
-      _appMode = savedMode == WzAppMode.developer.name && widget.appConfig.showDeveloperEntry ? WzAppMode.developer : WzAppMode.consumer;
+      _appMode = mode;
       if (_appMode == WzAppMode.consumer && _selectedTab == WzAppTab.engine) {
         _selectedTab = WzAppTab.home;
       }
@@ -1279,8 +1279,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _setAppMode(WzAppMode mode) async {
     final messenger = ScaffoldMessenger.of(context);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_appModePreferenceKey, mode.name);
+    await _appModePreferences.save(mode);
     if (!mounted) return;
     setState(() {
       _appMode = mode;
