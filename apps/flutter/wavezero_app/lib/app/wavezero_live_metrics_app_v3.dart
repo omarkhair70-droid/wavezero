@@ -21,6 +21,7 @@ import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
 import '../features/library/library_controls.dart';
 import '../features/library/library_sort.dart';
+import '../features/library/library_sources.dart';
 import '../features/search/search_controls.dart';
 import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
@@ -354,15 +355,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<CatalogTrackSummary> get _cloudCatalogTracks =>
       _cloudVaultTracks.map((track) => track.toCatalogSummary()).toList(growable: false);
 
-  List<CatalogTrackSummary> get _libraryTracks {
-    return switch (_librarySourceFilter) {
-      WzLibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks, ..._cachedCatalogTracks, ..._cloudCatalogTracks],
-      WzLibrarySourceFilter.api => _catalog,
-      WzLibrarySourceFilter.device => _deviceCatalogTracks,
-      WzLibrarySourceFilter.downloads => _cachedCatalogTracks,
-      WzLibrarySourceFilter.cloud => _cloudCatalogTracks,
-    };
-  }
+  List<CatalogTrackSummary> get _libraryTracks => composeWzLibraryTracks(
+        filter: _librarySourceFilter,
+        catalogTracks: _catalog,
+        deviceTracks: _deviceCatalogTracks,
+        downloadedTracks: _cachedCatalogTracks,
+        cloudTracks: _cloudCatalogTracks,
+      );
 
   int get _libraryTotalTrackCount => _libraryTracks.length;
 
