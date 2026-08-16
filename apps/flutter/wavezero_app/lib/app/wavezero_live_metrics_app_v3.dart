@@ -30,6 +30,7 @@ import '../features/search/search_index.dart';
 import '../features/playback/playback_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
+import '../features/downloads/smart_download_policy.dart';
 import '../features/cloud_vault/cloud_vault_models.dart';
 import '../features/cloud_vault/cloud_vault_service.dart';
 import '../design/wavezero_design_system.dart';
@@ -1600,7 +1601,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   // Predictive Smart Downloads helpers
-  Future<bool> _canAutoCacheTrack({required String trackId, required String? url}) async {
+) async {
     if (!_smartDownloadsEnabled) {
       _lastSmartDownloadReason = 'smart downloads disabled';
       return false;
@@ -1635,44 +1636,42 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return true;
   }
 
+  void _recordSmartDownloadSkip(String reason) {
+    _lastSmartDownloadReason = reason;
+    if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+  }
+
   Future<void> _autoCacheTrack({required String trackId, required String url, required String title, String? artistName, int? durationMs, String? artworkUrl, String reason = 'auto', String downloadSource = 'unknown', String qualityLabel = 'unknown', String? codec, int? bitrateKbps}) async {
-    // Gatekeeper checks: do not early-return before updating diagnostics.
-    if (!_smartDownloadsEnabled) {
-      _lastSmartDownloadReason = 'smart downloads disabled';
-      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+    // Gatekeeper checks: preserve the existing reason precedence before I/O.
+    final preflight = evaluateWzSmartDownloadPreflight(
+      enabled: _smartDownloadsEnabled,
+      trackId: trackId,
+      url: url,
+      isDeviceTrack: _isDeviceTrackId(trackId),
+      isDeviceUrl: _isDeviceUrl(url),
+    );
+    if (!preflight.allowed) {
+      _recordSmartDownloadSkip(preflight.reason!);
       return;
     }
-    if (url.isEmpty) {
-      _lastSmartDownloadReason = 'no remote url';
-      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
-      return;
-    }
-    if (_isDeviceTrackId(trackId) || _isDeviceUrl(url)) {
-      _lastSmartDownloadReason = 'device local track already local';
-      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
-      return;
-    }
+
     await _cacheService.ensureInitialized();
-    final status = _cacheService.statusForTrack(trackId);
-    if (status == TrackCacheStatus.cached) {
-      _lastSmartDownloadReason = 'already cached';
-      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+    final cacheState = evaluateWzSmartDownloadCacheState(
+      status: _cacheService.statusForTrack(trackId),
+      alreadyInFlight: _autoCacheInFlight.contains(trackId),
+    );
+    if (!cacheState.allowed) {
+      _recordSmartDownloadSkip(cacheState.reason!);
       return;
     }
-    if (status == TrackCacheStatus.caching) {
-      _lastSmartDownloadReason = 'already caching';
-      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
-      return;
-    }
-    if (_autoCacheInFlight.contains(trackId)) {
-      _lastSmartDownloadReason = 'already in-flight';
-      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
-      return;
-    }
+
     final cachedLibrary = await _cacheService.cachedLibrary();
-    if (cachedLibrary.length >= _maxSmartDownloadCachedTracks) {
-      _lastSmartDownloadReason = 'smart download cache limit reached';
-      if (mounted) setState(() => _smartDownloadSkippedCount += 1);
+    final capacity = evaluateWzSmartDownloadCapacity(
+      cachedTrackCount: cachedLibrary.length,
+      maxCachedTracks: _maxSmartDownloadCachedTracks,
+    );
+    if (!capacity.allowed) {
+      _recordSmartDownloadSkip(capacity.reason!);
       return;
     }
     _autoCacheInFlight.add(trackId);
