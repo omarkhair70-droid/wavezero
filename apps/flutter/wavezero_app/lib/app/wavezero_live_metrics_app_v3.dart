@@ -33,6 +33,7 @@ import '../features/cloud_vault/cloud_vault_service.dart';
 import '../design/wavezero_design_system.dart';
 import '../features/device_music/device_music_service.dart';
 import '../features/device_music/device_music_track.dart';
+import '../features/device_music/device_music_projection.dart';
 import '../features/collections/collections_service.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/playback/playback_operation_controller.dart';
@@ -351,7 +352,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   List<CatalogTrackSummary> get _deviceCatalogTracks =>
-      _deviceMusicTracks.map(_catalogSummaryFromDeviceTrack).toList(growable: false);
+      _deviceMusicTracks.map(wzCatalogSummaryFromDeviceTrack).toList(growable: false);
 
   List<CatalogTrackSummary> get _cachedCatalogTracks =>
       _cachedLibrary.map(wzCatalogSummaryFromCachedTrack).toList(growable: false);
@@ -934,7 +935,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
 
     final restoredDeviceTrack = _findDeviceTrack(entry.trackId);
-    return restoredDeviceTrack == null ? null : _catalogSummaryFromDeviceTrack(restoredDeviceTrack);
+    return restoredDeviceTrack == null ? null : wzCatalogSummaryFromDeviceTrack(restoredDeviceTrack);
   }
 
   WzListeningHistoryEntry _historySnapshotForManifest(
@@ -2067,56 +2068,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
     for (final entry in _listeningHistory) {
       if (entry.trackId != trackId) continue;
-      final restored = _deviceTrackFromHistory(entry);
+      final restored = wzDeviceTrackFromHistory(entry);
       if (restored != null) return restored;
     }
     return null;
   }
 
-  DeviceMusicTrack? _deviceTrackFromHistory(WzListeningHistoryEntry entry) {
-    final contentUri = entry.primaryUrl?.trim();
-    if (entry.source != WzListeningHistorySource.device ||
-        contentUri == null ||
-        contentUri.isEmpty ||
-        !contentUri.startsWith('content://')) {
-      return null;
-    }
 
-    final subtitle = entry.subtitle.trim();
-    return DeviceMusicTrack(
-      trackId: entry.trackId,
-      title: entry.title,
-      contentUri: contentUri,
-      artistName: subtitle.isEmpty || subtitle == 'Device music' ? null : subtitle,
-      albumName: entry.albumName,
-      durationMs: entry.durationMs,
-      codec: entry.codec,
-      artworkUri: entry.artworkUrl,
-    );
-  }
-
-  CatalogTrackManifest _deviceManifest(DeviceMusicTrack track) {
-    return CatalogTrackManifest(
-      trackId: track.trackId,
-      title: track.title,
-      streamUrl: track.contentUri,
-      artistId: null,
-      artistName: track.artistName,
-      durationMs: track.durationMs,
-      artworkUrl: track.artworkUri,
-      assetId: 'device-${track.trackId}',
-      qualityLabel: track.qualityLabel ?? 'unknown',
-      codec: track.codec,
-      bitrateKbps: track.bitrateKbps,
-      fileSizeBytes: track.sizeBytes,
-    );
-  }
 
   Future<void> _loadDeviceMusicTrack(DeviceMusicTrack track, {bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status}) {
     return _runOperation(operation, () async {
       await _clearNativeNextPrebuffer();
       if (!mounted) return;
-      final manifest = _deviceManifest(track);
+      final manifest = wzDeviceManifest(track);
       _titleController.text = manifest.title;
       _urlController.text = manifest.streamUrl;
       setState(() {
@@ -3701,28 +3665,6 @@ int _searchRank(WzSearchResult result, String query) {
 }
 
 
-CatalogTrackSummary _catalogSummaryFromDeviceTrack(DeviceMusicTrack track) {
-  return CatalogTrackSummary(
-    trackId: track.trackId,
-    title: track.title,
-    artistId: null,
-    artistName: track.artistName,
-    albumName: track.albumName,
-    displayName: track.displayName,
-    durationMs: track.durationMs,
-    artworkUrl: track.artworkUri,
-    source: 'device',
-    license: LicenseMetadata.userDevice,
-    primaryAsset: CatalogTrackAssetSummary(
-      assetId: 'device-${track.trackId}',
-      manifestUrl: track.contentUri,
-      qualityLabel: track.qualityLabel,
-      codec: track.codec,
-      bitrateKbps: track.bitrateKbps,
-      fileSizeBytes: track.sizeBytes,
-    ),
-  );
-}
 
 bool _isDeviceTrackId(String? trackId) => trackId != null && trackId.startsWith('device-audio-');
 
