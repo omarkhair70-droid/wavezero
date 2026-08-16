@@ -9,6 +9,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WzConsumerSettingsPage(
+            onBack: () {},
             preferredAudioQuality: AudioQualityTier.high,
             onQualityChanged: (_) {},
             smartDownloadsEnabled: true,
@@ -30,7 +31,7 @@ void main() {
     expect(find.text('Downloads & storage'), findsOneWidget);
     expect(find.text('Privacy'), findsOneWidget);
     expect(find.text('About'), findsOneWidget);
-    expect(find.text('Manage storage'), findsOneWidget);
+    expect(find.text('Storage'), findsOneWidget);
     expect(find.text('Licenses & sources'), findsOneWidget);
 
     expect(find.text('Search & Discovery'), findsNothing);
