@@ -2886,8 +2886,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzPageScaffold(
         children: [
-          const WzPageHeader(icon: Icons.library_music, title: 'Library', subtitle: 'Everything you can play, in one place.'),
-          const SizedBox(height: WzSpacing.md),
           WzLibraryCatalogPanel(
             tracks: _filteredCatalog,
             totalTrackCount: _libraryTotalTrackCount,
@@ -2957,7 +2955,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzCollectionsPage(
         collections: _collections,
-        onBack: () => _navigateTo(WzAppTab.home),
+        onBack: () => _navigateTo(WzAppTab.library),
         onOpen: _openCollection,
         onCreate: _createCollectionFromPage,
         onRename: _showRenameCollectionDialog,
@@ -2994,7 +2992,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzStorageManagerPage(
         downloads: _cachedLibrary,
-        onBack: () => _navigateTo(WzAppTab.downloads),
+        onBack: () => _navigateTo(WzAppTab.settings),
         cacheBytes: _cacheBytes,
         trackBytes: _cachedTrackBytes,
         manualDownloadedCount: _manualDownloadedCount,
@@ -3037,7 +3035,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzListeningHistoryPage(
         entries: _listeningHistory,
-        onBack: () => _navigateTo(WzAppTab.home),
+        onBack: () => _navigateTo(WzAppTab.library),
         mostPlayedEntry: _mostPlayedHistoryEntry,
         resolver: _resolveHistoryEntry,
         onPlay: (entry) => unawaited(_playHistoryEntry(entry)),
@@ -3133,6 +3131,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     ];
 
     final settingsPage = WzConsumerSettingsPage(
+      onBack: () => _navigateTo(WzAppTab.home),
       preferredAudioQuality: _preferredAudioQuality,
       onQualityChanged: (quality) => setState(() {
         _preferredAudioQuality = quality;
@@ -3204,22 +3203,24 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: WaveZeroBottomShell(
-        destinations: destinations,
-        currentIndex: currentIndex < 0 ? 0 : currentIndex,
-        onDestinationSelected: (i) => _navigateTo(destinations[i].tab),
-        accent: widget.themeConfig.accent,
-        miniPlayer: hasPlayerTrack
-            ? WzConsumerMiniPlayer(
-                metrics: _metrics,
-                manifest: _manifest,
-                progressValue: progress,
-                controlsDisabled: _playerDisabled,
-                onTap: _showPremiumPlayerSheet,
-                onPlayPause: _playPause,
-              )
-            : null,
-      ),
+      bottomNavigationBar: currentIndex >= 0
+          ? WaveZeroBottomShell(
+              destinations: destinations,
+              currentIndex: currentIndex,
+              onDestinationSelected: (i) => _navigateTo(destinations[i].tab),
+              accent: widget.themeConfig.accent,
+              miniPlayer: hasPlayerTrack
+                  ? WzConsumerMiniPlayer(
+                      metrics: _metrics,
+                      manifest: _manifest,
+                      progressValue: progress,
+                      controlsDisabled: _playerDisabled,
+                      onTap: _showPremiumPlayerSheet,
+                      onPlayPause: _playPause,
+                    )
+                  : null,
+            )
+          : null,
     );
   }
 }
