@@ -1,7 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'search_text.dart';
-
 class WzRecentSearchesStore {
   const WzRecentSearchesStore();
 
@@ -14,19 +12,12 @@ class WzRecentSearchesStore {
     return searches.take(maxItems).toList(growable: false);
   }
 
-  Future<List<String>> remember({
-    required List<String> current,
-    required String query,
-  }) async {
-    final next = buildWzRecentSearches(
-      current: current,
-      query: query,
-      limit: maxItems,
-    );
-    if (canonicalizeWzRecentSearch(query).isEmpty) return next;
+  Future<void> save(List<String> searches) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(preferenceKey, next);
-    return next;
+    await prefs.setStringList(
+      preferenceKey,
+      searches.take(maxItems).toList(growable: false),
+    );
   }
 
   Future<void> clear() async {
