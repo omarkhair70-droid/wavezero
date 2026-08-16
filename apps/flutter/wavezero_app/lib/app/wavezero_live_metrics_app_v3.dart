@@ -22,6 +22,7 @@ import '../features/playback/playback_modes.dart';
 import '../features/library/library_controls.dart';
 import '../features/library/library_sort.dart';
 import '../features/library/library_sources.dart';
+import '../features/library/library_status_presentation.dart';
 import '../features/search/search_controls.dart';
 import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
@@ -57,46 +58,6 @@ import '../features/queue/queue_position.dart';
 import '../features/queue/smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
-
-String _catalogModeLabel(String? contentMode, int trackCount) {
-  final normalized = contentMode?.trim().toLowerCase().replaceAll('-', '_');
-  if (normalized == 'demo' || normalized == 'demo_catalog' || normalized == 'legal_demo') return 'Demo catalog';
-  if (normalized == 'production' || normalized == 'prod' || normalized == 'catalog_ready') return 'Catalog ready';
-  if (trackCount > 0) return 'Catalog ready';
-  return 'Catalog unavailable';
-}
-
-String _friendlyLoadError(String error) {
-  final normalized = error.toLowerCase();
-  if (normalized.contains('permission')) return WaveZeroReleaseCopy.deviceMusicPermission;
-  if (normalized.contains('socketexception') || normalized.contains('connection') || normalized.contains('http')) {
-    return '${WaveZeroReleaseCopy.catalogUnavailable} ${WaveZeroReleaseCopy.catalogTryAgain}';
-  }
-  return WaveZeroReleaseCopy.playbackCouldNotStart;
-}
-
-String _consumerCatalogStatus(String status) {
-  final normalized = status.toLowerCase();
-
-  if (normalized.contains('demo catalog')) return 'Demo catalog';
-  if (normalized.contains('catalog ready')) return 'Catalog ready';
-  if (normalized.contains('catalog unavailable') ||
-      normalized.contains('unavailable') ||
-      normalized.contains('error') ||
-      normalized.contains('exception') ||
-      normalized.contains('failed')) {
-    return '${WaveZeroReleaseCopy.catalogUnavailable} ${WaveZeroReleaseCopy.catalogTryAgain} ${WaveZeroReleaseCopy.catalogLocalFallback}';
-  }
-  if (normalized.contains('permission')) return WaveZeroReleaseCopy.deviceMusicPermission;
-  if (normalized.contains('loaded') || normalized.contains('imported')) return status;
-  if (normalized.contains('offline')) return status;
-  return 'Choose music from your library.';
-}
-
-String? _consumerDeviceError(String? error) {
-  if (error == null || error.isEmpty) return null;
-  return _friendlyLoadError(error);
-}
 
 class WaveZeroLiveMetricsApp extends StatefulWidget {
   const WaveZeroLiveMetricsApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
@@ -558,7 +519,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         refreshingMetrics: _refreshingMetrics,
         upNextTitle: _upNextQueueTrack?.title,
         queueStatus: _queueStatus,
-        consumerError: _friendlyLoadError,
+        consumerError: friendlyWzLoadError,
       );
 
   @override
@@ -1844,7 +1805,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               ? 'Catalog is empty.'
               : (catalog.tracks.length > _defaultCatalogLimit
                   ? 'Large demo library loaded. Showing first $_initialVisibleTrackCount tracks.'
-                  : contentStatus?.friendlyLabel ?? _catalogModeLabel(catalog.contentMode, catalog.tracks.length));
+                  : contentStatus?.friendlyLabel ?? wzCatalogModeLabel(catalog.contentMode, catalog.tracks.length));
           _queueStatus = restored == null ? 'Queue ready for selected track.' : 'Queue restored from previous session.';
           _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
           _offlineLibraryMode = false;
@@ -3019,7 +2980,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             cacheBytes: _cacheBytes,
             curatedPicks: _featuredCuratedPicks,
             selectedTrackId: _selectedTrackId,
-            status: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
+            status: _developerMode ? _catalogStatus : wzConsumerCatalogStatus(_catalogStatus),
             loading: _operation == PlayerOperation.loadingCatalog,
             refreshDisabled: _catalogRefreshDisabled,
             addToQueueDisabled: _operation.isTrackLoading || _operation.isQueueAdvancing,
@@ -3028,7 +2989,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             librarySortMode: _librarySortMode,
             devicePermissionStatus: _deviceMusicPermissionStatus.status,
             deviceScanStatus: _deviceMusicScanStatus,
-            deviceLastError: _developerMode ? _deviceMusicLastError : _consumerDeviceError(_deviceMusicLastError),
+            deviceLastError: _developerMode ? _deviceMusicLastError : wzConsumerDeviceError(_deviceMusicLastError),
             onSourceFilterChanged: (filter) => setState(() {
               _librarySourceFilter = filter;
               _visibleTrackCount = _initialVisibleTrackCount;
@@ -3331,12 +3292,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       devicePlatformSupported: _deviceMusicPermissionStatus.platformSupported,
       importedDeviceTrackCount: _deviceMusicTracks.length,
       deviceScanStatus: _deviceMusicScanStatus,
-      deviceLastError: _consumerDeviceError(_deviceMusicLastError),
+      deviceLastError: wzConsumerDeviceError(_deviceMusicLastError),
       onImportDeviceMusic: _importDeviceMusic,
       notificationActive: _metrics.isPlaying || (_metrics.trackTitle?.isNotEmpty ?? false),
       appConfig: widget.appConfig,
       contentModeLabel: _contentStatus?.friendlyLabel ?? widget.appConfig.contentModeLabel,
-      catalogStatusLabel: _developerMode ? _catalogStatus : _consumerCatalogStatus(_catalogStatus),
+      catalogStatusLabel: _developerMode ? _catalogStatus : wzConsumerCatalogStatus(_catalogStatus),
       showDeveloperEntry: _showDeveloperControls,
       appMode: _appMode,
       onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? WzAppMode.developer : WzAppMode.consumer),
