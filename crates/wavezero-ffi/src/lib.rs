@@ -61,6 +61,8 @@ pub enum AudioCodecDto {
     AacLc,
     Opus,
     Flac,
+    Mp3,
+    Wav,
 }
 
 impl From<AudioCodecDto> for AudioCodec {
@@ -69,6 +71,8 @@ impl From<AudioCodecDto> for AudioCodec {
             AudioCodecDto::AacLc => Self::AacLc,
             AudioCodecDto::Opus => Self::Opus,
             AudioCodecDto::Flac => Self::Flac,
+            AudioCodecDto::Mp3 => Self::Mp3,
+            AudioCodecDto::Wav => Self::Wav,
         }
     }
 }
@@ -198,5 +202,20 @@ mod tests {
         assert!(decision.should_prefetch_manifest);
         assert!(decision.should_prefetch_first_segments);
         assert_eq!(decision.asset_id.as_deref(), Some("asset-next"));
+    }
+
+    #[test]
+    fn audio_codec_dto_covers_all_core_codecs() {
+        let cases = [
+            (AudioCodecDto::AacLc, AudioCodec::AacLc),
+            (AudioCodecDto::Opus, AudioCodec::Opus),
+            (AudioCodecDto::Flac, AudioCodec::Flac),
+            (AudioCodecDto::Mp3, AudioCodec::Mp3),
+            (AudioCodecDto::Wav, AudioCodec::Wav),
+        ];
+
+        for (dto, expected) in cases {
+            assert_eq!(AudioCodec::from(dto), expected);
+        }
     }
 }
