@@ -33,6 +33,7 @@ import '../features/search/search_index.dart';
 import '../features/search/search_page.dart';
 import '../features/playback/playback_preferences.dart';
 import '../features/playback/player_presentation.dart';
+import '../features/playback/consumer_player.dart';
 import '../features/playback/audio_effect_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
@@ -2524,70 +2525,157 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     await _playQueueTrack(_queue[index - 1], autoStart: autoStart, source: QueueAdvanceSource.previous);
   }
 
-  Future<void> _showPremiumPlayerSheet() async {
-    if (_manifest == null && _metrics.trackTitle == null) return;
-    final durationMs = _metrics.durationMs ?? _manifest?.durationMs;
-    final displayedPositionMs = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
-    final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
-    final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
-    final qualityLabel = hasPlayerTrack ? (_manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label) : 'unknown';
-    final isDevicePlayback = isWzDeviceTrackId(_manifest?.trackId) || isWzDeviceUrl(_currentAssetUrl);
-    final isPlayingFromCache = !isDevicePlayback && (_currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false));
-    final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : wzEffectStatusLabel(_nativeAudioEffectStatus);
-    final sourceLabel = isDevicePlayback ? 'Device' : wzPlayerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack);
-    final currentTrack = _currentKnownTrack;
-
+  Future<void> _showQueueSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      barrierColor: const Color(0x66788792),
-      builder: (sheetContext) => WzPremiumPlayerSheet(
-        child: WzPremiumPlayerSurface(
-          metrics: _metrics,
-          manifest: _manifest,
-          nextTrack: _upNextQueueTrack,
-          qualityLabel: qualityLabel,
-          effectsSummary: effectsSummary,
-          sourceLabel: sourceLabel,
-          progressValue: progress,
-          displayedPositionMs: displayedPositionMs,
-          durationMs: durationMs,
-          controlsDisabled: _playerDisabled,
-          canPlayPrevious: _canPrevious,
-          canPlayNext: _canPlayNextControl,
-          offlineReady: _offlineLibraryAvailable,
-          shuffleEnabled: _shuffleEnabled,
-          repeatMode: _repeatMode,
-          sleepTimerLabel: _sleepTimerStatusLabel,
-          sleepTimerActive: _sleepTimerDeadline != null,
-          onShuffleChanged: _setShuffleEnabled,
-          onCycleRepeatMode: _cycleRepeatMode,
-          onOpenSleepTimer: _showSleepTimerPicker,
-          onPlayPause: _playPause,
-          onStop: _stop,
-          onRetry: _retry,
-          onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
-          onNext: () => _playNext(autoStart: _metrics.isPlaying),
-          onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
-          onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
-              ? null
-              : (value) async {
-                  final target = value * durationMs;
-                  setState(() => _dragPositionMs = null);
-                  await _seekTo(target);
-                },
-          canSaveTrack: currentTrack != null,
-          liked: currentTrack == null ? false : _isLiked(currentTrack.trackId),
-          onToggleLike: currentTrack == null ? null : () => _toggleLikedTrack(currentTrack),
-          onAddToCollection: currentTrack == null ? null : () => _showAddToCollectionSheet(currentTrack),
-          onAddToQueue: currentTrack == null ? null : () => _addToQueue(currentTrack),
-          onOpenQueue: () {
-            Navigator.of(sheetContext).maybePop();
-            _navigateTo(WzAppTab.queue);
+      barrierColor: const Color(0x55788792),
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.72,
+        minChildSize: 0.42,
+        maxChildSize: 0.94,
+        expand: false,
+        builder: (context, scrollController) => ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(38)),
+          child: Material(
+            color: const Color(0xFFF8FAFC),
+            child: StatefulBuilder(
+              builder: (context, refreshSheet) => ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(color: WzColors.border, borderRadius: BorderRadius.circular(999)),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Text('Up next', style: WzText.pageTitle.copyWith(fontSize: 24)),
+                      const Spacer(),
+                      Text('${_queue.length} tracks', style: WzText.caption),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  WzQueuePanel(
+                    queue: _queue,
+                    currentTrackId: _queueCurrentTrackId,
+                    currentIndex: _queueIndex,
+                    status: _queueStatus,
+                    controlsDisabled: _queueDisabled,
+                    autoAdvanceEnabled: _autoAdvanceEnabled,
+                    autoAdvanceCount: _autoAdvanceCount,
+                    smartQueueCandidateTrackId: _smartQueueCandidateTrackId,
+                    smartQueueReason: _smartQueueReason,
+                    showDeveloperDetails: false,
+                    onToggleAutoAdvance: (value) {
+                      setState(() {
+                        _autoAdvanceEnabled = value;
+                        _queueStatus = value ? 'Auto-advance enabled.' : 'Auto-advance disabled.';
+                        _sessionStatus = 'Session saved.';
+                      });
+                      unawaited(_saveSession());
+                      unawaited(_updatePredictivePreloadCandidate());
+                      refreshSheet(() {});
+                    },
+                    onPlayTrack: (track) async {
+                      await _playQueueTrack(track, autoStart: _metrics.isPlaying);
+                      if (sheetContext.mounted) refreshSheet(() {});
+                    },
+                    onMoveUp: (track) {
+                      _moveQueueTrack(track, -1);
+                      refreshSheet(() {});
+                    },
+                    onMoveDown: (track) {
+                      _moveQueueTrack(track, 1);
+                      refreshSheet(() {});
+                    },
+                    onPlayNext: (track) {
+                      _playTrackNext(track);
+                      refreshSheet(() {});
+                    },
+                    onRemoveTrack: (track) {
+                      _removeFromQueue(track);
+                      refreshSheet(() {});
+                    },
+                    onClearQueue: () {
+                      _clearQueue();
+                      refreshSheet(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPremiumPlayerSheet() async {
+    if (_manifest == null && _metrics.trackTitle == null) return;
+    final currentTrack = _currentKnownTrack;
+
+    await Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 320),
+        reverseTransitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (routeContext, animation, secondaryAnimation) => WzConsumerNowPlayingPage(
+          surfaceBuilder: (_) {
+            final durationMs = _metrics.durationMs ?? _manifest?.durationMs;
+            final displayedPositionMs = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
+            final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
+            return WzConsumerPlayerSurface(
+              metrics: _metrics,
+              manifest: _manifest,
+              nextTrack: _upNextQueueTrack,
+              progressValue: progress,
+              displayedPositionMs: displayedPositionMs,
+              durationMs: durationMs,
+              controlsDisabled: _playerDisabled,
+              canPlayPrevious: _canPrevious,
+              canPlayNext: _canPlayNextControl,
+              onPlayPause: _playPause,
+              onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
+              onNext: () => _playNext(autoStart: _metrics.isPlaying),
+              onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
+              onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
+                  ? null
+                  : (value) async {
+                      final target = value * durationMs;
+                      setState(() => _dragPositionMs = null);
+                      await _seekTo(target);
+                    },
+              canSaveTrack: currentTrack != null,
+              liked: currentTrack == null ? false : _isLiked(currentTrack.trackId),
+              onToggleLike: currentTrack == null ? null : () => _toggleLikedTrack(currentTrack),
+              onAddToCollection: currentTrack == null ? null : () => _showAddToCollectionSheet(currentTrack),
+              onAddToQueue: currentTrack == null ? null : () => _addToQueue(currentTrack),
+              onOpenQueue: _showQueueSheet,
+              shuffleEnabled: _shuffleEnabled,
+              repeatMode: _repeatMode,
+              sleepTimerActive: _sleepTimerDeadline != null,
+              onShuffleChanged: _setShuffleEnabled,
+              onCycleRepeatMode: _cycleRepeatMode,
+              onOpenSleepTimer: _showSleepTimerPicker,
+            );
           },
         ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(
+              position: Tween<Offset>(begin: const Offset(0, 0.035), end: Offset.zero).animate(curved),
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }
@@ -2622,7 +2710,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                   ? 'Device music'
                   : wzPlayerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
               isPlaying: _metrics.isPlaying,
-              onOpenNow: () => _navigateTo(WzAppTab.now),
+              onOpenNow: _showPremiumPlayerSheet,
             )
           else
             WzHomeCurrentListeningCard(
@@ -3135,15 +3223,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onDestinationSelected: (i) => _navigateTo(destinations[i].tab),
         accent: widget.themeConfig.accent,
         miniPlayer: hasPlayerTrack
-            ? WzPremiumMiniPlayer(
+            ? WzConsumerMiniPlayer(
                 metrics: _metrics,
                 manifest: _manifest,
                 progressValue: progress,
-                sourceLabel: isDevicePlayback ? 'Device music' : wzPlayerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
-                offlineReady: _offlineLibraryAvailable,
-                shuffleEnabled: _shuffleEnabled,
-                repeatMode: _repeatMode,
-                sleepTimerBadge: _sleepTimerDeadline == null ? null : _sleepTimerStatusLabel,
                 controlsDisabled: _playerDisabled,
                 onTap: _showPremiumPlayerSheet,
                 onPlayPause: _playPause,

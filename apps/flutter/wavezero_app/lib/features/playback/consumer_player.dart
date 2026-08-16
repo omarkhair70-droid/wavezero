@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../../catalog/catalog_track_manifest.dart';
@@ -10,15 +11,37 @@ import '../../playback/playback_metrics.dart';
 import '../../shared/widgets/wavezero_artwork.dart';
 import 'playback_modes.dart';
 
-class WzConsumerNowPlayingPage extends StatelessWidget {
+class WzConsumerNowPlayingPage extends StatefulWidget {
   const WzConsumerNowPlayingPage({
     super.key,
-    required this.surface,
+    required this.surfaceBuilder,
     this.onClose,
   });
 
-  final Widget surface;
+  final WidgetBuilder surfaceBuilder;
   final VoidCallback? onClose;
+
+  @override
+  State<WzConsumerNowPlayingPage> createState() => _WzConsumerNowPlayingPageState();
+}
+
+class _WzConsumerNowPlayingPageState extends State<WzConsumerNowPlayingPage> {
+  late final Ticker _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Ticker((elapsed) {
+      if (!mounted) return;
+      if (elapsed.inMilliseconds % 250 < 17) setState(() {});
+    })..start();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -38,7 +61,7 @@ class WzConsumerNowPlayingPage extends StatelessWidget {
                           tooltip: 'Close player',
                           size: 44,
                           iconSize: 24,
-                          onPressed: onClose ?? () => Navigator.of(context).maybePop(),
+                          onPressed: widget.onClose ?? () => Navigator.of(context).maybePop(),
                         ),
                         const Spacer(),
                         const Text(
@@ -59,7 +82,7 @@ class WzConsumerNowPlayingPage extends StatelessWidget {
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(18, 6, 18, 28),
-                      child: surface,
+                      child: widget.surfaceBuilder(context),
                     ),
                   ),
                 ],
