@@ -61,7 +61,7 @@ def find_matching_brace(text: str, opening: int) -> int:
                     continue
                 i += 1
                 continue
-            if ch == "\\":
+n            if ch == "\\":
                 i += 2
                 continue
             if ch == quote:
@@ -121,16 +121,16 @@ def class_span(text: str, name: str) -> tuple[int, int]:
 
 def main() -> None:
     original = TARGET.read_text(encoding="utf-8")
-    spans: list[tuple[int, int, str]] = []
-
-    for name in NAMES:
-        start, end = class_span(original, name)
-        spans.append((start, end, name))
-
     cleaned = original
-    for start, end, _ in sorted(spans, reverse=True):
+
+    # Recompute offsets after every deletion. This avoids stale offsets when
+    # neighboring legacy classes sit close together in the monolith.
+    for name in NAMES:
+        start, end = class_span(cleaned, name)
         cleaned = cleaned[:start] + cleaned[end:]
 
+    # Strict safety guard: every retired private symbol must disappear from
+    # the remaining production file. If not, write nothing.
     for name in NAMES:
         match = re.search(rf"\b{re.escape(name)}\b", cleaned)
         if match:
