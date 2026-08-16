@@ -58,7 +58,7 @@ import '../features/history/history_resolution.dart';
 import '../features/history/history_presentation.dart';
 import '../features/history/listening_history_page.dart';
 import '../features/settings/app_mode_preferences.dart';
-import '../features/settings/settings_page.dart';
+import '../features/settings/consumer_settings_page.dart';
 import '../shared/media/media_presentation.dart';
 import '../shared/media/track_source.dart';
 import '../features/playback/playback_operation_controller.dart';
@@ -3056,56 +3056,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
     ];
 
-    final settingsPage = WzSettingsPage(
-      themeConfig: widget.themeConfig,
-      onThemePresetChanged: (preset) => widget.onThemeConfigChanged(widget.themeConfig.copyWith(themePreset: preset)),
-      onAccentPresetChanged: (preset) => widget.onThemeConfigChanged(widget.themeConfig.copyWith(accentPreset: preset)),
+    final settingsPage = WzConsumerSettingsPage(
       preferredAudioQuality: _preferredAudioQuality,
       onQualityChanged: (quality) => setState(() {
         _preferredAudioQuality = quality;
         _lastQualityFallbackReason = 'preferred quality set to ${quality.label}';
       }),
-      selectedAudioEffectProfile: _selectedAudioEffectProfile,
-      nativeAudioEffectStatus: _nativeAudioEffectStatus,
-      lastAudioEffectApplyResult: _lastAudioEffectApplyResult,
-      onAudioEffectChanged: _setAudioEffectProfile,
-      shuffleEnabled: _shuffleEnabled,
-      repeatMode: _repeatMode,
-      sleepTimerLabel: _sleepTimerSettingsLabel,
-      sleepTimerActive: _sleepTimerDeadline != null,
-      onShuffleChanged: _setShuffleEnabled,
-      onRepeatModeChanged: _setRepeatMode,
-      onOpenSleepTimer: _showSleepTimerPicker,
       smartDownloadsEnabled: _smartDownloadsEnabled,
       onSmartDownloadsChanged: (value) => setState(() => _smartDownloadsEnabled = value),
       cachedTrackCount: _cachedTrackCount,
       cacheBytes: _cacheBytes,
-      manualDownloadedCount: _manualDownloadedCount,
-      smartDownloadedCount: _smartDownloadedCount,
       controlsDisabled: _queueDisabled,
       onClearCache: _clearCache,
-      devicePermissionStatus: _deviceMusicPermissionStatus.status,
-      devicePlatformSupported: _deviceMusicPermissionStatus.platformSupported,
-      importedDeviceTrackCount: _deviceMusicTracks.length,
-      deviceScanStatus: _deviceMusicScanStatus,
-      deviceLastError: wzConsumerDeviceError(_deviceMusicLastError),
-      onImportDeviceMusic: _importDeviceMusic,
-      notificationActive: _metrics.isPlaying || (_metrics.trackTitle?.isNotEmpty ?? false),
-      appConfig: widget.appConfig,
-      contentModeLabel: _contentStatus?.friendlyLabel ?? widget.appConfig.contentModeLabel,
-      catalogStatusLabel: _developerMode ? _catalogStatus : wzConsumerCatalogStatus(_catalogStatus),
-      showDeveloperEntry: _showDeveloperControls,
-      appMode: _appMode,
-      onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? WzAppMode.developer : WzAppMode.consumer),
-      onOpenEngine: _developerMode ? () => _navigateTo(WzAppTab.engine) : null,
       onManageStorage: () => _navigateTo(WzAppTab.storage),
-      cloudVaultCount: _cloudVaultTracks.length,
-      onOpenCloudVault: _openCloudVaultPage,
-      onClearCloudVault: _cloudVaultTracks.isEmpty ? null : () => unawaited(_clearCloudVaultTracks()),
-      listeningHistoryCount: _listeningHistory.length,
-      mostPlayedHistoryTitle: _mostPlayedHistoryEntry?.title,
-      onOpenHistory: () => _navigateTo(WzAppTab.history),
-      onOpenSearch: () => _openSearch(),
       onClearRecentSearches: _recentSearches.isEmpty ? null : () => unawaited(_clearRecentSearches()),
       onClearListeningHistory: _listeningHistory.isEmpty ? null : () => unawaited(_clearListeningHistory()),
       legalTracks: _libraryTracks,
