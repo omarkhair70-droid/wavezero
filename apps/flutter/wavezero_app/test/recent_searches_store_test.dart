@@ -20,29 +20,38 @@ void main() {
     expect(canonicalizeWzRecentSearch('  New   Song  '), 'New Song');
   });
 
-  test('remember moves an equivalent normalized query to the front and preserves newest display form', () async {
-    const store = WzRecentSearchesStore();
-    final next = await store.remember(
+  test('recent search builder moves an equivalent normalized query to the front and preserves newest display form', () {
+    final next = buildWzRecentSearches(
       current: const ['اغنيه جديده', 'Other'],
       query: '  أَغْنِيَة   جديدة  ',
     );
 
     expect(next, const ['أَغْنِيَة جديدة', 'Other']);
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getStringList(WzRecentSearchesStore.preferenceKey), next);
   });
 
-  test('remember keeps at most ten items and ignores an empty query', () async {
-    const store = WzRecentSearchesStore();
+  test('recent search builder keeps at most ten items and ignores an empty query', () {
     final current = List<String>.generate(10, (index) => 'q$index');
 
-    final next = await store.remember(current: current, query: 'new');
+    final next = buildWzRecentSearches(current: current, query: 'new');
     expect(next.length, 10);
     expect(next.first, 'new');
     expect(next.last, 'q8');
 
-    final unchanged = await store.remember(current: next, query: '   ');
-    expect(unchanged, next);
+    final unchanged = buildWzRecentSearches(current: next, query: '   ');
+    expect(unchanged, same(next));
+  });
+
+  test('store saves at most ten items using the existing preference key', () async {
+    const store = WzRecentSearchesStore();
+    final searches = List<String>.generate(12, (index) => 'q$index');
+
+    await store.save(searches);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getStringList(WzRecentSearchesStore.preferenceKey),
+      searches.take(10).toList(),
+    );
   });
 
   test('load truncates persisted history to ten items and clear removes the key', () async {
