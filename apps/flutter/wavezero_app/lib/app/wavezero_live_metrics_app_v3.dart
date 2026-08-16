@@ -28,6 +28,7 @@ import '../device_music/device_music_service.dart';
 import '../device_music/device_music_track.dart';
 import 'collections_service.dart';
 import 'listening_history_service.dart';
+import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
 import '../features/playback/sleep_timer_presentation.dart';
@@ -205,7 +206,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   final WzPlaybackPreferences _playbackPreferences = const WzPlaybackPreferences();
 
-  PlayerOperation _operation = PlayerOperation.idle;
+  final WzPlaybackOperationController _operationController = WzPlaybackOperationController();
+  PlayerOperation get _operation => _operationController.current;
   bool _refreshingMetrics = false;
   bool _showMetrics = false;
   WzAppMode _appMode = WzAppMode.consumer;
@@ -1407,9 +1409,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _importDeviceMusic() async {
-    if (_operation != PlayerOperation.idle) return;
+    if (!_operationController.tryBegin(PlayerOperation.loadingCatalog)) return;
     setState(() {
-      _operation = PlayerOperation.loadingCatalog;
       _deviceMusicScanStatus = 'checking_permission';
       _deviceMusicLastError = null;
     });
@@ -1449,7 +1450,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _deviceMusicLastError = error.toString();
       });
     } finally {
-      if (mounted) setState(() => _operation = PlayerOperation.idle);
+      if (mounted) setState(_operationController.end);
     }
   }
 
@@ -1539,18 +1540,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _runOperation(PlayerOperation operation, Future<void> Function() body, {bool refreshAfter = true}) async {
-    if (_operation != PlayerOperation.idle) return;
-    setState(() {
-      _operation = operation;
-      _lastError = null;
-    });
+    if (!_operationController.tryBegin(operation)) return;
+    setState(() => _lastError = null);
     try {
       await body();
       if (refreshAfter) await _refreshMetrics(allowAutoAdvance: false);
     } catch (error) {
       if (mounted) setState(() => _lastError = error.toString());
     } finally {
-      if (mounted) setState(() => _operation = PlayerOperation.idle);
+      if (mounted) setState(_operationController.end);
     }
   }
 
@@ -2536,7 +2534,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now')));
       return;
     }
-    setState(() => _operation = PlayerOperation.loadingTrack);
+    if (!_operationController.tryBegin(PlayerOperation.loadingTrack)) return;
+    setState(() {});
     try {
       final ok = await _cacheService.downloadAndCache(
         track.trackId,
@@ -2562,14 +2561,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _lastQualityFallbackReason = 'manual cache: ${selection?.fallbackReason ?? 'quality unknown'}';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Downloaded ${track.title} (${_productQualityLabel(selectedAsset?.qualityLabel ?? 'unknown')})' : 'Download failed for ${track.title}')));
     } finally {
-      if (mounted) setState(() => _operation = PlayerOperation.idle);
+      if (mounted) setState(_operationController.end);
     }
   }
 
   Future<void> _deleteCachedTrack(CachedTrackMetadata track) async {
     if (_operation != PlayerOperation.idle) return;
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _operation = PlayerOperation.loadingCatalog);
+    if (!_operationController.tryBegin(PlayerOperation.loadingCatalog)) return;
+    setState(() {});
     try {
       final ok = await _cacheService.deleteCachedTrack(track.trackId);
       _lastCacheDeleteResult = ok ? 'removed:${track.trackId}' : 'remove failed:${track.trackId}';
@@ -2580,7 +2580,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         SnackBar(content: Text(ok ? 'Removed from downloads' : 'Could not remove ${track.title}')),
       );
     } finally {
-      if (mounted) setState(() => _operation = PlayerOperation.idle);
+      if (mounted) setState(_operationController.end);
     }
   }
 
@@ -2625,7 +2625,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _clearCache() async {
     if (_operation != PlayerOperation.idle) return;
-    setState(() => _operation = PlayerOperation.loadingCatalog);
+    if (!_operationController.tryBegin(PlayerOperation.loadingCatalog)) return;
+    setState(() {});
     try {
       await _cacheService.clearCache();
       _lastCacheDeleteResult = 'storage is clear';
@@ -2634,7 +2635,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Downloads cleared')));
     } finally {
-      if (mounted) setState(() => _operation = PlayerOperation.idle);
+      if (mounted) setState(_operationController.end);
     }
   }
 
