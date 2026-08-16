@@ -1,0 +1,40 @@
+name: One-shot Flutter compile blocker fix
+
+on:
+  push:
+    branches:
+      - ci/flutter-checks
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ci/flutter-checks
+          fetch-depth: 0
+      - name: Fix collection artwork artist field
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+          old = "_Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),"
+          new = "_Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.subtitle),"
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one invalid artistName reference, found {count}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+          rm .github/workflows/one-shot-ci-compile-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-ci-compile-fix.yml
+          git commit -m "Fix collection artwork compile error"
+          git push origin HEAD:ci/flutter-checks
