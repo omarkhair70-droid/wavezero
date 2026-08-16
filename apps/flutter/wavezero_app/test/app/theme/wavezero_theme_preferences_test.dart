@@ -10,6 +10,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  // Regression coverage for persisted theme/accent ownership.
   test('defaults to the existing Midnight / Wave Purple theme', () async {
     final config = await store.load();
     expect(config.themePreset, WzThemePreset.midnight);
