@@ -32,6 +32,7 @@ import '../features/playback/audio_effect_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
 import '../features/downloads/smart_download_policy.dart';
+import '../features/downloads/storage_manager_page.dart';
 import '../features/cloud_vault/cloud_vault_models.dart';
 import '../features/cloud_vault/cloud_vault_service.dart';
 import '../features/cloud_vault/cloud_vault_page.dart';
@@ -3037,7 +3038,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
         ],
       ),
-      _StorageManagerPage(
+      WzStorageManagerPage(
         downloads: _cachedLibrary,
         onBack: () => _navigateTo(WzAppTab.downloads),
         cacheBytes: _cacheBytes,
@@ -6179,236 +6180,6 @@ class _QueueRow extends StatelessWidget {
 }
 
 
-class _StorageManagerPage extends StatelessWidget {
-  const _StorageManagerPage({
-    required this.downloads,
-    required this.onBack,
-    required this.cacheBytes,
-    required this.trackBytes,
-    required this.manualDownloadedCount,
-    required this.smartDownloadedCount,
-    required this.offlineReadyCount,
-    required this.smartDownloadsEnabled,
-    required this.controlsDisabled,
-    required this.onSmartDownloadsChanged,
-    required this.onPlay,
-    required this.onDelete,
-    required this.onClearAll,
-  });
-
-  final List<CachedTrackMetadata> downloads;
-  final VoidCallback onBack;
-  final int cacheBytes;
-  final Map<String, int> trackBytes;
-  final int manualDownloadedCount;
-  final int smartDownloadedCount;
-  final int offlineReadyCount;
-  final bool smartDownloadsEnabled;
-  final bool controlsDisabled;
-  final ValueChanged<bool> onSmartDownloadsChanged;
-  final ValueChanged<CachedTrackMetadata> onPlay;
-  final ValueChanged<CachedTrackMetadata> onDelete;
-  final Future<void> Function() onClearAll;
-
-  int get _currentOrRecentCount => downloads.where((track) => track.downloadSource == 'smart_current').length;
-  int get _unknownCount => downloads.where((track) => track.downloadSource != 'manual' && !track.downloadSource.startsWith('smart_')).length;
-
-  @override
-  Widget build(BuildContext context) {
-    final healthLabel = downloads.isEmpty ? 'No downloads yet' : 'Ready for offline playback';
-    return WzPageScaffold(
-      children: [
-        WzPageHeader(
-          icon: Icons.storage,
-          title: 'Storage Manager',
-          subtitle: 'Manage downloaded tracks for offline playback.',
-          trailing: IconButton.outlined(tooltip: 'Back to Downloads', onPressed: onBack, icon: const Icon(Icons.arrow_back)),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        WzPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                spacing: WzSpacing.xs,
-                runSpacing: WzSpacing.xs,
-                children: [
-                  WzStatusPill(label: healthLabel, active: downloads.isNotEmpty, icon: downloads.isEmpty ? Icons.inbox_outlined : Icons.offline_pin),
-                  WzStatusPill(label: smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off', active: smartDownloadsEnabled, icon: Icons.auto_awesome),
-                ],
-              ),
-              const SizedBox(height: WzSpacing.md),
-              Wrap(
-                spacing: WzSpacing.sm,
-                runSpacing: WzSpacing.sm,
-                children: [
-                  WzMiniMetric(label: 'Cached for offline', value: '${downloads.length}', active: downloads.isNotEmpty, icon: Icons.library_music),
-                  WzMiniMetric(label: 'Device storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
-                  WzMiniMetric(label: 'Manual downloads', value: '$manualDownloadedCount', active: manualDownloadedCount > 0, icon: Icons.download_done),
-                  WzMiniMetric(label: 'Smart downloads', value: '$smartDownloadedCount', active: smartDownloadedCount > 0, icon: Icons.auto_awesome),
-                  WzMiniMetric(label: 'Offline-ready', value: '$offlineReadyCount', active: offlineReadyCount > 0, icon: Icons.offline_pin),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Smart Downloads', subtitle: 'Keep likely next tracks ready without changing playback behavior.', icon: Icons.auto_awesome),
-        WzPanel(
-          child: SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Smart Downloads'),
-            subtitle: const Text('WaveZero can cache the current and up-next tracks for faster offline-ready playback.'),
-            value: smartDownloadsEnabled,
-            onChanged: controlsDisabled ? null : onSmartDownloadsChanged,
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Categories', subtitle: 'See what kind of downloads are using storage.', icon: Icons.category),
-        WzPanel(
-          child: Wrap(
-            spacing: WzSpacing.sm,
-            runSpacing: WzSpacing.sm,
-            children: [
-              _StorageCategoryCard(label: 'All cached', count: downloads.length, icon: Icons.all_inbox),
-              _StorageCategoryCard(label: 'Manual downloads', count: manualDownloadedCount, icon: Icons.download_done),
-              _StorageCategoryCard(label: 'Smart downloads', count: smartDownloadedCount, icon: Icons.auto_awesome),
-              _StorageCategoryCard(label: 'Current / recently cached', count: _currentOrRecentCount, icon: Icons.flash_on),
-              _StorageCategoryCard(label: 'Unknown source', count: _unknownCount, icon: Icons.help_outline),
-            ],
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        WzSectionHeader(
-          title: 'Downloaded tracks',
-          subtitle: downloads.isEmpty ? 'No downloads yet.' : 'Play or remove individual offline-ready tracks.',
-          icon: Icons.playlist_play,
-        ),
-        WzPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                spacing: WzSpacing.sm,
-                runSpacing: WzSpacing.sm,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(downloads.isEmpty ? 'Downloads cleared' : '${downloads.length} downloaded • ${formatWzCacheBytes(cacheBytes)}', style: WzText.body),
-                  OutlinedButton.icon(
-                    onPressed: controlsDisabled || downloads.isEmpty ? null : () => unawaited(onClearAll()),
-                    icon: const Icon(Icons.clear_all),
-                    label: const Text('Clear all downloads'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: WzSpacing.md),
-              if (downloads.isEmpty)
-                const WzEmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
-              else
-                ...downloads.map((track) => _StorageTrackRow(
-                      track: track,
-                      sizeBytes: trackBytes[track.trackId],
-                      disabled: controlsDisabled,
-                      onPlay: () => onPlay(track),
-                      onDelete: () => onDelete(track),
-                    )),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StorageCategoryCard extends StatelessWidget {
-  const _StorageCategoryCard({required this.label, required this.count, required this.icon});
-
-  final String label;
-  final int count;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: 210,
-        child: WzMiniMetric(label: label, value: '$count', active: count > 0, icon: icon),
-      );
-}
-
-class _StorageTrackRow extends StatelessWidget {
-  const _StorageTrackRow({required this.track, required this.sizeBytes, required this.disabled, required this.onPlay, required this.onDelete});
-
-  final CachedTrackMetadata track;
-  final int? sizeBytes;
-  final bool disabled;
-  final VoidCallback onPlay;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final quality = wzProductQualityLabel(track.qualityLabel);
-    final details = <String>[
-      if (quality != 'Unknown') quality,
-      if (track.codec != null && track.codec!.trim().isNotEmpty) track.codec!,
-      if (track.bitrateKbps != null) '${track.bitrateKbps}kbps',
-      if (sizeBytes != null) formatWzCacheBytes(sizeBytes!),
-    ];
-    return Container(
-      margin: const EdgeInsets.only(bottom: WzSpacing.sm),
-      padding: const EdgeInsets.all(WzSpacing.sm),
-      decoration: BoxDecoration(
-        color: WzColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(WzRadius.lg),
-        border: Border.all(color: WzColors.borderSoft),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              WzArtwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
-              const SizedBox(width: WzSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: WzSpacing.xxs),
-                    Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: WzSpacing.sm),
-          Wrap(
-            spacing: WzSpacing.xs,
-            runSpacing: WzSpacing.xs,
-            children: [
-              WzStatusPill(label: wzDownloadSourceLabel(track.downloadSource), active: track.downloadSource != 'unknown', icon: _downloadSourceIcon(track.downloadSource)),
-              if (quality != 'Unknown') WzStatusPill(label: quality, active: true, icon: Icons.high_quality),
-              if (track.codec != null && track.codec!.trim().isNotEmpty) WzStatusPill(label: track.codec!, active: true, icon: Icons.memory),
-              if (track.bitrateKbps != null) WzStatusPill(label: '${track.bitrateKbps}kbps', active: true, icon: Icons.speed),
-              if (sizeBytes != null) WzStatusPill(label: formatWzCacheBytes(sizeBytes!), active: true, icon: Icons.sd_storage),
-              if (details.isEmpty) const WzStatusPill(label: 'Offline-ready', active: true, icon: Icons.offline_pin),
-            ],
-          ),
-          const SizedBox(height: WzSpacing.xs),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: WzSpacing.xs,
-            runSpacing: WzSpacing.xs,
-            children: [
-              OutlinedButton.icon(onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
-              OutlinedButton.icon(onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Remove from device')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DownloadsCard extends StatelessWidget {
   const _DownloadsCard({
     required this.downloads,
@@ -6532,19 +6303,6 @@ class _DownloadRow extends StatelessWidget {
 }
 
 
-
-IconData _downloadSourceIcon(String source) {
-  switch (source) {
-    case 'manual':
-      return Icons.download_done;
-    case 'smart_current':
-      return Icons.flash_on;
-    case 'smart_up_next':
-      return Icons.auto_awesome;
-    default:
-      return Icons.help_outline;
-  }
-}
 
 class _LibrarySourceSummaryCard extends StatelessWidget {
   const _LibrarySourceSummaryCard({
