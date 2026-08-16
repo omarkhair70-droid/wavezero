@@ -38,8 +38,6 @@ WzSmartDownloadAdmission evaluateWzSmartDownloadPreflight({
 WzSmartDownloadAdmission evaluateWzSmartDownloadCacheState({
   required TrackCacheStatus status,
   required bool alreadyInFlight,
-  required int cachedTrackCount,
-  required int maxCachedTracks,
 }) {
   if (status == TrackCacheStatus.cached) {
     return const WzSmartDownloadAdmission.deny('already cached');
@@ -50,6 +48,13 @@ WzSmartDownloadAdmission evaluateWzSmartDownloadCacheState({
   if (alreadyInFlight) {
     return const WzSmartDownloadAdmission.deny('already in-flight');
   }
+  return const WzSmartDownloadAdmission.allow();
+}
+
+WzSmartDownloadAdmission evaluateWzSmartDownloadCapacity({
+  required int cachedTrackCount,
+  required int maxCachedTracks,
+}) {
   if (cachedTrackCount >= maxCachedTracks) {
     return const WzSmartDownloadAdmission.deny(
       'smart download cache limit reached',
