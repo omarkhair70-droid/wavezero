@@ -1560,41 +1560,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   // Predictive Smart Downloads helpers
-) async {
-    if (!_smartDownloadsEnabled) {
-      _lastSmartDownloadReason = 'smart downloads disabled';
-      return false;
-    }
-    if (url == null || url.isEmpty) {
-      _lastSmartDownloadReason = 'no remote url';
-      return false;
-    }
-    if (_isDeviceTrackId(trackId) || _isDeviceUrl(url)) {
-      _lastSmartDownloadReason = 'device local track already local';
-      return false;
-    }
-    await _cacheService.ensureInitialized();
-    final status = _cacheService.statusForTrack(trackId);
-    if (status == TrackCacheStatus.cached) {
-      _lastSmartDownloadReason = 'already cached';
-      return false;
-    }
-    if (status == TrackCacheStatus.caching) {
-      _lastSmartDownloadReason = 'already caching';
-      return false;
-    }
-    if (_autoCacheInFlight.contains(trackId)) {
-      _lastSmartDownloadReason = 'already in-flight';
-      return false;
-    }
-    final cachedLibrary = await _cacheService.cachedLibrary();
-    if (cachedLibrary.length >= _maxSmartDownloadCachedTracks) {
-      _lastSmartDownloadReason = 'smart download cache limit reached';
-      return false;
-    }
-    return true;
-  }
-
   void _recordSmartDownloadSkip(String reason) {
     _lastSmartDownloadReason = reason;
     if (mounted) setState(() => _smartDownloadSkippedCount += 1);
