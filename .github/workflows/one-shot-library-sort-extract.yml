@@ -1,0 +1,81 @@
+name: One-shot Library sort extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-library-sort-policy
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-library-sort-policy
+          fetch-depth: 0
+      - name: Move Library sort policy out of V3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+
+          import_anchor = "import '../features/library/library_controls.dart';\n"
+          sort_import = "import '../features/library/library_sort.dart';\n"
+          if text.count(import_anchor) != 1:
+              raise SystemExit('library controls import anchor changed')
+          if sort_import not in text:
+              text = text.replace(import_anchor, import_anchor + sort_import, 1)
+
+          old_call = "    final sorted = _sortLibraryTracks(matching);\n"
+          new_call = (
+              "    final sorted = sortWzLibraryTracks(\n"
+              "      matching,\n"
+              "      mode: _librarySortMode,\n"
+              "      addedRank: _libraryAddedRank,\n"
+              "    );\n"
+          )
+          if text.count(old_call) != 1:
+              raise SystemExit('library sort call changed')
+          text = text.replace(old_call, new_call, 1)
+
+          start_marker = "  List<CatalogTrackSummary> _sortLibraryTracks(List<CatalogTrackSummary> tracks) {\n"
+          end_marker = "\n\n  CachedTrackMetadata? _cachedMetadataForTrack(CatalogTrackSummary track) {"
+          if text.count(start_marker) != 1:
+              raise SystemExit('library sort function start changed')
+          start = text.index(start_marker)
+          try:
+              end = text.index(end_marker, start)
+          except ValueError:
+              raise SystemExit('library sort function end changed')
+
+          replacement = (
+              "  int _libraryAddedRank(CatalogTrackSummary track) {\n"
+              "    final cached = _cachedMetadataForTrack(track);\n"
+              "    if (cached != null) return cached.cachedAt;\n"
+              "    if (_isDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;\n"
+              "    return 0;\n"
+              "  }"
+          )
+          text = text[:start] + replacement + text[end:]
+
+          if text.count(sort_import) != 1:
+              raise SystemExit('library sort import missing after patch')
+          if '_sortLibraryTracks' in text:
+              raise SystemExit('inline Library sort owner remains')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-library-sort-extract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-library-sort-extract.yml
+          git commit -m "Use extracted Library sort policy"
+          git push origin HEAD:refactor/extract-library-sort-policy
