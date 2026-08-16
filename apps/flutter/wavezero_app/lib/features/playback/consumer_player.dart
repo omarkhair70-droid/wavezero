@@ -454,6 +454,7 @@ class _RibbonPainter extends CustomPainter {
         Offset(size.width * .04, size.height * .15),
         Offset(size.width * .96, size.height * .82),
         const [Color(0xE6FFFFFF), Color(0x59FFFFFF), Color(0xCFFFFFFF)],
+        const [0.0, 0.52, 1.0],
       );
     final path = Path()
       ..moveTo(size.width * .02, size.height * .54)
