@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../catalog/catalog_track_manifest.dart';
+import '../../catalog/catalog_track_manifest.dart';
 
 const String waveZeroCollectionsPreferenceKey = 'wavezero.collections.v1';
 const String likedTracksCollectionId = 'liked-tracks';
