@@ -26,6 +26,7 @@ import '../features/search/search_controls.dart';
 import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
 import '../features/search/search_results.dart';
+import '../features/search/search_index.dart';
 import '../features/playback/playback_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
@@ -430,110 +431,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final key = _searchIndexKey();
     final memo = _searchIndexMemo;
     if (memo != null && _searchIndexMemoKey == key) return memo;
-    final results = <WzSearchResult>[];
-    WzSearchResult resultForTrack(CatalogTrackSummary track, WzSearchResultType type, WzSearchSource source, String secondary) {
-      final asset = track.primaryAsset;
-      final label = wzSearchSourceLabel(source);
-      return WzSearchResult(
-        id: '${source.name}:${track.trackId}',
-        title: track.title,
-        subtitle: track.subtitle,
-        type: type,
-        source: source,
-        artworkUrl: track.artworkUrl,
-        trackId: track.trackId,
-        qualityLabel: asset?.qualityLabel,
-        codec: asset?.codec,
-        license: _isDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
-        available: asset?.manifestUrl.trim().isNotEmpty == true,
-        secondaryLabel: secondary,
-        searchText: normalizeWzSearch([
-          track.title,
-          track.subtitle,
-          track.artistName ?? '',
-          track.albumName ?? '',
-          track.displayName ?? '',
-          label,
-          secondary,
-          asset?.qualityLabel ?? '',
-          asset?.codec ?? '',
-          track.license.badgeLabel,
-          track.license.sourceName ?? '',
-          track.license.usageNotes ?? '',
-        ].join(' ')),
-        track: track,
-      );
-    }
-
-    for (final track in _searchableCatalogTracks) {
-      final source = track.license.needsRightsWarning || track.license.sourceName?.toLowerCase().contains('demo') == true
-          ? WzSearchSource.legalDemo
-          : WzSearchSource.apiCatalog;
-      results.add(resultForTrack(track, WzSearchResultType.track, source, source == WzSearchSource.legalDemo ? 'Legal demo catalog' : 'Catalog'));
-    }
-    for (final track in _deviceCatalogTracks) {
-      results.add(resultForTrack(track, WzSearchResultType.deviceTrack, WzSearchSource.deviceMusic, 'Your device music'));
-    }
-    for (final track in _cachedCatalogTracks) {
-      results.add(resultForTrack(track, WzSearchResultType.downloadedTrack, WzSearchSource.downloads, 'Offline Ready download'));
-    }
-    for (final track in _cloudCatalogTracks) {
-      results.add(resultForTrack(track, WzSearchResultType.cloudTrack, WzSearchSource.cloudVault, 'Cloud Vault metadata only'));
-    }
-
-    for (final collection in _collections) {
-      results.add(WzSearchResult(
-        id: 'collection:${collection.id}',
-        title: collection.name,
-        subtitle: collection.type == WzCollectionType.liked ? '${collection.trackCount} liked tracks' : '${collection.trackCount} collection tracks',
-        type: WzSearchResultType.collection,
-        source: WzSearchSource.collections,
-        collectionId: collection.id,
-        available: true,
-        secondaryLabel: collection.type == WzCollectionType.liked ? 'Liked Tracks' : 'Collection',
-        searchText: normalizeWzSearch([
-          collection.name,
-          collection.description ?? '',
-          'Collections',
-          collection.type == WzCollectionType.liked ? 'Liked Tracks' : 'Playlist',
-          ...collection.tracks.expand((track) => [track.title, track.subtitle, track.albumName ?? '', track.license.badgeLabel, track.license.sourceName ?? '']),
-        ].join(' ')),
-        collection: collection,
-      ));
-    }
-
-    for (final entry in _listeningHistory) {
-      final resolved = _resolveHistoryEntry(entry);
-      results.add(WzSearchResult(
-        id: 'history:${entry.trackId}',
-        title: entry.title,
-        subtitle: entry.subtitle,
-        type: WzSearchResultType.historyEntry,
-        source: WzSearchSource.history,
-        artworkUrl: entry.artworkUrl,
-        trackId: resolved?.trackId,
-        historyTrackId: entry.trackId,
-        qualityLabel: entry.qualityLabel,
-        codec: entry.codec,
-        license: entry.license,
-        available: resolved != null,
-        secondaryLabel: 'Recently played • ${entry.playCount} play${entry.playCount == 1 ? '' : 's'}',
-        searchText: normalizeWzSearch([
-          entry.title,
-          entry.subtitle,
-          entry.albumName ?? '',
-          'History Recently Played Continue Listening',
-          _historySourceLabel(entry.source),
-          entry.qualityLabel ?? '',
-          entry.codec ?? '',
-          entry.license.badgeLabel,
-          entry.license.sourceName ?? '',
-        ].join(' ')),
-        track: resolved,
-        historyEntry: entry,
-      ));
-    }
-
+    final results = buildWzSearchIndex(
+      catalogTracks: _searchableCatalogTracks,
+      deviceTracks: _deviceCatalogTracks,
+      downloadedTracks: _cachedCatalogTracks,
+      cloudTracks: _cloudCatalogTracks,
+      collections: _collections,
+      historyEntries: _listeningHistory,
+      resolveHistoryEntry: _resolveHistoryEntry,
+      isDeviceTrack: _isDeviceCatalogTrack,
+      historySourceLabel: _historySourceLabel,
+    );
     _searchIndexMemoKey = key;
     _searchIndexMemo = results;
     return results;
