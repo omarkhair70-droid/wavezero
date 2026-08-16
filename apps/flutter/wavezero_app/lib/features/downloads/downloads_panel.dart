@@ -38,9 +38,9 @@ class WzDownloadsPanel extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               alignment: WrapAlignment.spaceBetween,
               children: [
-                const ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 480),
-                  child: Column(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Downloads', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
