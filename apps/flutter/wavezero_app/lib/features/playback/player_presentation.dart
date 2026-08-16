@@ -457,7 +457,12 @@ String wzEffectStatusLabel(NativeAudioEffectStatus status) {
   }
 }
 
-String wzPlayerSourceLabel({required bool isPlayingFromCache, required bool offlineReady, required bool hasTrack}
+String wzPlayerSourceLabel({required bool isPlayingFromCache, required bool offlineReady, required bool hasTrack}) {
+  if (isPlayingFromCache) return 'Downloaded';
+  if (hasTrack) return 'Catalog';
+  if (offlineReady) return 'Offline Ready';
+  return 'Not cached';
+}
 
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 

@@ -60,7 +60,6 @@ import '../features/settings/app_mode_preferences.dart';
 import '../features/settings/settings_page.dart';
 import '../shared/media/media_presentation.dart';
 import '../shared/media/track_source.dart';
-import '../shared/widgets/wavezero_artwork.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
@@ -3272,12 +3271,6 @@ Map<String, int> _cachedTrackSizeMap(List<CachedTrackMetadata> tracks) {
 
 
 
-) {
-  if (isPlayingFromCache) return 'Downloaded';
-  if (hasTrack) return 'Catalog';
-  if (offlineReady) return 'Offline Ready';
-  return 'Not cached';
-}
 
 
 
