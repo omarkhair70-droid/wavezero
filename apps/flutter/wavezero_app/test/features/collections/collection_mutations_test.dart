@@ -3,9 +3,10 @@ import 'package:wavezero_app/features/collections/collection_mutations.dart';
 import 'package:wavezero_app/features/collections/collections_service.dart';
 
 void main() {
-  WzCollectionTrackSnapshot track(String id) => WzCollectionTrackSnapshot(
+  WzCollectionTrackSnapshot track(String id, {String? title}) =>
+      WzCollectionTrackSnapshot(
         trackId: id,
-        title: id,
+        title: title ?? id,
         subtitle: 'Artist',
         source: WzCollectionTrackSource.unknown,
         addedAtMs: 1,
@@ -38,7 +39,7 @@ void main() {
   });
 
   test('upsert deduplicates then appends the newest snapshot', () {
-    final newest = track('a').copyWith(title: 'Newest');
+    final newest = track('a', title: 'Newest');
     final result = wzUpsertCollectionTrack(
       collections: [collection(tracks: [track('a'), track('b')])],
       collectionId: 'c1',
