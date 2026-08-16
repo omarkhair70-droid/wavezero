@@ -28,6 +28,7 @@ import '../device_music/device_music_track.dart';
 import 'collections_service.dart';
 import 'listening_history_service.dart';
 import '../features/playback/player_operation_state.dart';
+import '../features/playback/playback_status.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
@@ -623,23 +624,23 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool get _consumerLibraryHeaderActive =>
       !_consumerLibraryHeaderWarning && _consumerLibraryHeaderStatus != 'Loading library';
 
-  String get _statusText {
-    if ((_lastError ?? _metrics.playbackError) != null) return 'Error';
-    if (_operation != PlayerOperation.idle) return _operation.displayName;
-    if (_metrics.isPlaying) return 'Playing';
-    if (_manifest != null || _metrics.trackTitle != null) return 'Paused / Ready';
-    return 'Ready';
-  }
+  String get _statusText => WzPlaybackStatusPresentation.headline(
+        lastError: _lastError,
+        playbackError: _metrics.playbackError,
+        operation: _operation,
+        isPlaying: _metrics.isPlaying,
+        hasLoadedTrack: _manifest != null || _metrics.trackTitle != null,
+      );
 
-  String get _statusDetail {
-    final error = _lastError ?? _metrics.playbackError;
-    if (error != null && error.isNotEmpty) return _developerMode ? error : _friendlyLoadError(error);
-    if (_refreshingMetrics) {
-      return _developerMode ? 'Metrics refresh is running without blocking controls.' : 'Updating playback status.';
-    }
-    if (_upNextQueueTrack != null) return 'Up next: ${_upNextQueueTrack!.title}';
-    return _queueStatus;
-  }
+  String get _statusDetail => WzPlaybackStatusPresentation.detail(
+        lastError: _lastError,
+        playbackError: _metrics.playbackError,
+        developerMode: _developerMode,
+        refreshingMetrics: _refreshingMetrics,
+        upNextTitle: _upNextQueueTrack?.title,
+        queueStatus: _queueStatus,
+        consumerError: _friendlyLoadError,
+      );
 
   @override
   void initState() {
