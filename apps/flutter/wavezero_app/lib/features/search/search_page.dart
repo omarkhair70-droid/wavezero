@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/curated_demo_picks.dart';
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
+import '../../shared/media/media_presentation.dart';
 import '../collections/collections_service.dart';
 import '../history/listening_history_service.dart';
 import 'search_controls.dart';
