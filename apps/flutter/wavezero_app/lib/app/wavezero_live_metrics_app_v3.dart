@@ -27,7 +27,7 @@ import '../device_music/device_music_service.dart';
 import '../device_music/device_music_track.dart';
 import 'collections_service.dart';
 import 'listening_history_service.dart';
-import 'player_operation_state.dart';
+import '../features/playback/player_operation_state.dart';
 import 'queue_session_store.dart';
 import 'smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
