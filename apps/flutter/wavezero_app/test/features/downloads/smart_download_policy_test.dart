@@ -3,7 +3,6 @@ import 'package:wavezero_app/features/downloads/cache_service.dart';
 import 'package:wavezero_app/features/downloads/smart_download_policy.dart';
 
 void main() {
-  // Regression coverage for the extracted admission gates.
   test('preflight preserves disabled, missing-url, and device reasons', () {
     expect(
       evaluateWzSmartDownloadPreflight(

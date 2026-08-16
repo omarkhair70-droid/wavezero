@@ -5,7 +5,6 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../audio/audio_effects.dart';
 import 'app_config.dart';
@@ -28,13 +27,16 @@ import '../features/search/recent_searches_store.dart';
 import '../features/search/search_text.dart';
 import '../features/search/search_results.dart';
 import '../features/search/search_index.dart';
+import '../features/search/search_page.dart';
 import '../features/playback/playback_preferences.dart';
 import '../features/playback/audio_effect_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
 import '../features/downloads/smart_download_policy.dart';
+import '../features/downloads/storage_manager_page.dart';
 import '../features/cloud_vault/cloud_vault_models.dart';
 import '../features/cloud_vault/cloud_vault_service.dart';
+import '../features/cloud_vault/cloud_vault_page.dart';
 import '../design/wavezero_design_system.dart';
 import '../features/device_music/device_music_service.dart';
 import '../features/device_music/device_music_track.dart';
@@ -42,11 +44,18 @@ import '../features/device_music/device_music_projection.dart';
 import '../features/collections/collections_service.dart';
 import '../features/collections/collection_resolution.dart';
 import '../features/collections/collection_mutations.dart';
+import '../features/collections/collections_pages.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/history/history_selection.dart';
 import '../features/history/history_resolution.dart';
 import '../features/history/history_presentation.dart';
+import '../features/history/listening_history_page.dart';
 import '../features/settings/app_mode_preferences.dart';
+import '../features/settings/legal_licenses_page.dart';
+import '../shared/media/media_presentation.dart';
+import '../shared/media/track_source.dart';
+import '../shared/widgets/wavezero_artwork.dart';
+import '../shared/widgets/wavezero_empty_message.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
@@ -58,9 +67,10 @@ import '../features/queue/queue_position.dart';
 import '../features/queue/smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
+import 'theme/wavezero_theme_preferences.dart';
 
-class WaveZeroLiveMetricsApp extends StatefulWidget {
-  const WaveZeroLiveMetricsApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
+class WaveZeroApp extends StatefulWidget {
+  const WaveZeroApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
       : _playbackBridge = playbackBridge,
         _sessionStore = sessionStore;
 
@@ -68,10 +78,11 @@ class WaveZeroLiveMetricsApp extends StatefulWidget {
   final QueueSessionStore? _sessionStore;
 
   @override
-  State<WaveZeroLiveMetricsApp> createState() => _WaveZeroLiveMetricsAppState();
+  State<WaveZeroApp> createState() => _WaveZeroAppState();
 }
 
-class _WaveZeroLiveMetricsAppState extends State<WaveZeroLiveMetricsApp> {
+class _WaveZeroAppState extends State<WaveZeroApp> {
+  final WzThemePreferences _themePreferences = const WzThemePreferences();
   WzThemeConfig _themeConfig = const WzThemeConfig();
 
   @override
@@ -81,16 +92,14 @@ class _WaveZeroLiveMetricsAppState extends State<WaveZeroLiveMetricsApp> {
   }
 
   Future<void> _loadThemeConfig() async {
-    final prefs = await SharedPreferences.getInstance();
+    final config = await _themePreferences.load();
     if (!mounted) return;
-    setState(() => _themeConfig = WzThemeConfig.fromPrefs(prefs));
+    setState(() => _themeConfig = config);
   }
 
   Future<void> _setThemeConfig(WzThemeConfig config) async {
     setState(() => _themeConfig = config);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(WzThemeConfig.themePreferenceKey, config.themePreset.name);
-    await prefs.setString(WzThemeConfig.accentPreferenceKey, config.accentPreset.name);
+    await _themePreferences.save(config);
   }
 
   @override
@@ -405,7 +414,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       collections: _collections,
       historyEntries: _listeningHistory,
       resolveHistoryEntry: _resolveHistoryEntry,
-      isDeviceTrack: _isDeviceCatalogTrack,
+      isDeviceTrack: isWzDeviceCatalogTrack,
       historySourceLabel: wzHistorySourceLabel,
     );
     _searchIndexMemoKey = key;
@@ -677,7 +686,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _openCloudVaultPage() async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => _CloudVaultPage(
+      builder: (_) => WzCloudVaultPage(
         tracks: _cloudVaultTracks,
         developerMode: _developerMode,
         titleController: _cloudSeedTitleController,
@@ -753,9 +762,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   bool _isLiked(String trackId) => wzCollectionContainsTrack(_likedCollection, trackId);
 
   WzCollectionTrackSnapshot _snapshotForTrack(CatalogTrackSummary track) {
-    final source = _isDeviceCatalogTrack(track)
+    final source = isWzDeviceCatalogTrack(track)
         ? WzCollectionTrackSource.device
-        : _isCachedCatalogTrack(track)
+        : isWzCachedCatalogTrack(track)
             ? WzCollectionTrackSource.cached
             : track.source == 'api'
                 ? WzCollectionTrackSource.api
@@ -770,7 +779,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       primaryUrl: track.primaryAsset?.manifestUrl,
       qualityLabel: track.primaryAsset?.qualityLabel,
       codec: track.primaryAsset?.codec,
-      license: _isDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
+      license: isWzDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
       addedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
@@ -1572,8 +1581,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       enabled: _smartDownloadsEnabled,
       trackId: trackId,
       url: url,
-      isDeviceTrack: _isDeviceTrackId(trackId),
-      isDeviceUrl: _isDeviceUrl(url),
+      isDeviceTrack: isWzDeviceTrackId(trackId),
+      isDeviceUrl: isWzDeviceUrl(url),
     );
     if (!preflight.allowed) {
       _recordSmartDownloadSkip(preflight.reason!);
@@ -1642,7 +1651,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _maybeAutoCacheCurrentTrack(CatalogTrackManifest manifest) async {
     if (manifest.trackId.isEmpty) return;
-    if (_isDeviceTrackId(manifest.trackId) || _isDeviceUrl(manifest.streamUrl)) {
+    if (isWzDeviceTrackId(manifest.trackId) || isWzDeviceUrl(manifest.streamUrl)) {
       _lastSmartDownloadReason = 'device local track already local';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
       return;
@@ -1665,7 +1674,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _maybeAutoCacheNextQueuedTrack() async {
     final next = _upNextQueueTrack;
     if (next == null) return;
-    if (_isDeviceCatalogTrack(next)) {
+    if (isWzDeviceCatalogTrack(next)) {
       _lastSmartDownloadReason = 'device local track already local';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
       return;
@@ -1861,7 +1870,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int _libraryAddedRank(CatalogTrackSummary track) {
     final cached = _cachedMetadataForTrack(track);
     if (cached != null) return cached.cachedAt;
-    if (_isDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
+    if (isWzDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
     return 0;
   }
 
@@ -2308,7 +2317,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       await _refreshCacheStats();
       if (!mounted) return;
       _lastQualityFallbackReason = 'manual cache: ${selection?.fallbackReason ?? 'quality unknown'}';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Downloaded ${track.title} (${_productQualityLabel(selectedAsset?.qualityLabel ?? 'unknown')})' : 'Download failed for ${track.title}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Downloaded ${track.title} (${wzProductQualityLabel(selectedAsset?.qualityLabel ?? 'unknown')})' : 'Download failed for ${track.title}')));
     } finally {
       if (mounted) setState(_operationController.end);
     }
@@ -2621,7 +2630,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
     final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
     final qualityLabel = hasPlayerTrack ? (_manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label) : 'unknown';
-    final isDevicePlayback = _isDeviceTrackId(_manifest?.trackId) || _isDeviceUrl(_currentAssetUrl);
+    final isDevicePlayback = isWzDeviceTrackId(_manifest?.trackId) || isWzDeviceUrl(_currentAssetUrl);
     final isPlayingFromCache = !isDevicePlayback && (_currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false));
     final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : _effectStatusLabel(_nativeAudioEffectStatus);
     final sourceLabel = isDevicePlayback ? 'Device' : _playerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack);
@@ -2691,7 +2700,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
     final qualityLabel = _manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label;
     final nowQualityLabel = hasPlayerTrack ? qualityLabel : 'unknown';
-    final isDevicePlayback = _isDeviceTrackId(_manifest?.trackId) || _isDeviceUrl(_currentAssetUrl);
+    final isDevicePlayback = isWzDeviceTrackId(_manifest?.trackId) || isWzDeviceUrl(_currentAssetUrl);
     final isPlayingFromCache = !isDevicePlayback && (_currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false));
     final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : _effectStatusLabel(_nativeAudioEffectStatus);
     final engineSummary = '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
@@ -2990,7 +2999,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ],
         ],
       ),
-      _CollectionsPage(
+      WzCollectionsPage(
         collections: _collections,
         onBack: () => _navigateTo(WzAppTab.home),
         onOpen: _openCollection,
@@ -2998,7 +3007,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onRename: _showRenameCollectionDialog,
         onDelete: _showDeleteCollectionDialog,
       ),
-      _CollectionDetailPage(
+      WzCollectionDetailPage(
         collection: _selectedCollection ?? _likedCollection,
         onBack: () => _navigateTo(WzAppTab.collections),
         onPlayFirst: (collection) {
@@ -3031,7 +3040,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
         ],
       ),
-      _StorageManagerPage(
+      WzStorageManagerPage(
         downloads: _cachedLibrary,
         onBack: () => _navigateTo(WzAppTab.downloads),
         cacheBytes: _cacheBytes,
@@ -3046,7 +3055,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onDelete: _deleteCachedTrack,
         onClearAll: _clearCache,
       ),
-      _SearchPage(
+      WzSearchPage(
         controller: _fullSearchController,
         onBack: () => _navigateTo(WzAppTab.home),
         filter: _searchFilter,
@@ -3074,7 +3083,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onLoadCatalog: () => _loadCatalog(),
         onPlayCuratedPick: (pick) => unawaited(_loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded search pick: ${pick.track.title}')),
       ),
-      _ListeningHistoryPage(
+      WzListeningHistoryPage(
         entries: _listeningHistory,
         onBack: () => _navigateTo(WzAppTab.home),
         mostPlayedEntry: _mostPlayedHistoryEntry,
@@ -3391,14 +3400,6 @@ IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
       WzSearchResultType.track || WzSearchResultType.unknown => Icons.music_note,
     };
 
-bool _isDeviceTrackId(String? trackId) => trackId != null && trackId.startsWith('device-audio-');
-
-bool _isDeviceUrl(String? url) => url != null && url.startsWith('content://');
-
-bool _isDeviceCatalogTrack(CatalogTrackSummary track) => track.source == 'device' || _isDeviceTrackId(track.trackId) || _isDeviceUrl(track.primaryAsset?.manifestUrl);
-
-bool _isCachedCatalogTrack(CatalogTrackSummary track) => track.source == 'cached' || track.primaryAsset?.assetId.startsWith('cached-') == true;
-
 
 String _formatDuration(int ms) {
   final totalSeconds = (ms / 1000).floor();
@@ -3511,7 +3512,7 @@ class _CuratedPickCard extends StatelessWidget {
           child: compact
               ? Row(
                   children: [
-                    _Artwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
+                    WzArtwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
                     const SizedBox(width: WzSpacing.sm),
                     Expanded(child: _CuratedPickText(pick: pick, onPlay: onPlay, onAddToQueue: onAddToQueue, compact: true)),
                   ],
@@ -3519,7 +3520,7 @@ class _CuratedPickCard extends StatelessWidget {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Artwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
+                    WzArtwork(artworkUrl: track.artworkUrl, size: artSize, trackId: track.trackId, title: track.title, artist: track.artistName, mood: pick.pick.mood),
                     const SizedBox(height: WzSpacing.sm),
                     Expanded(child: _CuratedPickText(pick: pick, onPlay: onPlay, onAddToQueue: onAddToQueue)),
                   ],
@@ -3690,7 +3691,7 @@ class _HomeHistorySection extends StatelessWidget {
               if (recent.isEmpty)
                 const Text('No listening history yet. Play a track to start.', style: WzText.body)
               else
-                ...recent.map((entry) => _HistoryEntryTile(
+                ...recent.map((entry) => WzHistoryEntryTile(
                       entry: entry,
                       available: resolver(entry) != null,
                       compact: true,
@@ -3726,7 +3727,7 @@ class _ContinueListeningCard extends StatelessWidget {
           Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
             WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
             WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
-            if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
+            if (entry.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
           ]),
           const SizedBox(height: WzSpacing.sm),
           Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
@@ -3742,251 +3743,6 @@ class _ContinueListeningCard extends StatelessWidget {
       );
 }
 
-
-class _SearchPage extends StatelessWidget {
-  const _SearchPage({
-    required this.controller,
-    required this.onBack,
-    required this.filter,
-    required this.results,
-    required this.allResultCount,
-    required this.recentSearches,
-    required this.history,
-    required this.cachedTracks,
-    required this.collections,
-    required this.catalogTracks,
-    required this.curatedPicks,
-    required this.onFilterChanged,
-    required this.onClearQuery,
-    required this.onRecentSearch,
-    required this.onClearRecentSearches,
-    required this.onSubmitted,
-    required this.onPlay,
-    required this.onAddToQueue,
-    required this.onAddToCollection,
-    required this.onOpenCollection,
-    required this.onImportDeviceMusic,
-    required this.onLoadCatalog,
-    required this.onPlayCuratedPick,
-  });
-
-  final TextEditingController controller;
-  final VoidCallback onBack;
-  final WzSearchFilter filter;
-  final List<WzSearchResult> results;
-  final int allResultCount;
-  final List<String> recentSearches;
-  final List<WzListeningHistoryEntry> history;
-  final List<CatalogTrackSummary> cachedTracks;
-  final List<WzCollection> collections;
-  final List<CatalogTrackSummary> catalogTracks;
-  final List<ResolvedCuratedDemoPick> curatedPicks;
-  final ValueChanged<WzSearchFilter> onFilterChanged;
-  final VoidCallback onClearQuery;
-  final ValueChanged<String> onRecentSearch;
-  final VoidCallback? onClearRecentSearches;
-  final ValueChanged<String> onSubmitted;
-  final ValueChanged<WzSearchResult> onPlay;
-  final ValueChanged<WzSearchResult> onAddToQueue;
-  final ValueChanged<WzSearchResult> onAddToCollection;
-  final ValueChanged<WzSearchResult> onOpenCollection;
-  final VoidCallback onImportDeviceMusic;
-  final VoidCallback onLoadCatalog;
-  final ValueChanged<ResolvedCuratedDemoPick> onPlayCuratedPick;
-
-  @override
-  Widget build(BuildContext context) {
-    final query = controller.text.trim();
-    final hasQuery = query.isNotEmpty;
-    return WzPageScaffold(
-      children: [
-        WzPageHeader(
-          icon: Icons.search,
-          title: 'Search',
-          subtitle: 'Find tracks, downloads, collections, and recent plays on this device.',
-          trailing: IconButton.outlined(tooltip: 'Back to Home', onPressed: onBack, icon: const Icon(Icons.arrow_back)),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        WzPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: false,
-                textInputAction: TextInputAction.search,
-                onSubmitted: onSubmitted,
-                decoration: InputDecoration(
-                  labelText: 'Search music',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: hasQuery ? IconButton(onPressed: onClearQuery, icon: const Icon(Icons.close)) : null,
-                ),
-              ),
-              const SizedBox(height: WzSpacing.sm),
-              Wrap(
-                spacing: WzSpacing.xs,
-                runSpacing: WzSpacing.xs,
-                children: WzSearchFilter.values
-                    .map((item) => ChoiceChip(
-                          label: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          selected: filter == item,
-                          onSelected: (_) => onFilterChanged(item),
-                        ))
-                    .toList(growable: false),
-              ),
-              const SizedBox(height: WzSpacing.sm),
-              Text(
-                hasQuery ? '${filter.label} • ${results.length} result${results.length == 1 ? '' : 's'}' : 'Search your local WaveZero library across $allResultCount available items.',
-                style: WzText.caption,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        if (!hasQuery) ...[
-          if (curatedPicks.isNotEmpty) ...[
-            _CuratedTryPicksPanel(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
-            const SizedBox(height: WzSpacing.md),
-          ],
-          if (recentSearches.isNotEmpty) ...[
-            const WzSectionHeader(title: 'Recent searches', subtitle: 'Stored on this device only.', icon: Icons.manage_search),
-            Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: onClearRecentSearches, child: const Text('Clear'))),
-            WzPanel(child: Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: recentSearches.map((query) => ActionChip(label: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis), onPressed: () => onRecentSearch(query))).toList(growable: false))),
-            const SizedBox(height: WzSpacing.md),
-          ],
-          _SearchDiscoverySections(
-            history: history,
-            cachedTracks: cachedTracks,
-            collections: collections,
-            catalogTracks: catalogTracks,
-            onRecent: (entry) => onRecentSearch(entry.title),
-            onTrack: (track) => onRecentSearch(track.title),
-            onCollection: (collection) => onRecentSearch(collection.name),
-          ),
-        ] else if (results.isEmpty) ...[
-          WzPanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('No matching music found.', style: WzText.title),
-                const SizedBox(height: WzSpacing.xs),
-                const Text('Try a different title, import device music, or refresh the catalog when you are online.', style: WzText.body),
-                const SizedBox(height: WzSpacing.md),
-                Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
-                  WzPrimaryAction(label: 'Import Device music', icon: Icons.perm_media, onPressed: onImportDeviceMusic),
-                  OutlinedButton.icon(onPressed: onLoadCatalog, icon: const Icon(Icons.refresh), label: const Text('Load catalog')),
-                ]),
-              ],
-            ),
-          ),
-        ] else ...[
-          SizedBox(
-            height: math.min(620.0, math.max(260.0, results.length * 150.0)),
-            child: ListView.builder(
-              itemCount: results.length,
-              itemBuilder: (context, index) {
-                final result = results[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-                  child: _SearchResultCard(
-                    result: result,
-                    onPlay: () => onPlay(result),
-                    onAddToQueue: () => onAddToQueue(result),
-                    onAddToCollection: () => onAddToCollection(result),
-                    onOpenCollection: result.type == WzSearchResultType.collection ? () => onOpenCollection(result) : null,
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _SearchResultCard extends StatelessWidget {
-  const _SearchResultCard({required this.result, required this.onPlay, required this.onAddToQueue, required this.onAddToCollection, required this.onOpenCollection});
-
-  final WzSearchResult result;
-  final VoidCallback onPlay;
-  final VoidCallback onAddToQueue;
-  final VoidCallback onAddToCollection;
-  final VoidCallback? onOpenCollection;
-
-  @override
-  Widget build(BuildContext context) => WzPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(backgroundColor: const Color(0xFF20283A), child: Icon(_searchResultIcon(result), color: WzColors.textPrimary)),
-                const SizedBox(width: WzSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(result.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
-                      const SizedBox(height: WzSpacing.xxs),
-                      Text(result.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: WzSpacing.sm),
-            Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-              WzStatusPill(label: wzSearchSourceLabel(result.source), active: true, icon: Icons.label_outline),
-              WzStatusPill(label: wzSearchTypeLabel(result.type), icon: _searchResultIcon(result)),
-              if (result.qualityLabel != null) WzStatusPill(label: _productQualityLabel(result.qualityLabel!), icon: Icons.high_quality),
-              if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component),
-              if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy),
-              if (!result.available) const WzStatusPill(label: 'Unavailable', warning: true, icon: Icons.block),
-            ]),
-            const SizedBox(height: WzSpacing.xs),
-            Text(result.secondaryLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            const SizedBox(height: WzSpacing.sm),
-            Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-              if (onOpenCollection != null)
-                WzPrimaryAction(label: 'Open Collection', icon: Icons.open_in_full, onPressed: onOpenCollection)
-              else ...[
-                WzPrimaryAction(label: 'Play', icon: Icons.play_arrow, onPressed: result.available ? onPlay : null),
-                OutlinedButton.icon(onPressed: result.available ? onAddToQueue : null, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
-                OutlinedButton.icon(onPressed: result.available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add), label: const Text('Add to Collection')),
-              ],
-            ]),
-          ],
-        ),
-      );
-}
-
-class _SearchDiscoverySections extends StatelessWidget {
-  const _SearchDiscoverySections({required this.history, required this.cachedTracks, required this.collections, required this.catalogTracks, required this.onRecent, required this.onTrack, required this.onCollection});
-
-  final List<WzListeningHistoryEntry> history;
-  final List<CatalogTrackSummary> cachedTracks;
-  final List<WzCollection> collections;
-  final List<CatalogTrackSummary> catalogTracks;
-  final ValueChanged<WzListeningHistoryEntry> onRecent;
-  final ValueChanged<CatalogTrackSummary> onTrack;
-  final ValueChanged<WzCollection> onCollection;
-
-  @override
-  Widget build(BuildContext context) {
-    final visibleCollections = collections.where((collection) => collection.trackCount > 0 || collection.type == WzCollectionType.liked).take(5).toList(growable: false);
-    final sections = <Widget>[];
-    if (history.isNotEmpty) {
-      sections.add(_DiscoveryPanel(title: 'Continue Listening', subtitle: 'Latest saved play.', icon: Icons.play_circle, children: [_DiscoveryButton(label: history.first.title, detail: history.first.subtitle, icon: Icons.history, onTap: () => onRecent(history.first))]));
-      sections.add(_DiscoveryPanel(title: 'Recently Played', subtitle: 'Local listening history.', icon: Icons.schedule, children: history.take(5).map((entry) => _DiscoveryButton(label: entry.title, detail: entry.subtitle, icon: Icons.history, onTap: () => onRecent(entry))).toList(growable: false)));
-    }
-    if (cachedTracks.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Downloaded / Offline Ready', subtitle: 'Cached tracks available locally.', icon: Icons.download_done, children: cachedTracks.take(5).map((track) => _DiscoveryButton(label: track.title, detail: track.subtitle, icon: Icons.download_done, onTap: () => onTrack(track))).toList(growable: false)));
-    if (visibleCollections.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Collections', subtitle: 'Liked Tracks and local playlists.', icon: Icons.playlist_play, children: visibleCollections.map((collection) => _DiscoveryButton(label: collection.name, detail: '${collection.trackCount} tracks', icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play, onTap: () => onCollection(collection))).toList(growable: false)));
-    if (catalogTracks.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Legal demo catalog', subtitle: 'Loaded catalog tracks with license labels.', icon: Icons.cloud_queue, children: catalogTracks.take(5).map((track) => _DiscoveryButton(label: track.title, detail: '${track.subtitle} • ${track.license.badgeLabel}', icon: Icons.music_note, onTap: () => onTrack(track))).toList(growable: false)));
-    if (sections.isEmpty) return const WzPanel(child: Text('Import Device music or load the Catalog to search more.', style: WzText.body));
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: sections.expand((section) => [section, const SizedBox(height: WzSpacing.md)]).toList(growable: false));
-  }
-}
 
 class _DiscoveryPanel extends StatelessWidget {
   const _DiscoveryPanel({required this.title, required this.subtitle, required this.icon, required this.children});
@@ -4006,366 +3762,6 @@ class _DiscoveryButton extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => ListTile(leading: Icon(icon), title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis), subtitle: Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: onTap);
-}
-
-class _ListeningHistoryPage extends StatelessWidget {
-  const _ListeningHistoryPage({
-    required this.entries,
-    required this.onBack,
-    required this.mostPlayedEntry,
-    required this.resolver,
-    required this.onPlay,
-    required this.onAddToQueue,
-    required this.onAddToCollection,
-    required this.onRemove,
-    required this.onClearAll,
-  });
-
-  final List<WzListeningHistoryEntry> entries;
-  final VoidCallback onBack;
-  final WzListeningHistoryEntry? mostPlayedEntry;
-  final CatalogTrackSummary? Function(WzListeningHistoryEntry entry) resolver;
-  final ValueChanged<WzListeningHistoryEntry> onPlay;
-  final ValueChanged<WzListeningHistoryEntry> onAddToQueue;
-  final ValueChanged<WzListeningHistoryEntry> onAddToCollection;
-  final ValueChanged<WzListeningHistoryEntry> onRemove;
-  final VoidCallback? onClearAll;
-
-  @override
-  Widget build(BuildContext context) => WzPageScaffold(
-        children: [
-          WzPageHeader(
-            icon: Icons.history,
-            title: 'Listening History',
-            subtitle: 'Recently played tracks saved locally on this device.',
-            trailing: Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [IconButton.outlined(tooltip: 'Back to Home', onPressed: onBack, icon: const Icon(Icons.arrow_back)), OutlinedButton.icon(onPressed: onClearAll, icon: const Icon(Icons.delete_sweep), label: const Text('Clear'))]),
-          ),
-          const SizedBox(height: WzSpacing.md),
-          WzPanel(
-            child: Wrap(
-              spacing: WzSpacing.sm,
-              runSpacing: WzSpacing.sm,
-              children: [
-                WzMiniMetric(label: 'Recently played', value: '${entries.length}', active: entries.isNotEmpty, icon: Icons.history),
-                WzMiniMetric(label: 'Most played', value: mostPlayedEntry?.title ?? 'None yet', active: mostPlayedEntry != null, icon: Icons.repeat),
-                const WzMiniMetric(label: 'Privacy', value: 'Local only', active: true, icon: Icons.lock),
-              ],
-            ),
-          ),
-          const SizedBox(height: WzSpacing.md),
-          WzPanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (entries.isEmpty)
-                  const Text('No listening history yet. Play a track to start.', style: WzText.body)
-                else
-                  ...entries.map((entry) => _HistoryEntryTile(
-                        entry: entry,
-                        available: resolver(entry) != null,
-                        onPlay: () => onPlay(entry),
-                        onAddToQueue: () => onAddToQueue(entry),
-                        onAddToCollection: () => onAddToCollection(entry),
-                        onRemove: () => onRemove(entry),
-                      )),
-                const SizedBox(height: WzSpacing.sm),
-                const Text('Removing history does not unlike tracks, delete collections, or remove downloads/cache.', style: WzText.caption),
-              ],
-            ),
-          ),
-        ],
-      );
-}
-
-class _HistoryEntryTile extends StatelessWidget {
-  const _HistoryEntryTile({
-    required this.entry,
-    required this.available,
-    required this.onPlay,
-    required this.onAddToQueue,
-    required this.onAddToCollection,
-    required this.onRemove,
-    this.compact = false,
-  });
-
-  final WzListeningHistoryEntry entry;
-  final bool available;
-  final VoidCallback onPlay;
-  final VoidCallback onAddToQueue;
-  final VoidCallback onAddToCollection;
-  final VoidCallback onRemove;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: WzColors.surfaceElevated,
-            borderRadius: BorderRadius.circular(WzRadius.lg),
-            border: Border.all(color: WzColors.borderSoft),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(WzSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle)),
-                    const SizedBox(width: WzSpacing.xs),
-                    Text(friendlyWzHistoryTime(entry.lastPlayedAtMs), style: WzText.caption),
-                  ],
-                ),
-                const SizedBox(height: WzSpacing.xxs),
-                Text(entry.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
-                const SizedBox(height: WzSpacing.xs),
-                Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-                  WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
-                  WzStatusPill(label: '${entry.playCount} play${entry.playCount == 1 ? '' : 's'}', icon: Icons.repeat),
-                  if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
-                  WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
-                ]),
-                if (!available) ...[
-                  const SizedBox(height: WzSpacing.xs),
-                  const Text('Track is not available right now.', style: WzText.caption),
-                ],
-                const SizedBox(height: WzSpacing.sm),
-                Wrap(
-                  spacing: WzSpacing.xs,
-                  runSpacing: WzSpacing.xs,
-                  children: [
-                    FilledButton.icon(onPressed: available ? onPlay : null, icon: const Icon(Icons.play_arrow), label: Text(compact ? 'Play' : 'Play / Continue')),
-                    OutlinedButton.icon(onPressed: available ? onAddToQueue : null, icon: const Icon(Icons.queue_music), label: const Text('Queue')),
-                    OutlinedButton.icon(onPressed: available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add), label: const Text('Collection')),
-                    TextButton.icon(onPressed: onRemove, icon: const Icon(Icons.close), label: const Text('Remove')),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-}
-
-
-class _CloudVaultPage extends StatelessWidget {
-  const _CloudVaultPage({
-    required this.tracks,
-    required this.developerMode,
-    required this.titleController,
-    required this.artistController,
-    required this.playableUrlController,
-    required this.providerLabelController,
-    required this.onAddDeveloperTrack,
-    required this.onPlay,
-    required this.onAddToQueue,
-    required this.onRemove,
-    required this.onClearAll,
-  });
-
-  final List<CloudVaultTrack> tracks;
-  final bool developerMode;
-  final TextEditingController titleController;
-  final TextEditingController artistController;
-  final TextEditingController playableUrlController;
-  final TextEditingController providerLabelController;
-  final Future<void> Function() onAddDeveloperTrack;
-  final ValueChanged<CloudVaultTrack> onPlay;
-  final ValueChanged<CloudVaultTrack> onAddToQueue;
-  final ValueChanged<CloudVaultTrack> onRemove;
-  final VoidCallback? onClearAll;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Cloud Vault')),
-        body: WzPageScaffold(
-          children: [
-            const WzPageHeader(
-              icon: Icons.cloud_done_outlined,
-              title: 'Cloud Vault',
-              subtitle: 'Play music you own from your private cloud sources.',
-            ),
-            const SizedBox(height: WzSpacing.md),
-            const WzSectionHeader(title: 'Privacy-first foundation', subtitle: 'Cloud Vault stores source metadata locally and does not add cloud auth yet.', icon: Icons.privacy_tip),
-            const WzPanel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('WaveZero does not upload your cloud files to WaveZero servers.', style: WzText.body),
-                  SizedBox(height: WzSpacing.xs),
-                  Text('Only files you choose should appear here.', style: WzText.body),
-                  SizedBox(height: WzSpacing.xs),
-                  Text('Sharing copyrighted files with others is not supported.', style: WzText.body),
-                ],
-              ),
-            ),
-            const SizedBox(height: WzSpacing.md),
-            const WzSectionHeader(title: 'Private source providers', subtitle: 'Provider connections are intentionally coming-soon; no OAuth, tokens, uploads, or account sync are present.', icon: Icons.cloud_queue),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final cardWidth = constraints.maxWidth >= 360 ? (constraints.maxWidth - 10) / 2 : constraints.maxWidth;
-                final cards = <Widget>[
-                  _CloudProviderCard(title: 'Google Drive', status: 'Coming soon', icon: Icons.add_to_drive),
-                  _CloudProviderCard(title: 'Dropbox', status: 'Later', icon: Icons.cloud_outlined),
-                  _CloudProviderCard(title: 'OneDrive', status: 'Later', icon: Icons.cloud_circle_outlined),
-                  _CloudProviderCard(title: 'Nextcloud / self-hosted', status: 'Later', icon: Icons.dns_outlined),
-                  if (developerMode) _CloudProviderCard(title: 'Manual private URL', status: 'Developer preview', icon: Icons.link),
-                ];
-                return Wrap(spacing: 10, runSpacing: 10, children: cards.map((card) => SizedBox(width: cardWidth, child: card)).toList(growable: false));
-              },
-            ),
-            if (developerMode) ...[
-              const SizedBox(height: WzSpacing.md),
-              const WzSectionHeader(title: 'Developer preview', subtitle: 'Manual seed controls are only visible in Developer Mode and persist locally for test playback.', icon: Icons.developer_mode),
-              WzPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text('Developer preview: add a private URL placeholder for local UI and playback-path testing. Do not add public copyrighted catalog links.', style: WzText.caption),
-                    const SizedBox(height: WzSpacing.sm),
-                    TextField(controller: titleController, decoration: const InputDecoration(labelText: 'Title')),
-                    const SizedBox(height: WzSpacing.sm),
-                    TextField(controller: artistController, decoration: const InputDecoration(labelText: 'Artist')),
-                    const SizedBox(height: WzSpacing.sm),
-                    TextField(controller: playableUrlController, decoration: const InputDecoration(labelText: 'Playable URL')),
-                    const SizedBox(height: WzSpacing.sm),
-                    TextField(controller: providerLabelController, decoration: const InputDecoration(labelText: 'Provider label')),
-                    const SizedBox(height: WzSpacing.md),
-                    Align(alignment: Alignment.centerLeft, child: WzPrimaryAction(label: 'Add developer preview track', icon: Icons.add_link, onPressed: () => unawaited(onAddDeveloperTrack()))),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: WzSpacing.md),
-            WzPanel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(child: Text('Cloud music entries', style: WzText.title)),
-                      Text('${tracks.length} tracks', style: WzText.caption),
-                    ],
-                  ),
-                  const SizedBox(height: WzSpacing.sm),
-                  if (tracks.isEmpty) ...[
-                    const _EmptyCatalogMessage(message: 'No cloud music connected yet.\nYour device music and downloads still work offline.'),
-                  ] else ...[
-                    ...tracks.map((track) => _CloudVaultTrackRow(
-                          track: track,
-                          developerMode: developerMode,
-                          onPlay: track.isResolvable ? () => onPlay(track) : () => onPlay(track),
-                          onAddToQueue: track.isResolvable ? () => onAddToQueue(track) : null,
-                          onRemove: () => onRemove(track),
-                        )),
-                    const SizedBox(height: WzSpacing.sm),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: onClearAll,
-                        icon: const Icon(Icons.delete_sweep),
-                        label: const Text('Clear all Cloud Vault entries from this device'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
-class _CloudProviderCard extends StatelessWidget {
-  const _CloudProviderCard({required this.title, required this.status, required this.icon});
-
-  final String title;
-  final String status;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => WzPanel(
-        child: Row(
-          children: [
-            Icon(icon, color: WzColors.accentAlt),
-            const SizedBox(width: WzSpacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: WzText.sectionTitle),
-                  const SizedBox(height: WzSpacing.xs),
-                  Text(status, style: WzText.caption),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
-class _CloudVaultTrackRow extends StatelessWidget {
-  const _CloudVaultTrackRow({
-    required this.track,
-    required this.developerMode,
-    required this.onPlay,
-    required this.onAddToQueue,
-    required this.onRemove,
-  });
-
-  final CloudVaultTrack track;
-  final bool developerMode;
-  final VoidCallback onPlay;
-  final VoidCallback? onAddToQueue;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(top: WzSpacing.sm),
-        padding: const EdgeInsets.all(WzSpacing.sm),
-        decoration: BoxDecoration(
-          color: WzColors.surfaceMuted,
-          borderRadius: BorderRadius.circular(WzRadius.md),
-          border: Border.all(color: WzColors.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(track.isResolvable ? Icons.cloud_done_outlined : Icons.cloud_off_outlined, color: track.isResolvable ? WzColors.accentAlt : WzColors.textSubtle),
-                const SizedBox(width: WzSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-                      Text('${track.subtitle} • ${track.provider.label}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: WzSpacing.xs),
-            Text(track.isResolvable ? 'Private placeholder is available through the existing playback path.' : 'Cloud playback is not connected yet.', style: WzText.caption),
-            if (developerMode && track.playableUri?.trim().isNotEmpty == true) ...[
-              const SizedBox(height: WzSpacing.xs),
-              Text('Developer preview URL: ${track.playableUri}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            ],
-            const SizedBox(height: WzSpacing.sm),
-            Wrap(
-              spacing: WzSpacing.sm,
-              runSpacing: WzSpacing.sm,
-              children: [
-                FilledButton.tonalIcon(onPressed: onPlay, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
-                OutlinedButton.icon(onPressed: onAddToQueue, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
-                OutlinedButton.icon(onPressed: onRemove, icon: const Icon(Icons.delete_outline), label: const Text('Remove from Vault')),
-              ],
-            ),
-          ],
-        ),
-      );
 }
 
 class _SettingsPage extends StatelessWidget {
@@ -4581,14 +3977,14 @@ class _SettingsPage extends StatelessWidget {
                   runSpacing: WzSpacing.xs,
                   children: [AudioQualityTier.standard, AudioQualityTier.high, AudioQualityTier.original]
                       .map((tier) => ChoiceChip(
-                            label: Text(_productQualityLabel(tier.label)),
+                            label: Text(wzProductQualityLabel(tier.label)),
                             selected: preferredAudioQuality == tier,
                             onSelected: controlsDisabled ? null : (_) => onQualityChanged(tier),
                           ))
                       .toList(growable: false),
                 ),
                 const SizedBox(height: WzSpacing.xs),
-                Text('Current selected quality: ${_productQualityLabel(preferredAudioQuality.label)}. If a track does not include that asset, WaveZero chooses the closest available quality.', style: WzText.caption),
+                Text('Current selected quality: ${wzProductQualityLabel(preferredAudioQuality.label)}. If a track does not include that asset, WaveZero chooses the closest available quality.', style: WzText.caption),
                 const SizedBox(height: WzSpacing.md),
                 Text('Audio effects profile', style: WzText.sectionTitle),
                 const SizedBox(height: WzSpacing.xs),
@@ -4809,7 +4205,7 @@ class _SettingsPage extends StatelessWidget {
                   label: 'Open Legal / Licenses',
                   icon: Icons.policy,
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _LegalLicensesPage(tracks: legalTracks, appMode: appMode),
+                    builder: (_) => WzLegalLicensesPage(tracks: legalTracks, appMode: appMode),
                   )),
                 ),
               ],
@@ -5031,7 +4427,7 @@ class _CurrentListeningCard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 340;
-              final art = _Artwork(artworkUrl: manifest?.artworkUrl, size: compact ? 84 : 108, trackId: manifest?.trackId, title: manifest?.title, artist: manifest?.artistName);
+              final art = WzArtwork(artworkUrl: manifest?.artworkUrl, size: compact ? 84 : 108, trackId: manifest?.trackId, title: manifest?.title, artist: manifest?.artistName);
               final identity = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -5065,7 +4461,7 @@ class _CurrentListeningCard extends StatelessWidget {
             runSpacing: WzSpacing.xs,
             children: [
               WzStatusPill(label: status, active: metrics.isPlaying, warning: status == 'Error', icon: metrics.isPlaying ? Icons.play_arrow : Icons.pause),
-              WzStatusPill(label: 'Quality: ${_productQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
+              WzStatusPill(label: 'Quality: ${wzProductQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
               if (devicePlayback) const WzStatusPill(label: 'Device music', active: true, icon: Icons.phone_android),
               if (playingFromCache) const WzStatusPill(label: 'Downloaded', active: true, icon: Icons.offline_pin),
               if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
@@ -5169,7 +4565,7 @@ class _SmartEngineCards extends StatelessWidget {
                 WzMiniMetric(label: 'Smart Downloads', value: smartDownloadsEnabled ? '$smartDownloadsCompleted cached' : 'Off', active: smartDownloadsEnabled, icon: Icons.download_for_offline),
                 WzMiniMetric(label: 'Next track ready', value: prefetchEnabled ? (prefetchedTrackTitle ?? 'Ready') : 'Off', active: prefetchEnabled, icon: Icons.offline_bolt),
                 WzMiniMetric(label: 'Offline Ready', value: offlineReady ? '$offlineTrackCount tracks' : 'No downloads yet', active: offlineReady, icon: Icons.offline_pin),
-                WzMiniMetric(label: 'Audio Quality', value: _productQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
+                WzMiniMetric(label: 'Audio Quality', value: wzProductQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality),
               ],
             ),
           ],
@@ -5244,7 +4640,7 @@ class _NowContextPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const WzSectionHeader(title: 'Player context', subtitle: 'Live quality, effects, cache, and queue state.', icon: Icons.dashboard_customize),
-        _PlayerSourceCard(icon: Icons.high_quality, title: 'Audio Quality', primary: _productQualityLabel(qualityLabel), detail: '$codec • $bitrate', active: qualityLabel != 'unknown'),
+        _PlayerSourceCard(icon: Icons.high_quality, title: 'Audio Quality', primary: wzProductQualityLabel(qualityLabel), detail: '$codec • $bitrate', active: qualityLabel != 'unknown'),
         const SizedBox(height: WzSpacing.sm),
         _PlayerSourceCard(icon: Icons.tune, title: 'Audio Effects', primary: selectedEffectProfile.label, detail: 'Native status: ${_effectStatusLabel(nativeAudioEffectStatus)} • Badge: $effectsSummary', active: nativeAudioEffectStatus == NativeAudioEffectStatus.applied),
         const SizedBox(height: WzSpacing.sm),
@@ -5298,8 +4694,8 @@ class _AudioQualityPanel extends StatelessWidget {
                 .toList(growable: false),
           ),
           const SizedBox(height: 10),
-          Text('Preferred quality: ${_productQualityLabel(preferredAudioQuality.label)}', style: _WzTokens.caption),
-          Text('Current track quality: ${_productQualityLabel(manifest?.qualityLabel ?? 'unknown')}', style: _WzTokens.caption),
+          Text('Preferred quality: ${wzProductQualityLabel(preferredAudioQuality.label)}', style: _WzTokens.caption),
+          Text('Current track quality: ${wzProductQualityLabel(manifest?.qualityLabel ?? 'unknown')}', style: _WzTokens.caption),
           Text('Current codec: ${manifest?.codec ?? 'unknown'}', style: _WzTokens.caption),
           Text('Current bitrate: ${manifest?.bitrateKbps == null ? 'unknown' : '${manifest!.bitrateKbps} kbps'}', style: _WzTokens.caption),
           Text('Current asset URL: ${currentAssetUrl ?? manifest?.streamUrl ?? 'none'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
@@ -5764,8 +5160,8 @@ class _PlayerArtworkHero extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(WzRadius.xl), gradient: WzColors.accentGradient, border: Border.all(color: WzColors.border), boxShadow: const [BoxShadow(color: Color(0xAA000000), blurRadius: 36, offset: Offset(0, 24))]),
       child: url == null || url.trim().isEmpty
-          ? _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size)
-          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size)),
+          ? WzWaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size)
+          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => WzWaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size)),
     );
   }
 }
@@ -5806,7 +5202,7 @@ class _PlayerContextBadges extends StatelessWidget {
         runSpacing: WzSpacing.sm,
         children: [
           WzStatusPill(label: status, active: status == 'Playing', icon: status == 'Playing' ? Icons.play_arrow : Icons.pause),
-          WzStatusPill(label: 'Quality: ${_productQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
+          WzStatusPill(label: 'Quality: ${wzProductQualityLabel(qualityLabel)}', active: qualityLabel != 'unknown', icon: Icons.high_quality),
           WzStatusPill(label: 'Effects: $effectsSummary', active: effectsSummary == 'Applied', warning: effectsSummary == 'Pending' || effectsSummary == 'Failed', icon: Icons.tune),
           WzStatusPill(label: 'Source: $sourceLabel', active: sourceLabel == 'Cache' || sourceLabel == 'Offline Ready' || sourceLabel == 'Device', icon: sourceLabel == 'Device' ? Icons.phone_android : Icons.offline_pin),
           if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
@@ -5914,150 +5310,6 @@ class _PlayerSourceCard extends StatelessWidget {
 }
 
 
-
-class _WaveZeroCoverArt extends StatelessWidget {
-  const _WaveZeroCoverArt({this.trackId, this.title, this.artist, this.mood, required this.size, this.compact = false});
-
-  final String? trackId;
-  final String? title;
-  final String? artist;
-  final String? mood;
-  final double size;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final seedText = [trackId, title, artist, mood].whereType<String>().join('|');
-    final seed = _stableArtworkSeed(seedText.isEmpty ? 'wavezero' : seedText);
-    final colors = _coverColors(seed, mood ?? title ?? 'wavezero');
-    final initials = _coverInitials(title, artist);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Positioned.fill(child: CustomPaint(painter: _WaveZeroCoverPainter(seed: seed, color: Colors.white.withOpacity(compact ? 0.13 : 0.16)))),
-          Positioned(top: -size * 0.14, right: -size * 0.12, child: Icon(Icons.graphic_eq, size: size * 0.48, color: Colors.white.withOpacity(0.07))),
-          Positioned(left: size * 0.10, top: size * 0.10, child: Text('WZ', style: TextStyle(color: Colors.white.withOpacity(0.42), fontSize: math.max(8, size * 0.09), fontWeight: FontWeight.w900, letterSpacing: 1.2))),
-          Center(
-            child: Container(
-              width: size * (compact ? 0.50 : 0.46),
-              height: size * (compact ? 0.50 : 0.46),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withOpacity(0.22), border: Border.all(color: Colors.white.withOpacity(0.18))),
-              child: Text(initials, maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(color: Colors.white.withOpacity(0.92), fontSize: math.max(13, size * (compact ? 0.20 : 0.16)), fontWeight: FontWeight.w900, letterSpacing: 0.8)),
-            ),
-          ),
-          if (!compact && mood != null && mood!.trim().isNotEmpty)
-            Positioned(
-              left: size * 0.09,
-              right: size * 0.09,
-              bottom: size * 0.08,
-              child: Text(mood!, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.72), fontSize: math.max(9, size * 0.08), fontWeight: FontWeight.w700)),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WaveZeroCoverPainter extends CustomPainter {
-  const _WaveZeroCoverPainter({required this.seed, required this.color});
-
-  final int seed;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color..strokeCap = StrokeCap.round;
-    final bars = 9 + (seed % 7);
-    final width = size.width / (bars * 1.8);
-    for (var i = 0; i < bars; i++) {
-      final value = ((seed >> (i % 16)) & 0x0F) / 15.0;
-      final height = size.height * (0.16 + value * 0.42);
-      final x = size.width * 0.12 + i * width * 1.65;
-      final y = size.height * 0.72;
-      paint.strokeWidth = math.max(2, width * 0.52);
-      canvas.drawLine(Offset(x, y), Offset(x, y - height), paint);
-    }
-    final ringPaint = Paint()
-      ..color = color.withOpacity(0.45)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(1, size.width * 0.012);
-    canvas.drawCircle(Offset(size.width * 0.78, size.height * 0.22), size.width * (0.12 + (seed % 5) * 0.015), ringPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _WaveZeroCoverPainter oldDelegate) => oldDelegate.seed != seed || oldDelegate.color != color;
-}
-
-int _stableArtworkSeed(String value) {
-  var hash = 0x811c9dc5;
-  for (final unit in value.codeUnits) {
-    hash ^= unit;
-    hash = (hash * 0x01000193) & 0x7fffffff;
-  }
-  return hash;
-}
-
-List<Color> _coverColors(int seed, String hint) {
-  final normalized = hint.toLowerCase();
-  if (normalized.contains('folk') || normalized.contains('acoustic') || normalized.contains('calm')) return const [Color(0xFF243B30), Color(0xFF0B1019), Color(0xFFB98E54)];
-  if (normalized.contains('hip') || normalized.contains('beat')) return const [Color(0xFF311B52), Color(0xFF070A13), Color(0xFFFF7A59)];
-  if (normalized.contains('ambient') || normalized.contains('focus') || normalized.contains('instrumental')) return const [Color(0xFF102A43), Color(0xFF070A13), Color(0xFF36D7FF)];
-  final palettes = const <List<Color>>[
-    [Color(0xFF2D1B5F), Color(0xFF070A13), Color(0xFF36D7FF)],
-    [Color(0xFF12243D), Color(0xFF070A13), Color(0xFF9A8CFF)],
-    [Color(0xFF3A1935), Color(0xFF080A12), Color(0xFFFF6B8A)],
-    [Color(0xFF18362F), Color(0xFF070A13), Color(0xFF38D996)],
-  ];
-  return palettes[seed % palettes.length];
-}
-
-String _coverInitials(String? title, String? artist) {
-  String firstLetter(String? value) {
-    final trimmed = value?.trim();
-    if (trimmed == null || trimmed.isEmpty) return '';
-    return String.fromCharCode(trimmed.runes.first).toUpperCase();
-  }
-  final result = '${firstLetter(title)}${firstLetter(artist)}';
-  return result.trim().isEmpty ? 'WZ' : result;
-}
-
-class _Artwork extends StatelessWidget {
-  const _Artwork({this.artworkUrl, this.size = 118, this.trackId, this.title, this.artist, this.mood});
-
-  final String? artworkUrl;
-  final double size;
-  final String? trackId;
-  final String? title;
-  final String? artist;
-  final String? mood;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = artworkUrl;
-    return Container(
-      width: size,
-      height: size,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size > 60 ? 28 : 14),
-        color: _WzTokens.surfaceElevated,
-        border: Border.all(color: _WzTokens.borderSoft),
-      ),
-      child: url == null || url.trim().isEmpty
-          ? _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size, compact: size < 70)
-          : Image.network(
-              url,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: size, compact: size < 70),
-            ),
-    );
-  }
-}
 
 class _PerformanceBaselinePanel extends StatelessWidget {
   const _PerformanceBaselinePanel({
@@ -6459,26 +5711,6 @@ String _playerSourceLabel({required bool isPlayingFromCache, required bool offli
   return 'Not cached';
 }
 
-String _productQualityLabel(String? value) {
-  final normalized = value?.trim().toLowerCase();
-  switch (normalized) {
-    case 'original':
-    case 'lossless':
-      return 'Original';
-    case 'high':
-      return 'High';
-    case 'standard':
-    case 'low':
-      return 'Standard';
-    case null:
-    case '':
-    case 'unknown':
-      return 'Unknown';
-    default:
-      return value!;
-  }
-}
-
 String _prefetchResultLabel(bool? value) {
   if (value == null) return 'none';
   return value ? 'hit' : 'miss';
@@ -6585,7 +5817,7 @@ class _QueueCard extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           if (queue.isEmpty)
-            const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from Library or Search to choose what plays next.')
+            const WzEmptyCatalogMessage(message: 'Queue is empty. Add tracks from Library or Search to choose what plays next.')
           else
             ...queue.indexed.map((entry) => _QueueRow(
                   track: entry.$2,
@@ -6705,236 +5937,6 @@ class _QueueRow extends StatelessWidget {
 }
 
 
-class _StorageManagerPage extends StatelessWidget {
-  const _StorageManagerPage({
-    required this.downloads,
-    required this.onBack,
-    required this.cacheBytes,
-    required this.trackBytes,
-    required this.manualDownloadedCount,
-    required this.smartDownloadedCount,
-    required this.offlineReadyCount,
-    required this.smartDownloadsEnabled,
-    required this.controlsDisabled,
-    required this.onSmartDownloadsChanged,
-    required this.onPlay,
-    required this.onDelete,
-    required this.onClearAll,
-  });
-
-  final List<CachedTrackMetadata> downloads;
-  final VoidCallback onBack;
-  final int cacheBytes;
-  final Map<String, int> trackBytes;
-  final int manualDownloadedCount;
-  final int smartDownloadedCount;
-  final int offlineReadyCount;
-  final bool smartDownloadsEnabled;
-  final bool controlsDisabled;
-  final ValueChanged<bool> onSmartDownloadsChanged;
-  final ValueChanged<CachedTrackMetadata> onPlay;
-  final ValueChanged<CachedTrackMetadata> onDelete;
-  final Future<void> Function() onClearAll;
-
-  int get _currentOrRecentCount => downloads.where((track) => track.downloadSource == 'smart_current').length;
-  int get _unknownCount => downloads.where((track) => track.downloadSource != 'manual' && !track.downloadSource.startsWith('smart_')).length;
-
-  @override
-  Widget build(BuildContext context) {
-    final healthLabel = downloads.isEmpty ? 'No downloads yet' : 'Ready for offline playback';
-    return WzPageScaffold(
-      children: [
-        WzPageHeader(
-          icon: Icons.storage,
-          title: 'Storage Manager',
-          subtitle: 'Manage downloaded tracks for offline playback.',
-          trailing: IconButton.outlined(tooltip: 'Back to Downloads', onPressed: onBack, icon: const Icon(Icons.arrow_back)),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        WzPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                spacing: WzSpacing.xs,
-                runSpacing: WzSpacing.xs,
-                children: [
-                  WzStatusPill(label: healthLabel, active: downloads.isNotEmpty, icon: downloads.isEmpty ? Icons.inbox_outlined : Icons.offline_pin),
-                  WzStatusPill(label: smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off', active: smartDownloadsEnabled, icon: Icons.auto_awesome),
-                ],
-              ),
-              const SizedBox(height: WzSpacing.md),
-              Wrap(
-                spacing: WzSpacing.sm,
-                runSpacing: WzSpacing.sm,
-                children: [
-                  WzMiniMetric(label: 'Cached for offline', value: '${downloads.length}', active: downloads.isNotEmpty, icon: Icons.library_music),
-                  WzMiniMetric(label: 'Device storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
-                  WzMiniMetric(label: 'Manual downloads', value: '$manualDownloadedCount', active: manualDownloadedCount > 0, icon: Icons.download_done),
-                  WzMiniMetric(label: 'Smart downloads', value: '$smartDownloadedCount', active: smartDownloadedCount > 0, icon: Icons.auto_awesome),
-                  WzMiniMetric(label: 'Offline-ready', value: '$offlineReadyCount', active: offlineReadyCount > 0, icon: Icons.offline_pin),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Smart Downloads', subtitle: 'Keep likely next tracks ready without changing playback behavior.', icon: Icons.auto_awesome),
-        WzPanel(
-          child: SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Smart Downloads'),
-            subtitle: const Text('WaveZero can cache the current and up-next tracks for faster offline-ready playback.'),
-            value: smartDownloadsEnabled,
-            onChanged: controlsDisabled ? null : onSmartDownloadsChanged,
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Categories', subtitle: 'See what kind of downloads are using storage.', icon: Icons.category),
-        WzPanel(
-          child: Wrap(
-            spacing: WzSpacing.sm,
-            runSpacing: WzSpacing.sm,
-            children: [
-              _StorageCategoryCard(label: 'All cached', count: downloads.length, icon: Icons.all_inbox),
-              _StorageCategoryCard(label: 'Manual downloads', count: manualDownloadedCount, icon: Icons.download_done),
-              _StorageCategoryCard(label: 'Smart downloads', count: smartDownloadedCount, icon: Icons.auto_awesome),
-              _StorageCategoryCard(label: 'Current / recently cached', count: _currentOrRecentCount, icon: Icons.flash_on),
-              _StorageCategoryCard(label: 'Unknown source', count: _unknownCount, icon: Icons.help_outline),
-            ],
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        WzSectionHeader(
-          title: 'Downloaded tracks',
-          subtitle: downloads.isEmpty ? 'No downloads yet.' : 'Play or remove individual offline-ready tracks.',
-          icon: Icons.playlist_play,
-        ),
-        WzPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Wrap(
-                spacing: WzSpacing.sm,
-                runSpacing: WzSpacing.sm,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(downloads.isEmpty ? 'Downloads cleared' : '${downloads.length} downloaded • ${formatWzCacheBytes(cacheBytes)}', style: WzText.body),
-                  OutlinedButton.icon(
-                    onPressed: controlsDisabled || downloads.isEmpty ? null : () => unawaited(onClearAll()),
-                    icon: const Icon(Icons.clear_all),
-                    label: const Text('Clear all downloads'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: WzSpacing.md),
-              if (downloads.isEmpty)
-                const _EmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
-              else
-                ...downloads.map((track) => _StorageTrackRow(
-                      track: track,
-                      sizeBytes: trackBytes[track.trackId],
-                      disabled: controlsDisabled,
-                      onPlay: () => onPlay(track),
-                      onDelete: () => onDelete(track),
-                    )),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StorageCategoryCard extends StatelessWidget {
-  const _StorageCategoryCard({required this.label, required this.count, required this.icon});
-
-  final String label;
-  final int count;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-        width: 210,
-        child: WzMiniMetric(label: label, value: '$count', active: count > 0, icon: icon),
-      );
-}
-
-class _StorageTrackRow extends StatelessWidget {
-  const _StorageTrackRow({required this.track, required this.sizeBytes, required this.disabled, required this.onPlay, required this.onDelete});
-
-  final CachedTrackMetadata track;
-  final int? sizeBytes;
-  final bool disabled;
-  final VoidCallback onPlay;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final quality = _productQualityLabel(track.qualityLabel);
-    final details = <String>[
-      if (quality != 'Unknown') quality,
-      if (track.codec != null && track.codec!.trim().isNotEmpty) track.codec!,
-      if (track.bitrateKbps != null) '${track.bitrateKbps}kbps',
-      if (sizeBytes != null) formatWzCacheBytes(sizeBytes!),
-    ];
-    return Container(
-      margin: const EdgeInsets.only(bottom: WzSpacing.sm),
-      padding: const EdgeInsets.all(WzSpacing.sm),
-      decoration: BoxDecoration(
-        color: WzColors.surfaceElevated,
-        borderRadius: BorderRadius.circular(WzRadius.lg),
-        border: Border.all(color: WzColors.borderSoft),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
-              const SizedBox(width: WzSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
-                    const SizedBox(height: WzSpacing.xxs),
-                    Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: WzSpacing.sm),
-          Wrap(
-            spacing: WzSpacing.xs,
-            runSpacing: WzSpacing.xs,
-            children: [
-              WzStatusPill(label: wzDownloadSourceLabel(track.downloadSource), active: track.downloadSource != 'unknown', icon: _downloadSourceIcon(track.downloadSource)),
-              if (quality != 'Unknown') WzStatusPill(label: quality, active: true, icon: Icons.high_quality),
-              if (track.codec != null && track.codec!.trim().isNotEmpty) WzStatusPill(label: track.codec!, active: true, icon: Icons.memory),
-              if (track.bitrateKbps != null) WzStatusPill(label: '${track.bitrateKbps}kbps', active: true, icon: Icons.speed),
-              if (sizeBytes != null) WzStatusPill(label: formatWzCacheBytes(sizeBytes!), active: true, icon: Icons.sd_storage),
-              if (details.isEmpty) const WzStatusPill(label: 'Offline-ready', active: true, icon: Icons.offline_pin),
-            ],
-          ),
-          const SizedBox(height: WzSpacing.xs),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: WzSpacing.xs,
-            runSpacing: WzSpacing.xs,
-            children: [
-              OutlinedButton.icon(onPressed: disabled ? null : onPlay, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
-              OutlinedButton.icon(onPressed: disabled ? null : onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Remove from device')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DownloadsCard extends StatelessWidget {
   const _DownloadsCard({
     required this.downloads,
@@ -6993,7 +5995,7 @@ class _DownloadsCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (downloads.isEmpty)
-              const _EmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
+              const WzEmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
             else
               ...downloads.map((track) => _DownloadRow(
                     track: track,
@@ -7028,7 +6030,7 @@ class _DownloadRow extends StatelessWidget {
           children: [
             Row(
               children: [
-                _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
+                WzArtwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.artistName),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -7036,7 +6038,7 @@ class _DownloadRow extends StatelessWidget {
                     children: [
                       Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text('${track.subtitle} • ${_productQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
+                      Text('${track.subtitle} • ${wzProductQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: _WzTokens.caption),
                     ],
                   ),
                 ),
@@ -7058,19 +6060,6 @@ class _DownloadRow extends StatelessWidget {
 }
 
 
-
-IconData _downloadSourceIcon(String source) {
-  switch (source) {
-    case 'manual':
-      return Icons.download_done;
-    case 'smart_current':
-      return Icons.flash_on;
-    case 'smart_up_next':
-      return Icons.auto_awesome;
-    default:
-      return Icons.help_outline;
-  }
-}
 
 class _LibrarySourceSummaryCard extends StatelessWidget {
   const _LibrarySourceSummaryCard({
@@ -7112,232 +6101,6 @@ class _LibrarySourceSummaryCard extends StatelessWidget {
           ],
         ),
       );
-}
-
-class _CollectionsPage extends StatelessWidget {
-  const _CollectionsPage({
-    required this.collections,
-    required this.onBack,
-    required this.onOpen,
-    required this.onCreate,
-    required this.onRename,
-    required this.onDelete,
-  });
-
-  final List<WzCollection> collections;
-  final VoidCallback onBack;
-  final ValueChanged<WzCollection> onOpen;
-  final VoidCallback onCreate;
-  final ValueChanged<WzCollection> onRename;
-  final ValueChanged<WzCollection> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final liked = collections.firstWhere((collection) => collection.type == WzCollectionType.liked, orElse: () => WzCollection.liked());
-    final userCollections = collections.where((collection) => collection.type == WzCollectionType.user).toList(growable: false);
-    return WzPageScaffold(
-      children: [
-        WzPageHeader(
-          icon: Icons.playlist_play,
-          title: 'Collections',
-          subtitle: 'Save tracks into playlists and liked music on this device.',
-          trailing: Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [IconButton.outlined(tooltip: 'Back to Home', onPressed: onBack, icon: const Icon(Icons.arrow_back)), WzPrimaryAction(label: 'Create', icon: Icons.add, onPressed: onCreate)]),
-        ),
-        const SizedBox(height: WzSpacing.md),
-        _CollectionCard(collection: liked, onOpen: () => onOpen(liked), onRename: null, onDelete: null),
-        const SizedBox(height: WzSpacing.md),
-        const WzSectionHeader(title: 'Your collections', subtitle: 'Local playlists stored on this device.', icon: Icons.queue_music),
-        if (userCollections.isEmpty)
-          const WzPanel(
-            child: Text('No collections yet. Save tracks from Library, Search, or Now Playing.', style: WzText.body),
-          )
-        else
-          ...userCollections.map((collection) => Padding(
-                padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-                child: _CollectionCard(
-                  collection: collection,
-                  onOpen: () => onOpen(collection),
-                  onRename: () => onRename(collection),
-                  onDelete: () => onDelete(collection),
-                ),
-              )),
-        const SizedBox(height: WzSpacing.md),
-        const WzPanel(
-          child: Text('Collections only store lightweight metadata. Removing tracks or deleting a collection does not delete downloads, cache files, or device music.', style: WzText.caption),
-        ),
-      ],
-    );
-  }
-}
-
-class _CollectionCard extends StatelessWidget {
-  const _CollectionCard({required this.collection, required this.onOpen, required this.onRename, required this.onDelete});
-
-  final WzCollection collection;
-  final VoidCallback onOpen;
-  final VoidCallback? onRename;
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final preview = collection.tracks.isEmpty ? 'No tracks yet' : collection.tracks.first.title;
-    return WzPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              _Artwork(artworkUrl: collection.tracks.isEmpty ? null : collection.tracks.first.artworkUrl, size: 54),
-              const SizedBox(width: WzSpacing.sm),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(collection.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-                  const SizedBox(height: WzSpacing.xxs),
-                  Text('${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'} • Updated ${_friendlyUpdated(collection.updatedAtMs)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-                  Text(preview, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
-                ]),
-              ),
-            ],
-          ),
-          const SizedBox(height: WzSpacing.sm),
-          Wrap(
-            spacing: WzSpacing.sm,
-            runSpacing: WzSpacing.xs,
-            children: [
-              FilledButton.tonalIcon(onPressed: onOpen, icon: const Icon(Icons.open_in_new), label: const Text('Open')),
-              if (onRename != null) OutlinedButton.icon(onPressed: onRename, icon: const Icon(Icons.edit), label: const Text('Rename')),
-              if (onDelete != null) OutlinedButton.icon(onPressed: onDelete, icon: const Icon(Icons.delete_outline), label: const Text('Delete')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CollectionDetailPage extends StatelessWidget {
-  const _CollectionDetailPage({
-    required this.collection,
-    required this.onBack,
-    required this.onPlayFirst,
-    required this.onAddAllToQueue,
-    required this.onRename,
-    required this.onDelete,
-    required this.onPlayTrack,
-    required this.onAddTrackToQueue,
-    required this.onRemoveTrack,
-    required this.resolver,
-  });
-
-  final WzCollection collection;
-  final VoidCallback onBack;
-  final ValueChanged<WzCollection> onPlayFirst;
-  final ValueChanged<WzCollection> onAddAllToQueue;
-  final ValueChanged<WzCollection> onRename;
-  final ValueChanged<WzCollection> onDelete;
-  final ValueChanged<WzCollectionTrackSnapshot> onPlayTrack;
-  final ValueChanged<WzCollectionTrackSnapshot> onAddTrackToQueue;
-  final void Function(WzCollection collection, WzCollectionTrackSnapshot track) onRemoveTrack;
-  final CatalogTrackSummary? Function(WzCollectionTrackSnapshot track) resolver;
-
-  @override
-  Widget build(BuildContext context) => WzPageScaffold(
-        children: [
-          WzPageHeader(
-            icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play,
-            title: collection.name,
-            subtitle: '${collection.trackCount} ${collection.trackCount == 1 ? 'track' : 'tracks'} saved locally on this device.',
-            trailing: IconButton.outlined(onPressed: onBack, icon: const Icon(Icons.arrow_back)),
-          ),
-          const SizedBox(height: WzSpacing.md),
-          WzPanel(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
-                WzStatusPill(label: collection.type == WzCollectionType.liked ? 'Liked' : 'Collection', active: true, icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play),
-                WzStatusPill(label: '${collection.trackCount} tracks', icon: Icons.music_note),
-                WzStatusPill(label: 'Local only', icon: Icons.phone_android),
-              ]),
-              const SizedBox(height: WzSpacing.md),
-              Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
-                FilledButton.tonalIcon(onPressed: collection.tracks.isEmpty ? null : () => onPlayFirst(collection), icon: const Icon(Icons.play_arrow), label: const Text('Play first')),
-                OutlinedButton.icon(onPressed: collection.tracks.isEmpty ? null : () => onAddAllToQueue(collection), icon: const Icon(Icons.queue_music), label: const Text('Add all to Queue')),
-                if (collection.type == WzCollectionType.user) OutlinedButton.icon(onPressed: () => onRename(collection), icon: const Icon(Icons.edit), label: const Text('Rename')),
-                if (collection.type == WzCollectionType.user) OutlinedButton.icon(onPressed: () => onDelete(collection), icon: const Icon(Icons.delete_outline), label: const Text('Delete')),
-              ]),
-            ]),
-          ),
-          const SizedBox(height: WzSpacing.md),
-          if (collection.tracks.isEmpty)
-            const WzPanel(child: Text('This collection is empty. Save tracks from Library, Search, or Now Playing.', style: WzText.body))
-          else
-            ...collection.tracks.map((track) => Padding(
-                  padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-                  child: _CollectionTrackRow(
-                    track: track,
-                    available: resolver(track) != null,
-                    onPlay: () => onPlayTrack(track),
-                    onAddToQueue: () => onAddTrackToQueue(track),
-                    onRemove: () => onRemoveTrack(collection, track),
-                  ),
-                )),
-        ],
-      );
-}
-
-class _CollectionTrackRow extends StatelessWidget {
-  const _CollectionTrackRow({required this.track, required this.available, required this.onPlay, required this.onAddToQueue, required this.onRemove});
-
-  final WzCollectionTrackSnapshot track;
-  final bool available;
-  final VoidCallback onPlay;
-  final VoidCallback onAddToQueue;
-  final VoidCallback onRemove;
-
-  @override
-  Widget build(BuildContext context) => WzPanel(
-        padding: const EdgeInsets.all(WzSpacing.sm),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            _Artwork(artworkUrl: track.artworkUrl, size: 48, trackId: track.trackId, title: track.title, artist: track.subtitle),
-            const SizedBox(width: WzSpacing.sm),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-              Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            ])),
-          ]),
-          const SizedBox(height: WzSpacing.xs),
-          Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-            WzStatusPill(label: _collectionSourceLabel(track.source), active: track.source == WzCollectionTrackSource.device || track.source == WzCollectionTrackSource.cached, icon: Icons.source),
-            if (track.qualityLabel != null) WzStatusPill(label: _productQualityLabel(track.qualityLabel!), icon: Icons.high_quality),
-            WzStatusPill(label: track.source == WzCollectionTrackSource.device ? 'Your device' : track.license.badgeLabel, active: track.source == WzCollectionTrackSource.device || !track.license.needsRightsWarning, warning: track.license.needsRightsWarning && track.source != WzCollectionTrackSource.device, icon: Icons.policy),
-            if (!available) const WzStatusPill(label: 'Track is not available right now', warning: true, icon: Icons.cloud_off),
-          ]),
-          const SizedBox(height: WzSpacing.xs),
-          Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-            OutlinedButton.icon(onPressed: available ? onPlay : null, icon: const Icon(Icons.play_arrow), label: const Text('Play')),
-            OutlinedButton.icon(onPressed: available ? onAddToQueue : null, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
-            OutlinedButton.icon(onPressed: onRemove, icon: const Icon(Icons.remove_circle_outline), label: const Text('Remove')),
-          ]),
-        ]),
-      );
-}
-
-String _collectionSourceLabel(WzCollectionTrackSource source) => switch (source) {
-      WzCollectionTrackSource.api => 'Catalog',
-      WzCollectionTrackSource.device => 'Device',
-      WzCollectionTrackSource.cached => 'Downloaded',
-      WzCollectionTrackSource.unknown => 'Unknown',
-    };
-
-String _friendlyUpdated(int updatedAtMs) {
-  final age = DateTime.now().millisecondsSinceEpoch - updatedAtMs;
-  if (age < 60000) return 'just now';
-  final minutes = age ~/ 60000;
-  if (minutes < 60) return '${minutes}m ago';
-  final hours = minutes ~/ 60;
-  if (hours < 24) return '${hours}h ago';
-  final days = hours ~/ 24;
-  return '${days}d ago';
 }
 
 class _CatalogListCard extends StatelessWidget {
@@ -7556,11 +6319,11 @@ class _CatalogListCard extends StatelessWidget {
             WzStatusPill(label: 'Showing first $visibleTrackCount tracks', active: true, icon: Icons.library_music),
           const SizedBox(height: 12),
           if (totalTrackCount == 0)
-            _EmptyCatalogMessage(
+            WzEmptyCatalogMessage(
               message: offlineMode ? 'No downloads are ready offline yet. Save tracks from Library before going offline.' : 'Your catalog is waiting. Refresh when you are online or import device music to begin.',
             )
           else if (tracks.isEmpty)
-            _EmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear it to return to ${librarySourceFilter.label}.' : 'No tracks available in ${librarySourceFilter.label} yet.')
+            WzEmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear it to return to ${librarySourceFilter.label}.' : 'No tracks available in ${librarySourceFilter.label} yet.')
           else ...[
             SizedBox(
               height: math.min(560.0, math.max(220.0, tracks.length * 96.0)),
@@ -7577,8 +6340,8 @@ class _CatalogListCard extends StatelessWidget {
                     onToggleLike: () => onToggleLike(track),
                     onAddToCollection: () => onAddToCollection(track),
                     liked: isLiked(track),
-                    onCache: _isDeviceCatalogTrack(track) || _isCachedCatalogTrack(track) || track.source == 'cloud_vault' ? null : () => onCache(track),
-                    onDeleteCached: _isCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
+                    onCache: isWzDeviceCatalogTrack(track) || isWzCachedCatalogTrack(track) || track.source == 'cloud_vault' ? null : () => onCache(track),
+                    onDeleteCached: isWzCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
                   );
                 },
               ),
@@ -7653,129 +6416,8 @@ class _LicenseBadge extends StatelessWidget {
       );
 }
 
-class _LegalLicensesPage extends StatelessWidget {
-  const _LegalLicensesPage({required this.tracks, required this.appMode});
-
-  final List<CatalogTrackSummary> tracks;
-  final WzAppMode appMode;
-
-  @override
-  Widget build(BuildContext context) {
-    final uniqueTracks = <String, CatalogTrackSummary>{};
-    for (final track in tracks) {
-      uniqueTracks.putIfAbsent(track.trackId, () => track);
-    }
-
-    return Scaffold(
-      backgroundColor: _WzTokens.canvas,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: WzPageScaffold(
-              children: [
-                Row(
-                  children: [
-                    IconButton.outlined(onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.arrow_back)),
-                    const SizedBox(width: WzSpacing.sm),
-                    const Expanded(child: WzPageHeader(icon: Icons.policy, title: 'Legal / Licenses', subtitle: 'Credits, license status, and safe catalog source labels.')),
-                  ],
-                ),
-                const SizedBox(height: WzSpacing.md),
-                WzPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('WaveZero separates user device music, local dev audio, demo catalog tracks, and future licensed/artist uploads.', style: WzText.body),
-                      SizedBox(height: WzSpacing.xs),
-                      Text('Device Music belongs to the user/device context and is not uploaded by WaveZero.', style: WzText.caption),
-                      SizedBox(height: WzSpacing.xs),
-                      Text('Local/dev-only tracks are not production-safe until rights are verified. Beta builds do not claim commercial catalog rights.', style: WzText.caption),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: WzSpacing.md),
-                const WzSectionHeader(title: 'Status guide', subtitle: 'Badges are metadata labels, not automated legal verification.', icon: Icons.verified_user_outlined),
-                WzPanel(
-                  child: Wrap(
-                    spacing: WzSpacing.xs,
-                    runSpacing: WzSpacing.xs,
-                    children: LicenseStatus.values.map((status) => WzStatusPill(label: status.label, active: status == LicenseStatus.verified || status == LicenseStatus.publicDomain || status == LicenseStatus.userDevice, warning: status == LicenseStatus.devOnly || status == LicenseStatus.licensePending || status == LicenseStatus.unknown, icon: Icons.label_outline)).toList(growable: false),
-                  ),
-                ),
-                const SizedBox(height: WzSpacing.md),
-                const WzSectionHeader(title: 'Catalog credits', subtitle: 'Current library entries and their available rights metadata.', icon: Icons.library_music),
-                if (uniqueTracks.isEmpty)
-                  const WzPanel(child: Text('No license entries yet. Load the Catalog or import Device music to review rights labels.', style: WzText.body))
-                else
-                  ...uniqueTracks.values.map((track) => _LegalTrackCard(track: track, developerMode: appMode == WzAppMode.developer)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LegalTrackCard extends StatelessWidget {
-  const _LegalTrackCard({required this.track, required this.developerMode});
-
-  final CatalogTrackSummary track;
-  final bool developerMode;
-
-  @override
-  Widget build(BuildContext context) {
-    final license = track.license;
-    final source = license.sourceName ?? (_isDeviceCatalogTrack(track) ? 'Device music' : _isCachedCatalogTrack(track) ? 'Downloaded' : 'Catalog');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-      child: WzPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-            const SizedBox(height: WzSpacing.xs),
-            Text(track.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            const SizedBox(height: WzSpacing.sm),
-            Wrap(
-              spacing: WzSpacing.xs,
-              runSpacing: WzSpacing.xs,
-              children: [
-                WzStatusPill(label: license.badgeLabel, active: !license.needsRightsWarning, warning: license.needsRightsWarning, icon: Icons.policy),
-                WzStatusPill(label: source, active: _isDeviceCatalogTrack(track), warning: license.status == LicenseStatus.devOnly, icon: Icons.source),
-                if (license.attributionRequired) const WzStatusPill(label: 'Attribution required', active: true, icon: Icons.badge),
-              ],
-            ),
-            if (license.attributionText != null && license.attributionText!.trim().isNotEmpty) ...[
-              const SizedBox(height: WzSpacing.sm),
-              Text(license.attributionText!, maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.body),
-            ],
-            if (license.licenseName != null || license.licenseUrl != null || license.sourceUrl != null) ...[
-              const SizedBox(height: WzSpacing.xs),
-              Text([license.licenseName, license.licenseUrl, license.sourceUrl].whereType<String>().where((value) => value.trim().isNotEmpty).join(' • '), maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            ],
-            if (license.needsRightsWarning) ...[
-              const SizedBox(height: WzSpacing.xs),
-              const Text('Not for production distribution until rights are verified.', style: WzText.caption),
-            ],
-            if (license.usageNotes != null && license.usageNotes!.trim().isNotEmpty) ...[
-              const SizedBox(height: WzSpacing.xs),
-              Text(license.usageNotes!, maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            ],
-            if (developerMode) ...[
-              const SizedBox(height: WzSpacing.xs),
-              Text('Internal track id: ${track.trackId} • source: ${track.source}', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 String _licenseBadgeLabel(CatalogTrackSummary track) {
-  if (_isDeviceCatalogTrack(track)) return 'Device music';
+  if (isWzDeviceCatalogTrack(track)) return 'Device music';
   if (track.license.status == LicenseStatus.unknown && track.trackId.startsWith('track-local-')) return 'Dev only';
   return track.license.badgeLabel;
 }
@@ -7808,8 +6450,8 @@ class _CatalogRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = CacheService().statusForTrack(track.trackId);
-    final isDevice = _isDeviceCatalogTrack(track);
-    final isCached = _isCachedCatalogTrack(track);
+    final isDevice = isWzDeviceCatalogTrack(track);
+    final isCached = isWzCachedCatalogTrack(track);
     final sourceLabel = isDevice ? 'Device' : isCached ? wzCachedSourceBadgeLabel(track.displayName) : (track.license.sourceName ?? 'Catalog');
     final licenseLabel = _licenseBadgeLabel(track);
     final asset = track.primaryAsset;
@@ -7844,7 +6486,7 @@ class _CatalogRow extends StatelessWidget {
           children: [
             Row(
               children: [
-                _Artwork(artworkUrl: track.artworkUrl, size: 54, trackId: track.trackId, title: track.title, artist: track.artistName),
+                WzArtwork(artworkUrl: track.artworkUrl, size: 54, trackId: track.trackId, title: track.title, artist: track.artistName),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -8186,8 +6828,8 @@ class _MiniArtwork extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(gradient: WzColors.accentGradient, borderRadius: BorderRadius.circular(WzRadius.md), border: Border.all(color: Colors.white.withOpacity(0.16))),
       child: url == null || url.trim().isEmpty
-          ? _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: 48, compact: true)
-          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => _WaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: 48, compact: true)),
+          ? WzWaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: 48, compact: true)
+          : Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => WzWaveZeroCoverArt(trackId: trackId, title: title, artist: artist, mood: mood, size: 48, compact: true)),
     );
   }
 }
@@ -8226,21 +6868,8 @@ class _Panel extends StatelessWidget {
       );
 }
 
-class _EmptyCatalogMessage extends StatelessWidget {
-  const _EmptyCatalogMessage({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: _WzTokens.surfaceMuted, borderRadius: BorderRadius.circular(_WzTokens.radiusMd)),
-        child: Text(message, style: _WzTokens.body),
-      );
-}
-
 CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
-String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(_isDeviceCatalogTrack(track) ? 'Device music' : (track.license.sourceName ?? 'Catalog')); parts.add(track.license.badgeLabel); return parts.join(' • '); }
+String _trackSubtitle(CatalogTrackSummary track) { final asset = track.primaryAsset; final parts = <String>[track.subtitle]; if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!); if (asset?.codec != null) parts.add(asset!.codec!); if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps'); parts.add(isWzDeviceCatalogTrack(track) ? 'Device music' : (track.license.sourceName ?? 'Catalog')); parts.add(track.license.badgeLabel); return parts.join(' • '); }
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }

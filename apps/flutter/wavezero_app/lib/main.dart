@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'app/wavezero_live_metrics_app_v3.dart';
+import 'app/wavezero_app.dart';
 
-void main() => runApp(const WaveZeroLiveMetricsApp());
+void main() => runApp(const WaveZeroApp());
