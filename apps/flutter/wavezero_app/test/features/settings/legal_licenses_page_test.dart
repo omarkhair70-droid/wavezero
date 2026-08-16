@@ -13,8 +13,8 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Legal & licenses'), findsOneWidget);
-    expect(find.textContaining('Rights metadata'), findsOneWidget);
-    expect(find.textContaining('No tracks are loaded yet.'), findsOneWidget);
+    expect(find.text('Legal / Licenses'), findsOneWidget);
+    expect(find.textContaining('WaveZero separates user device music'), findsOneWidget);
+    expect(find.textContaining('No license entries yet.'), findsOneWidget);
   });
 }
