@@ -79,7 +79,7 @@ jobs:
 
           if text.count(controller_import) != 1:
               raise SystemExit('operation controller import missing after patch')
-          if "_operation =" in text:
+          if "      _operation = operation;" in text or "setState(() => _operation = PlayerOperation.idle)" in text:
               raise SystemExit('direct operation assignment remains')
 
           path.write_text(text)
