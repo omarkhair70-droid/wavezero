@@ -2647,28 +2647,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onRemove: (entry) => unawaited(_removeHistoryEntry(entry)),
             onViewAll: () => _navigateTo(WzAppTab.history),
           ),
-          const SizedBox(height: WzSpacing.md),
-          WzHomeCollectionsOfflineSection(
-            collections: _collections,
-            offlineTrackCount: _offlineCachedTrackCount,
-            cacheBytes: _cacheBytes,
-            onOpenCollections: () => _navigateTo(WzAppTab.collections),
-            onOpenDownloads: () => _navigateTo(WzAppTab.downloads),
-          ),
-          const SizedBox(height: WzSpacing.md),
-          WzHomeSmartListeningCards(
-            smartDownloadsEnabled: _smartDownloadsEnabled,
-            smartDownloadsCompleted: _smartDownloadCompletedCount,
-            prefetchEnabled: _prefetchEnabled,
-            prefetchedTrackTitle: _prefetchedTrackTitle,
-            offlineReady: _offlineLibraryAvailable,
-            offlineTrackCount: _offlineCachedTrackCount,
-            qualityLabel: qualityLabel,
-          ),
-          const SizedBox(height: WzSpacing.md),
-          WzHomeQuickActions(onNavigate: _navigateTo, showDeveloperTools: _developerMode),
-          const SizedBox(height: WzSpacing.md),
           if (_developerMode) ...[
+            const SizedBox(height: WzSpacing.md),
+            WzHomeSmartListeningCards(
+              smartDownloadsEnabled: _smartDownloadsEnabled,
+              smartDownloadsCompleted: _smartDownloadCompletedCount,
+              prefetchEnabled: _prefetchEnabled,
+              prefetchedTrackTitle: _prefetchedTrackTitle,
+              offlineReady: _offlineLibraryAvailable,
+              offlineTrackCount: _offlineCachedTrackCount,
+              qualityLabel: qualityLabel,
+            ),
+            const SizedBox(height: WzSpacing.md),
+            WzHomeQuickActions(onNavigate: _navigateTo, showDeveloperTools: true),
+            const SizedBox(height: WzSpacing.md),
             WzDeveloperStatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
             const SizedBox(height: WzSpacing.sm),
             WzDeveloperSessionStrip(status: _sessionStatus),
@@ -2743,7 +2735,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzPageScaffold(
         children: [
-          const WzPageHeader(icon: Icons.queue_music, title: 'Queue', subtitle: 'Queue Engine v2 stays intact with cleaner product hierarchy.'),
+          const WzPageHeader(icon: Icons.queue_music, title: 'Queue', subtitle: 'What plays next.'),
           const SizedBox(height: WzSpacing.md),
           WzQueuePanel(
             queue: _queue,
@@ -2811,7 +2803,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzPageScaffold(
         children: [
-          const WzPageHeader(icon: Icons.library_music, title: 'Library', subtitle: 'Browse Catalog, Device music, and Downloaded tracks.'),
+          const WzPageHeader(icon: Icons.library_music, title: 'Library', subtitle: 'Everything you can play, in one place.'),
           const SizedBox(height: WzSpacing.md),
           WzLibraryCatalogPanel(
             tracks: _filteredCatalog,
@@ -2903,7 +2895,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzPageScaffold(
         children: [
-          const WzPageHeader(icon: Icons.download_done, title: 'Downloads', subtitle: 'Offline Ready library with manual and smart cached tracks.'),
+          const WzPageHeader(icon: Icons.download_done, title: 'Downloads', subtitle: 'Music saved for when you are offline.'),
           const SizedBox(height: WzSpacing.md),
           WzDownloadsPanel(
             downloads: _cachedLibrary,
