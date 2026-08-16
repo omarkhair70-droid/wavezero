@@ -54,12 +54,10 @@ import '../features/history/history_resolution.dart';
 import '../features/history/history_presentation.dart';
 import '../features/history/listening_history_page.dart';
 import '../features/settings/app_mode_preferences.dart';
-import '../features/settings/legal_licenses_page.dart';
 import '../features/settings/settings_page.dart';
 import '../shared/media/media_presentation.dart';
 import '../shared/media/track_source.dart';
 import '../shared/widgets/wavezero_artwork.dart';
-import '../shared/widgets/wavezero_empty_message.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
@@ -467,7 +465,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   bool get _canPrevious => _queuePosition.canPrevious;
   bool get _canNext => _queuePosition.canNext;
-  bool get _canShuffleNext => _queuePosition.canShuffleNext;
   bool get _canPlayNextControl => _queuePosition.canPlayNext;
 
   String get _sleepTimerStatusLabel => WzSleepTimerPresentation.statusLabel(
@@ -750,8 +747,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     await _collectionsService.save(collections);
   }
 
-  Future<void> _saveCollections() => _collectionsService.save(_collections);
-
   bool _isLiked(String trackId) => wzCollectionContainsTrack(_likedCollection, trackId);
 
   WzCollectionTrackSnapshot _snapshotForTrack(CatalogTrackSummary track) {
@@ -776,24 +771,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       addedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
-
-  CatalogTrackSummary _summaryFromSnapshot(WzCollectionTrackSnapshot snapshot) => CatalogTrackSummary(
-        trackId: snapshot.trackId,
-        title: snapshot.title,
-        artistName: snapshot.subtitle,
-        albumName: snapshot.albumName,
-        artworkUrl: snapshot.artworkUrl,
-        source: snapshot.source.name,
-        license: snapshot.source == WzCollectionTrackSource.device ? LicenseMetadata.userDevice : snapshot.license,
-        primaryAsset: snapshot.primaryUrl == null
-            ? null
-            : CatalogTrackAssetSummary(
-                assetId: '${snapshot.source.name}-${snapshot.trackId}',
-                manifestUrl: snapshot.primaryUrl!,
-                qualityLabel: snapshot.qualityLabel,
-                codec: snapshot.codec,
-              ),
-      );
 
   CatalogTrackSummary? _resolveCollectionTrack(WzCollectionTrackSnapshot snapshot) =>
       wzResolveCollectionTrack(libraryTracks: _libraryTracks, snapshot: snapshot);
@@ -3273,45 +3250,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
 enum QueueAdvanceSource { manual, next, previous, auto, shuffle }
 
-IconData _searchResultIcon(WzSearchResult result) => switch (result.type) {
-      WzSearchResultType.deviceTrack => Icons.phone_android,
-      WzSearchResultType.downloadedTrack => Icons.download_done,
-      WzSearchResultType.cloudTrack => Icons.cloud_done_outlined,
-      WzSearchResultType.collection => Icons.playlist_play,
-      WzSearchResultType.historyEntry => Icons.history,
-      WzSearchResultType.artistLike => Icons.person,
-      WzSearchResultType.track || WzSearchResultType.unknown => Icons.music_note,
-    };
-
-String _formatDuration(int ms) {
-  final totalSeconds = (ms / 1000).floor();
-  final minutes = totalSeconds ~/ 60;
-  final seconds = totalSeconds % 60;
-  return '$minutes:${seconds.toString().padLeft(2, '0')}';
-}
-
-class _DiscoveryPanel extends StatelessWidget {
-  const _DiscoveryPanel({required this.title, required this.subtitle, required this.icon, required this.children});
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final List<Widget> children;
-  @override
-  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [WzSectionHeader(title: title, subtitle: subtitle, icon: icon), WzPanel(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children))]);
-}
-
-class _DiscoveryButton extends StatelessWidget {
-  const _DiscoveryButton({required this.label, required this.detail, required this.icon, required this.onTap});
-  final String label;
-  final String detail;
-  final IconData icon;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => ListTile(leading: Icon(icon), title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis), subtitle: Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: onTap);
-}
-
-
-
 Map<String, int> _cachedTrackSizeMap(List<CachedTrackMetadata> tracks) {
   final sizes = <String, int>{};
   for (final track in tracks) {
@@ -3328,19 +3266,14 @@ Map<String, int> _cachedTrackSizeMap(List<CachedTrackMetadata> tracks) {
 class _WzTokens {
   const _WzTokens._();
 
-  static const Color canvas = WzColors.canvas;
   static const Color surface = WzColors.surface;
   static const Color surfaceElevated = WzColors.surfaceElevated;
-  static const Color surfacePremium = WzColors.surfacePremium;
   static const Color surfaceMuted = WzColors.surfaceMuted;
   static const Color border = WzColors.border;
   static const Color borderSoft = WzColors.borderSoft;
   static const Color accent = WzColors.accent;
-  static const Color accentSoft = WzColors.accentSoft;
-  static const Color success = WzColors.success;
   static const Color successSoft = WzColors.successSoft;
   static const Color warning = WzColors.warning;
-  static const Color warningSoft = WzColors.warningSoft;
   static const Color textPrimary = WzColors.textPrimary;
   static const Color textMuted = WzColors.textMuted;
   static const Color textSubtle = WzColors.textSubtle;
@@ -3350,40 +3283,17 @@ class _WzTokens {
   static const double space3 = 12;
   static const double space4 = 16;
   static const double space5 = 20;
-  static const double space6 = 24;
   static const double radiusMd = 18;
   static const double radiusLg = 26;
   static const double radiusXl = 32;
 
-  static const Duration motionFast = WzMotion.fast;
   static const Duration motionNormal = WzMotion.normal;
   static const Duration motionSlow = WzMotion.slow;
   static const Curve motionCurve = WzMotion.curve;
 
-  static const TextStyle eyebrow = TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.6);
   static const TextStyle title = TextStyle(color: textPrimary, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.3);
   static const TextStyle body = TextStyle(color: textMuted, fontSize: 13, height: 1.35);
   static const TextStyle caption = TextStyle(color: textSubtle, fontSize: 12, height: 1.3);
-}
-
-class _TopBar extends StatelessWidget {
-  const _TopBar();
-  @override
-  Widget build(BuildContext context) => const Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('WaveZero', style: TextStyle(color: _WzTokens.textPrimary, fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: -1.2)),
-                SizedBox(height: _WzTokens.space1),
-                Text('Premium music engine shell for predictive native playback.', style: _WzTokens.body),
-              ],
-            ),
-          ),
-          Icon(Icons.graphic_eq, color: _WzTokens.accent),
-        ],
-      );
 }
 
 class _NowContextPanel extends StatelessWidget {
@@ -4184,27 +4094,6 @@ class _TrackSetupCard extends StatelessWidget {
       ));
 }
 
-class _HealthStrip extends StatelessWidget {
-  const _HealthStrip({required this.metrics});
-  final PlaybackMetrics metrics;
-  @override
-  Widget build(BuildContext context) => Wrap(spacing: _WzTokens.space3, runSpacing: _WzTokens.space3, children: [
-        _MetricCard(label: 'Tap to audio', value: _formatMetric(metrics.tapToFirstAudioMs), active: metrics.tapToFirstAudioMs != null && metrics.tapToFirstAudioMs! < 800),
-        _MetricCard(label: 'Ready', value: _formatMetric(metrics.loadToReadyMs), active: metrics.preparedBeforePlay),
-        _MetricCard(label: 'Rebuffers', value: metrics.rebufferCount.toString(), active: metrics.rebufferCount == 0),
-        _MetricCard(label: 'Error', value: metrics.playbackError == null ? 'none' : 'check', active: metrics.playbackError == null),
-      ]);
-}
-
-class _HealthChip extends StatelessWidget {
-  const _HealthChip({required this.label, required this.value, required this.good});
-  final String label;
-  final String value;
-  final bool good;
-  @override
-  Widget build(BuildContext context) => _MetricCard(label: label, value: value, active: good);
-}
-
 class _DeveloperModePanel extends StatelessWidget {
   const _DeveloperModePanel({required this.enabled, required this.onChanged});
   final bool enabled;
@@ -4347,4 +4236,3 @@ CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackI
 String _statusFromEvent(String? event) { switch (event) { case 'track_loaded': case 'buffering_started': return 'Preparing'; case 'ready': case 'buffering_ended': case 'manifest_loaded': return 'Ready'; case 'not_playing': return 'Paused'; case 'stopped': return 'Paused'; case 'ended': case 'playback_ended': return 'Ended'; default: return 'Ready'; } }
 String _formatMetric(int? valueMs) => valueMs == null ? '—' : '${valueMs}ms';
 String _formatTime(int? valueMs) { if (valueMs == null || valueMs < 0) return '—:—'; final totalSeconds = (valueMs / 1000).floor(); final minutes = totalSeconds ~/ 60; final seconds = totalSeconds % 60; return '$minutes:${seconds.toString().padLeft(2, '0')}'; }
-const _timeStyle = TextStyle(color: Color(0xFF9BA3B4), fontSize: 12);
