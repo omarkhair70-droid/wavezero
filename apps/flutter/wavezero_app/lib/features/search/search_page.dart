@@ -70,13 +70,19 @@ class WzSearchPage extends StatelessWidget {
     return WzPageScaffold(
       children: [
         WzPageHeader(
-          icon: Icons.search,
+          icon: Icons.search_rounded,
           title: 'Search',
-          subtitle: 'Find tracks, downloads, collections, and recent plays on this device.',
-          trailing: IconButton.outlined(tooltip: 'Back to Home', onPressed: onBack, icon: const Icon(Icons.arrow_back)),
+          subtitle: 'Find the sound you want without leaving the room you are already in.',
+          trailing: WzSculptedIconButton(
+            tooltip: 'Back to Home',
+            icon: Icons.arrow_back_rounded,
+            size: 44,
+            iconSize: 19,
+            onPressed: onBack,
+          ),
         ),
         const SizedBox(height: WzSpacing.md),
-        WzPanel(
+        WzGlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -87,8 +93,8 @@ class WzSearchPage extends StatelessWidget {
                 onSubmitted: onSubmitted,
                 decoration: InputDecoration(
                   labelText: 'Search music',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: hasQuery ? IconButton(onPressed: onClearQuery, icon: const Icon(Icons.close)) : null,
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: hasQuery ? IconButton(tooltip: 'Clear search', onPressed: onClearQuery, icon: const Icon(Icons.close_rounded)) : null,
                 ),
               ),
               const SizedBox(height: WzSpacing.sm),
@@ -96,16 +102,20 @@ class WzSearchPage extends StatelessWidget {
                 spacing: WzSpacing.xs,
                 runSpacing: WzSpacing.xs,
                 children: WzSearchFilter.values
-                    .map((item) => ChoiceChip(
-                          label: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
-                          selected: filter == item,
-                          onSelected: (_) => onFilterChanged(item),
-                        ))
+                    .map(
+                      (item) => ChoiceChip(
+                        label: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        selected: filter == item,
+                        onSelected: (_) => onFilterChanged(item),
+                      ),
+                    )
                     .toList(growable: false),
               ),
               const SizedBox(height: WzSpacing.sm),
               Text(
-                hasQuery ? '${filter.label} • ${results.length} result${results.length == 1 ? '' : 's'}' : 'Search your local WaveZero library across $allResultCount available items.',
+                hasQuery
+                    ? '${filter.label} • ${results.length} result${results.length == 1 ? '' : 's'}'
+                    : '$allResultCount things are ready to search on this device.',
                 style: WzText.caption,
               ),
             ],
@@ -118,9 +128,17 @@ class WzSearchPage extends StatelessWidget {
             const SizedBox(height: WzSpacing.md),
           ],
           if (recentSearches.isNotEmpty) ...[
-            const WzSectionHeader(title: 'Recent searches', subtitle: 'Stored on this device only.', icon: Icons.manage_search),
+            const WzSectionHeader(title: 'Recent searches', subtitle: 'Only on this device.', icon: Icons.manage_search_rounded),
             Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: onClearRecentSearches, child: const Text('Clear'))),
-            WzPanel(child: Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: recentSearches.map((query) => ActionChip(label: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis), onPressed: () => onRecentSearch(query))).toList(growable: false))),
+            WzGlassCard(
+              child: Wrap(
+                spacing: WzSpacing.xs,
+                runSpacing: WzSpacing.xs,
+                children: recentSearches
+                    .map((query) => ActionChip(label: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis), onPressed: () => onRecentSearch(query)))
+                    .toList(growable: false),
+              ),
+            ),
             const SizedBox(height: WzSpacing.md),
           ],
           _SearchDiscoverySections(
@@ -133,24 +151,28 @@ class WzSearchPage extends StatelessWidget {
             onCollection: (collection) => onRecentSearch(collection.name),
           ),
         ] else if (results.isEmpty) ...[
-          WzPanel(
+          WzGlassCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('No matching music found.', style: WzText.title),
+                Text('Nothing matched that sound.', style: WzText.title),
                 const SizedBox(height: WzSpacing.xs),
-                const Text('Try a different title, import device music, or refresh the catalog when you are online.', style: WzText.body),
+                const Text('Try another title, import device music, or refresh the catalog when you are online.', style: WzText.body),
                 const SizedBox(height: WzSpacing.md),
-                Wrap(spacing: WzSpacing.sm, runSpacing: WzSpacing.sm, children: [
-                  WzPrimaryAction(label: 'Import Device music', icon: Icons.perm_media, onPressed: onImportDeviceMusic),
-                  OutlinedButton.icon(onPressed: onLoadCatalog, icon: const Icon(Icons.refresh), label: const Text('Load catalog')),
-                ]),
+                Wrap(
+                  spacing: WzSpacing.sm,
+                  runSpacing: WzSpacing.sm,
+                  children: [
+                    WzPrimaryAction(label: 'Import Device music', icon: Icons.perm_media_rounded, onPressed: onImportDeviceMusic),
+                    OutlinedButton.icon(onPressed: onLoadCatalog, icon: const Icon(Icons.refresh_rounded), label: const Text('Load catalog')),
+                  ],
+                ),
               ],
             ),
           ),
         ] else ...[
           SizedBox(
-            height: math.min(620.0, math.max(260.0, results.length * 150.0)),
+            height: math.min(620.0, math.max(260.0, results.length * 152.0)),
             child: ListView.builder(
               itemCount: results.length,
               itemBuilder: (context, index) {
@@ -175,7 +197,13 @@ class WzSearchPage extends StatelessWidget {
 }
 
 class _SearchResultCard extends StatelessWidget {
-  const _SearchResultCard({required this.result, required this.onPlay, required this.onAddToQueue, required this.onAddToCollection, required this.onOpenCollection});
+  const _SearchResultCard({
+    required this.result,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onAddToCollection,
+    required this.onOpenCollection,
+  });
 
   final WzSearchResult result;
   final VoidCallback onPlay;
@@ -184,13 +212,14 @@ class _SearchResultCard extends StatelessWidget {
   final VoidCallback? onOpenCollection;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
+  Widget build(BuildContext context) => WzGlassCard(
+        borderRadius: WzRadius.lg,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                CircleAvatar(backgroundColor: const Color(0xFF20283A), child: Icon(wzSearchResultIcon(result), color: WzColors.textPrimary)),
+                WzSculptedIcon(icon: wzSearchResultIcon(result), size: 48, iconSize: 20, color: WzColors.accent),
                 const SizedBox(width: WzSpacing.sm),
                 Expanded(
                   child: Column(
@@ -205,33 +234,49 @@ class _SearchResultCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: WzSpacing.sm),
-            Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-              WzStatusPill(label: wzSearchSourceLabel(result.source), active: true, icon: Icons.label_outline),
-              WzStatusPill(label: wzSearchTypeLabel(result.type), icon: wzSearchResultIcon(result)),
-              if (result.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(result.qualityLabel!), icon: Icons.high_quality),
-              if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component),
-              if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy),
-              if (!result.available) const WzStatusPill(label: 'Unavailable', warning: true, icon: Icons.block),
-            ]),
+            Wrap(
+              spacing: WzSpacing.xs,
+              runSpacing: WzSpacing.xs,
+              children: [
+                WzStatusPill(label: wzSearchSourceLabel(result.source), active: true, icon: Icons.label_outline_rounded),
+                WzStatusPill(label: wzSearchTypeLabel(result.type), icon: wzSearchResultIcon(result)),
+                if (result.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(result.qualityLabel!), icon: Icons.high_quality_rounded),
+                if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component_rounded),
+                if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy_outlined),
+                if (!result.available) const WzStatusPill(label: 'Unavailable', warning: true, icon: Icons.block_rounded),
+              ],
+            ),
             const SizedBox(height: WzSpacing.xs),
             Text(result.secondaryLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
             const SizedBox(height: WzSpacing.sm),
-            Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-              if (onOpenCollection != null)
-                WzPrimaryAction(label: 'Open Collection', icon: Icons.open_in_full, onPressed: onOpenCollection)
-              else ...[
-                WzPrimaryAction(label: 'Play', icon: Icons.play_arrow, onPressed: result.available ? onPlay : null),
-                OutlinedButton.icon(onPressed: result.available ? onAddToQueue : null, icon: const Icon(Icons.queue_music), label: const Text('Add to Queue')),
-                OutlinedButton.icon(onPressed: result.available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add), label: const Text('Add to Collection')),
+            Wrap(
+              spacing: WzSpacing.xs,
+              runSpacing: WzSpacing.xs,
+              children: [
+                if (onOpenCollection != null)
+                  WzPrimaryAction(label: 'Open Collection', icon: Icons.open_in_full_rounded, onPressed: onOpenCollection)
+                else ...[
+                  WzPrimaryAction(label: 'Play', icon: Icons.play_arrow_rounded, onPressed: result.available ? onPlay : null),
+                  OutlinedButton.icon(onPressed: result.available ? onAddToQueue : null, icon: const Icon(Icons.queue_music_rounded), label: const Text('Add to Queue')),
+                  OutlinedButton.icon(onPressed: result.available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add_rounded), label: const Text('Add to Collection')),
+                ],
               ],
-            ]),
+            ),
           ],
         ),
       );
 }
 
 class _SearchDiscoverySections extends StatelessWidget {
-  const _SearchDiscoverySections({required this.history, required this.cachedTracks, required this.collections, required this.catalogTracks, required this.onRecent, required this.onTrack, required this.onCollection});
+  const _SearchDiscoverySections({
+    required this.history,
+    required this.cachedTracks,
+    required this.collections,
+    required this.catalogTracks,
+    required this.onRecent,
+    required this.onTrack,
+    required this.onCollection,
+  });
 
   final List<WzListeningHistoryEntry> history;
   final List<CatalogTrackSummary> cachedTracks;
@@ -246,13 +291,13 @@ class _SearchDiscoverySections extends StatelessWidget {
     final visibleCollections = collections.where((collection) => collection.trackCount > 0 || collection.type == WzCollectionType.liked).take(5).toList(growable: false);
     final sections = <Widget>[];
     if (history.isNotEmpty) {
-      sections.add(WzSearchDiscoveryPanel(title: 'Continue Listening', subtitle: 'Latest saved play.', icon: Icons.play_circle, children: [WzSearchDiscoveryButton(label: history.first.title, detail: history.first.subtitle, icon: Icons.history, onTap: () => onRecent(history.first))]));
-      sections.add(WzSearchDiscoveryPanel(title: 'Recently Played', subtitle: 'Local listening history.', icon: Icons.schedule, children: history.take(5).map((entry) => WzSearchDiscoveryButton(label: entry.title, detail: entry.subtitle, icon: Icons.history, onTap: () => onRecent(entry))).toList(growable: false)));
+      sections.add(WzSearchDiscoveryPanel(title: 'Continue Listening', subtitle: 'The last voice you left.', icon: Icons.play_circle_outline_rounded, children: [WzSearchDiscoveryButton(label: history.first.title, detail: history.first.subtitle, icon: Icons.history_rounded, onTap: () => onRecent(history.first))]));
+      sections.add(WzSearchDiscoveryPanel(title: 'Recently Played', subtitle: 'Local listening history.', icon: Icons.schedule_rounded, children: history.take(5).map((entry) => WzSearchDiscoveryButton(label: entry.title, detail: entry.subtitle, icon: Icons.history_rounded, onTap: () => onRecent(entry))).toList(growable: false)));
     }
-    if (cachedTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Downloaded / Offline Ready', subtitle: 'Cached tracks available locally.', icon: Icons.download_done, children: cachedTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: track.subtitle, icon: Icons.download_done, onTap: () => onTrack(track))).toList(growable: false)));
-    if (visibleCollections.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Collections', subtitle: 'Liked Tracks and local playlists.', icon: Icons.playlist_play, children: visibleCollections.map((collection) => WzSearchDiscoveryButton(label: collection.name, detail: '${collection.trackCount} tracks', icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play, onTap: () => onCollection(collection))).toList(growable: false)));
-    if (catalogTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Legal demo catalog', subtitle: 'Loaded catalog tracks with license labels.', icon: Icons.cloud_queue, children: catalogTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: '${track.subtitle} • ${track.license.badgeLabel}', icon: Icons.music_note, onTap: () => onTrack(track))).toList(growable: false)));
-    if (sections.isEmpty) return const WzPanel(child: Text('Import Device music or load the Catalog to search more.', style: WzText.body));
+    if (cachedTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Offline', subtitle: 'Already here on the device.', icon: Icons.download_done_rounded, children: cachedTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: track.subtitle, icon: Icons.download_done_rounded, onTap: () => onTrack(track))).toList(growable: false)));
+    if (visibleCollections.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Collections', subtitle: 'Liked Tracks and your local playlists.', icon: Icons.playlist_play_rounded, children: visibleCollections.map((collection) => WzSearchDiscoveryButton(label: collection.name, detail: '${collection.trackCount} tracks', icon: collection.type == WzCollectionType.liked ? Icons.favorite_rounded : Icons.playlist_play_rounded, onTap: () => onCollection(collection))).toList(growable: false)));
+    if (catalogTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Catalog', subtitle: 'Loaded demo tracks with clear license labels.', icon: Icons.cloud_queue_rounded, children: catalogTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: '${track.subtitle} • ${track.license.badgeLabel}', icon: Icons.music_note_rounded, onTap: () => onTrack(track))).toList(growable: false)));
+    if (sections.isEmpty) return const WzGlassCard(child: Text('Import Device music or load the Catalog to search more.', style: WzText.body));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: sections.expand((section) => [section, const SizedBox(height: WzSpacing.md)]).toList(growable: false));
   }
 }

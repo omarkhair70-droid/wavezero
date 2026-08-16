@@ -48,7 +48,7 @@ class WzQueuePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final currentTrack = currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null;
     final nextTrack = currentIndex >= 0 && currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null;
-    return WzPanel(
+    return WzGlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -58,51 +58,39 @@ class WzQueuePanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Queue', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    Text('Queue', style: WzText.title),
                     SizedBox(height: 4),
-                    Text(
-                      'Queue Engine v2: reorder, remove, Play Next, and persistence.',
-                      style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13),
-                    ),
+                    Text('What stays with you next.', style: WzText.body),
                   ],
                 ),
               ),
-              Text('${queue.length} tracks', style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12)),
-              const SizedBox(width: 8),
-              IconButton.outlined(
+              Text('${queue.length} tracks', style: WzText.caption),
+              const SizedBox(width: WzSpacing.xs),
+              WzSculptedIconButton(
                 tooltip: 'Clear queue',
+                icon: Icons.clear_all,
+                size: 42,
+                iconSize: 19,
                 onPressed: queue.isEmpty || controlsDisabled ? null : onClearQueue,
-                icon: const Icon(Icons.clear_all),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: WzSpacing.md),
           Wrap(
-            spacing: 10,
-            runSpacing: 8,
+            spacing: WzSpacing.xs,
+            runSpacing: WzSpacing.xs,
             children: [
               _QueueStateChip(label: 'Current', value: currentTrack?.title ?? 'none', active: currentTrack != null),
               _QueueStateChip(label: 'Up next', value: nextTrack?.title ?? 'none', active: nextTrack != null),
-              if (showDeveloperDetails)
-                _QueueStateChip(label: 'Auto', value: '$autoAdvanceCount advances', active: autoAdvanceEnabled),
+              if (showDeveloperDetails) _QueueStateChip(label: 'Auto', value: '$autoAdvanceCount advances', active: autoAdvanceEnabled),
             ],
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            alignment: WrapAlignment.spaceBetween,
+          const SizedBox(height: WzSpacing.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: Text(
-                  status,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
-                ),
-              ),
+              Expanded(child: Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption)),
+              const SizedBox(width: WzSpacing.sm),
               Switch(value: autoAdvanceEnabled, onChanged: controlsDisabled ? null : onToggleAutoAdvance),
             ],
           ),
@@ -111,13 +99,11 @@ class WzQueuePanel extends StatelessWidget {
               'smartQueueReason: $smartQueueReason • candidate: ${smartQueueCandidateTrackId ?? 'none'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFF98A1B8), fontSize: 12),
+              style: WzText.caption.copyWith(fontSize: 10.5),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: WzSpacing.md),
           if (queue.isEmpty)
-            const WzEmptyCatalogMessage(
-              message: 'Queue is empty. Add tracks from Library or Search to choose what plays next.',
-            )
+            const WzEmptyCatalogMessage(message: 'Queue is empty. Add tracks from Library or Search to choose what plays next.')
           else
             ...queue.indexed.map(
               (entry) => _QueueRow(
@@ -150,13 +136,13 @@ class _QueueStateChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? const Color(0x227C5CFF) : WzColors.surfaceMuted,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: active ? WzColors.accent : WzColors.border),
+          color: active ? WzColors.accentSoft : Colors.white.withValues(alpha: 0.58),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: active ? WzColors.accent.withValues(alpha: 0.22) : WzColors.borderSoft),
         ),
-        child: Text('$label: $value', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+        child: Text('$label • $value', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption.copyWith(color: WzColors.textMuted)),
       );
 }
 
@@ -198,37 +184,29 @@ class _QueueRow extends StatelessWidget {
             : '#${index + 1}';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: current ? const Color(0x227C5CFF) : const Color(0xFF0B0E18),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: current
-              ? const Color(0xFF8D7CFF)
-              : upNext
-                  ? const Color(0xFF38D996)
-                  : const Color(0xFF20273A),
-        ),
-      ),
+      padding: const EdgeInsets.all(11),
+      decoration: WzSurface.sculpted(selected: current),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(
-                current
-                    ? Icons.equalizer
+              WzSculptedIcon(
+                icon: current
+                    ? Icons.graphic_eq_rounded
                     : upNext
-                        ? Icons.next_plan
-                        : Icons.queue_music,
-                color: current || upNext ? const Color(0xFF8D7CFF) : const Color(0xFF98A1B8),
+                        ? Icons.skip_next_rounded
+                        : Icons.queue_music_rounded,
+                size: 44,
+                iconSize: 19,
+                color: current || upNext ? WzColors.accent : WzColors.textMuted,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: WzSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
                     const SizedBox(height: 3),
                     Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
                   ],
@@ -236,37 +214,17 @@ class _QueueRow extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: WzSpacing.sm),
           Wrap(
             alignment: WrapAlignment.end,
-            spacing: 2,
-            runSpacing: 2,
+            spacing: 5,
+            runSpacing: 5,
             children: [
-              IconButton(
-                tooltip: 'Play/select',
-                onPressed: disabled ? null : onPlay,
-                icon: Icon(current ? Icons.check_circle : Icons.play_arrow, color: const Color(0xFF8D7CFF)),
-              ),
-              IconButton(
-                tooltip: 'Move up',
-                onPressed: disabled || !canMoveUp ? null : onMoveUp,
-                icon: const Icon(Icons.keyboard_arrow_up, color: Color(0xFF98A1B8)),
-              ),
-              IconButton(
-                tooltip: 'Move down',
-                onPressed: disabled || !canMoveDown ? null : onMoveDown,
-                icon: const Icon(Icons.keyboard_arrow_down, color: Color(0xFF98A1B8)),
-              ),
-              IconButton(
-                tooltip: 'Play next',
-                onPressed: disabled || current || upNext ? null : onPlayNext,
-                icon: const Icon(Icons.low_priority, color: Color(0xFF38D996)),
-              ),
-              IconButton(
-                tooltip: 'Remove',
-                onPressed: disabled ? null : onRemove,
-                icon: const Icon(Icons.close, color: Color(0xFF98A1B8)),
-              ),
+              WzSculptedIconButton(tooltip: 'Play/select', icon: current ? Icons.check_circle_rounded : Icons.play_arrow_rounded, selected: current, size: 38, iconSize: 17, onPressed: disabled ? null : onPlay),
+              WzSculptedIconButton(tooltip: 'Move up', icon: Icons.keyboard_arrow_up_rounded, size: 38, iconSize: 18, onPressed: disabled || !canMoveUp ? null : onMoveUp),
+              WzSculptedIconButton(tooltip: 'Move down', icon: Icons.keyboard_arrow_down_rounded, size: 38, iconSize: 18, onPressed: disabled || !canMoveDown ? null : onMoveDown),
+              WzSculptedIconButton(tooltip: 'Play next', icon: Icons.low_priority_rounded, selected: upNext, size: 38, iconSize: 17, onPressed: disabled || current || upNext ? null : onPlayNext),
+              WzSculptedIconButton(tooltip: 'Remove', icon: Icons.close_rounded, size: 38, iconSize: 17, onPressed: disabled ? null : onRemove),
             ],
           ),
         ],

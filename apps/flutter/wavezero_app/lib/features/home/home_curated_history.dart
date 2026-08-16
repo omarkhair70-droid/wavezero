@@ -26,21 +26,21 @@ class WzHomeCuratedDemoSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (shelves.isEmpty) {
-      return WzPanel(
+      return WzGlassCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const WzSectionHeader(
               title: 'WaveZero Picks',
               subtitle: 'Curated picks will appear when the demo catalog is loaded.',
-              icon: Icons.auto_awesome,
+              icon: Icons.auto_awesome_rounded,
             ),
             const SizedBox(height: WzSpacing.sm),
             const Text('Curated picks will appear when the demo catalog is loaded.', style: WzText.body),
             const SizedBox(height: WzSpacing.sm),
             OutlinedButton.icon(
               onPressed: onOpenLibrary,
-              icon: const Icon(Icons.library_music),
+              icon: const Icon(Icons.library_music_rounded),
               label: const Text('Open Library'),
             ),
           ],
@@ -53,8 +53,8 @@ class WzHomeCuratedDemoSection extends StatelessWidget {
       children: [
         const WzSectionHeader(
           title: 'WaveZero Picks',
-          subtitle: 'Curated shelves for a premium first listen.',
-          icon: Icons.auto_awesome,
+          subtitle: 'A few voices chosen to make starting feel effortless.',
+          icon: Icons.auto_awesome_rounded,
         ),
         const SizedBox(height: WzSpacing.xs),
         const Text(CuratedDemoPicks.consumerCopy, style: WzText.caption),
@@ -88,7 +88,7 @@ class _HomeCuratedShelf extends StatelessWidget {
   final ValueChanged<ResolvedCuratedDemoPick> onAddToQueue;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
+  Widget build(BuildContext context) => WzGlassCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -97,7 +97,7 @@ class _HomeCuratedShelf extends StatelessWidget {
             Text(shelf.shelf.subtitle, style: WzText.caption),
             const SizedBox(height: WzSpacing.sm),
             SizedBox(
-              height: 246,
+              height: 252,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: shelf.picks.length,
@@ -132,21 +132,23 @@ class _HomeCuratedPickCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final track = pick.track;
     return SizedBox(
-      width: 174,
-      child: InkWell(
+      width: 178,
+      child: WzPressableSurface(
         onTap: onPlay,
-        borderRadius: BorderRadius.circular(WzRadius.lg),
-        child: Container(
-          padding: const EdgeInsets.all(WzSpacing.sm),
-          decoration: BoxDecoration(
-            color: WzColors.surfaceMuted,
-            borderRadius: BorderRadius.circular(WzRadius.lg),
-            border: Border.all(color: WzColors.borderSoft),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              WzArtwork(
+        radius: WzRadius.lg,
+        decoration: WzSurface.sculpted(),
+        padding: const EdgeInsets.all(WzSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(WzRadius.lg),
+                boxShadow: WzSurface.softShadows,
+              ),
+              child: WzArtwork(
                 artworkUrl: track.artworkUrl,
                 size: 132,
                 trackId: track.trackId,
@@ -154,16 +156,16 @@ class _HomeCuratedPickCard extends StatelessWidget {
                 artist: track.artistName,
                 mood: pick.pick.mood,
               ),
-              const SizedBox(height: WzSpacing.sm),
-              Expanded(
-                child: _HomeCuratedPickText(
-                  pick: pick,
-                  onPlay: onPlay,
-                  onAddToQueue: onAddToQueue,
-                ),
+            ),
+            const SizedBox(height: WzSpacing.sm),
+            Expanded(
+              child: _HomeCuratedPickText(
+                pick: pick,
+                onPlay: onPlay,
+                onAddToQueue: onAddToQueue,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -187,38 +189,17 @@ class _HomeCuratedPickText extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          track.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: WzText.sectionTitle.copyWith(fontSize: 14),
-        ),
+        Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 14)),
         const SizedBox(height: WzSpacing.xxs),
         Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-        const SizedBox(height: WzSpacing.xxs),
-        Text(
-          '${pick.pick.shelfLabel} • ${pick.pick.mood}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: WzText.caption,
-        ),
+        const SizedBox(height: 3),
+        Text('${pick.pick.shelfLabel} • ${pick.pick.mood}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption.copyWith(fontSize: 10.5)),
         const Spacer(),
-        Wrap(
-          spacing: WzSpacing.xs,
+        Row(
           children: [
-            SizedBox(
-              height: 32,
-              child: FilledButton.tonalIcon(
-                onPressed: onPlay,
-                icon: const Icon(Icons.play_arrow, size: 16),
-                label: const Text('Play'),
-              ),
-            ),
-            IconButton.outlined(
-              tooltip: 'Add to Queue',
-              onPressed: onAddToQueue,
-              icon: const Icon(Icons.queue_music, size: 16),
-            ),
+            WzSculptedIconButton(tooltip: 'Play', icon: Icons.play_arrow_rounded, size: 36, iconSize: 18, onPressed: onPlay),
+            const SizedBox(width: WzSpacing.xs),
+            WzSculptedIconButton(tooltip: 'Add to Queue', icon: Icons.queue_music_rounded, size: 36, iconSize: 16, onPressed: onAddToQueue),
           ],
         ),
       ],
@@ -259,9 +240,9 @@ class WzHomeHistorySection extends StatelessWidget {
         const WzSectionHeader(
           title: 'Continue Listening',
           subtitle: 'Listening history stays on this device.',
-          icon: Icons.history,
+          icon: Icons.history_rounded,
         ),
-        WzPanel(
+        WzGlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -281,19 +262,9 @@ class WzHomeHistorySection extends StatelessWidget {
                 spacing: WzSpacing.sm,
                 runSpacing: WzSpacing.sm,
                 children: [
-                  WzMiniMetric(
-                    label: 'History count',
-                    value: '${entries.length}',
-                    active: entries.isNotEmpty,
-                    icon: Icons.history,
-                  ),
-                  WzMiniMetric(
-                    label: 'Most played',
-                    value: mostPlayedEntry?.title ?? 'None yet',
-                    active: mostPlayedEntry != null,
-                    icon: Icons.repeat,
-                  ),
-                  const WzMiniMetric(label: 'Privacy', value: 'Device only', active: true, icon: Icons.lock),
+                  WzMiniMetric(label: 'History count', value: '${entries.length}', active: entries.isNotEmpty, icon: Icons.history_rounded),
+                  WzMiniMetric(label: 'Most played', value: mostPlayedEntry?.title ?? 'None yet', active: mostPlayedEntry != null, icon: Icons.repeat_rounded),
+                  const WzMiniMetric(label: 'Privacy', value: 'Device only', active: true, icon: Icons.lock_outline_rounded),
                 ],
               ),
             ],
@@ -303,9 +274,9 @@ class WzHomeHistorySection extends StatelessWidget {
         WzSectionHeader(
           title: 'Recently Played',
           subtitle: recent.isEmpty ? 'Your latest plays will show up here.' : 'Last ${recent.length} tracks saved locally.',
-          icon: Icons.schedule,
+          icon: Icons.schedule_rounded,
         ),
-        WzPanel(
+        WzGlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -326,11 +297,7 @@ class WzHomeHistorySection extends StatelessWidget {
               const SizedBox(height: WzSpacing.sm),
               Align(
                 alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: onViewAll,
-                  icon: const Icon(Icons.open_in_full),
-                  label: const Text('View all'),
-                ),
+                child: OutlinedButton.icon(onPressed: onViewAll, icon: const Icon(Icons.open_in_full_rounded), label: const Text('View all')),
               ),
             ],
           ),
@@ -341,11 +308,7 @@ class WzHomeHistorySection extends StatelessWidget {
 }
 
 class _HomeContinueHistoryCard extends StatelessWidget {
-  const _HomeContinueHistoryCard({
-    required this.entry,
-    required this.available,
-    required this.onPlay,
-  });
+  const _HomeContinueHistoryCard({required this.entry, required this.available, required this.onPlay});
 
   final WzListeningHistoryEntry entry;
   final bool available;
@@ -359,43 +322,21 @@ class _HomeContinueHistoryCard extends StatelessWidget {
             spacing: WzSpacing.xs,
             runSpacing: WzSpacing.xs,
             children: [
-              WzStatusPill(
-                label: wzHistorySourceLabel(entry.source),
-                active: available,
-                warning: !available,
-                icon: Icons.album,
-              ),
-              WzStatusPill(
-                label: entry.license.badgeLabel,
-                warning: entry.license.needsRightsWarning,
-                icon: Icons.policy,
-              ),
-              if (entry.qualityLabel != null)
-                WzStatusPill(
-                  label: wzProductQualityLabel(entry.qualityLabel!),
-                  icon: Icons.high_quality,
-                ),
+              WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album_rounded),
+              WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy_outlined),
+              if (entry.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(entry.qualityLabel!), icon: Icons.high_quality_rounded),
             ],
           ),
           const SizedBox(height: WzSpacing.sm),
           Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
           const SizedBox(height: WzSpacing.xxs),
-          Text(
-            '${entry.subtitle} • ${wzHistoryPositionLabel(entry)}',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: WzText.body,
-          ),
+          Text('${entry.subtitle} • ${wzHistoryPositionLabel(entry)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
           if (!available) ...[
             const SizedBox(height: WzSpacing.xs),
             const Text('Track is not available right now.', style: WzText.caption),
           ],
           const SizedBox(height: WzSpacing.md),
-          WzPrimaryAction(
-            label: entry.lastPositionMs > 0 ? 'Continue' : 'Play',
-            icon: Icons.play_arrow,
-            onPressed: available ? onPlay : null,
-          ),
+          WzPrimaryAction(label: entry.lastPositionMs > 0 ? 'Continue' : 'Play', icon: Icons.play_arrow_rounded, onPressed: available ? onPlay : null),
         ],
       );
 }
