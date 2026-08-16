@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../catalog/catalog_track_manifest.dart';
+import '../../catalog/catalog_track_manifest.dart';
 
 const String waveZeroListeningHistoryPreferenceKey = 'wavezero.listening_history.v1';
 
