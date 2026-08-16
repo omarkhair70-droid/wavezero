@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../design/wavezero_design_system.dart';
-import '../../shared/media/media_presentation.dart';
-import '../../shared/widgets/wavezero_artwork.dart';
 import '../../shared/widgets/wavezero_empty_message.dart';
 import 'cloud_vault_models.dart';
 
