@@ -31,10 +31,8 @@ class WzShellDestination {
 
 const wzConsumerShellDestinations = <WzShellDestination>[
   WzShellDestination(tab: WzAppTab.home, label: 'Home', icon: Icons.home_filled),
+  WzShellDestination(tab: WzAppTab.search, label: 'Search', icon: Icons.search_rounded),
   WzShellDestination(tab: WzAppTab.library, label: 'Library', icon: Icons.library_music),
-  WzShellDestination(tab: WzAppTab.now, label: 'Now', icon: Icons.play_circle_fill),
-  WzShellDestination(tab: WzAppTab.queue, label: 'Queue', icon: Icons.queue_music),
-  WzShellDestination(tab: WzAppTab.downloads, label: 'Downloads', icon: Icons.download_done),
 ];
 
 const wzDeveloperShellDestinations = <WzShellDestination>[
