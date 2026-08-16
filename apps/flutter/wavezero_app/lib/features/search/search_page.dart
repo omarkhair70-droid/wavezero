@@ -117,7 +117,7 @@ class WzSearchPage extends StatelessWidget {
         const SizedBox(height: WzSpacing.md),
         if (!hasQuery) ...[
           if (curatedPicks.isNotEmpty) ...[
-            WzCuratedTryPicksPanel(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
+            WzCuratedTryPicksPanel(picks: curatedPicks, onPlay: onPlayCuratedPick),
             const SizedBox(height: WzSpacing.md),
           ],
           if (recentSearches.isNotEmpty) ...[
@@ -249,12 +249,12 @@ class _SearchDiscoverySections extends StatelessWidget {
     final visibleCollections = collections.where((collection) => collection.trackCount > 0 || collection.type == WzCollectionType.liked).take(5).toList(growable: false);
     final sections = <Widget>[];
     if (history.isNotEmpty) {
-      sections.add(_DiscoveryPanel(title: 'Continue Listening', subtitle: 'Latest saved play.', icon: Icons.play_circle, children: [_DiscoveryButton(label: history.first.title, detail: history.first.subtitle, icon: Icons.history, onTap: () => onRecent(history.first))]));
-      sections.add(_DiscoveryPanel(title: 'Recently Played', subtitle: 'Local listening history.', icon: Icons.schedule, children: history.take(5).map((entry) => _DiscoveryButton(label: entry.title, detail: entry.subtitle, icon: Icons.history, onTap: () => onRecent(entry))).toList(growable: false)));
+      sections.add(WzSearchDiscoveryPanel(title: 'Continue Listening', subtitle: 'Latest saved play.', icon: Icons.play_circle, children: [WzSearchDiscoveryButton(label: history.first.title, detail: history.first.subtitle, icon: Icons.history, onTap: () => onRecent(history.first))]));
+      sections.add(WzSearchDiscoveryPanel(title: 'Recently Played', subtitle: 'Local listening history.', icon: Icons.schedule, children: history.take(5).map((entry) => WzSearchDiscoveryButton(label: entry.title, detail: entry.subtitle, icon: Icons.history, onTap: () => onRecent(entry))).toList(growable: false)));
     }
-    if (cachedTracks.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Downloaded / Offline Ready', subtitle: 'Cached tracks available locally.', icon: Icons.download_done, children: cachedTracks.take(5).map((track) => _DiscoveryButton(label: track.title, detail: track.subtitle, icon: Icons.download_done, onTap: () => onTrack(track))).toList(growable: false)));
-    if (visibleCollections.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Collections', subtitle: 'Liked Tracks and local playlists.', icon: Icons.playlist_play, children: visibleCollections.map((collection) => _DiscoveryButton(label: collection.name, detail: '${collection.trackCount} tracks', icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play, onTap: () => onCollection(collection))).toList(growable: false)));
-    if (catalogTracks.isNotEmpty) sections.add(_DiscoveryPanel(title: 'Legal demo catalog', subtitle: 'Loaded catalog tracks with license labels.', icon: Icons.cloud_queue, children: catalogTracks.take(5).map((track) => _DiscoveryButton(label: track.title, detail: '${track.subtitle} • ${track.license.badgeLabel}', icon: Icons.music_note, onTap: () => onTrack(track))).toList(growable: false)));
+    if (cachedTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Downloaded / Offline Ready', subtitle: 'Cached tracks available locally.', icon: Icons.download_done, children: cachedTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: track.subtitle, icon: Icons.download_done, onTap: () => onTrack(track))).toList(growable: false)));
+    if (visibleCollections.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Collections', subtitle: 'Liked Tracks and local playlists.', icon: Icons.playlist_play, children: visibleCollections.map((collection) => WzSearchDiscoveryButton(label: collection.name, detail: '${collection.trackCount} tracks', icon: collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play, onTap: () => onCollection(collection))).toList(growable: false)));
+    if (catalogTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Legal demo catalog', subtitle: 'Loaded catalog tracks with license labels.', icon: Icons.cloud_queue, children: catalogTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: '${track.subtitle} • ${track.license.badgeLabel}', icon: Icons.music_note, onTap: () => onTrack(track))).toList(growable: false)));
     if (sections.isEmpty) return const WzPanel(child: Text('Import Device music or load the Catalog to search more.', style: WzText.body));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: sections.expand((section) => [section, const SizedBox(height: WzSpacing.md)]).toList(growable: false));
   }
