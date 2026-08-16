@@ -1,0 +1,124 @@
+name: One-shot recent searches extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-recent-searches
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-recent-searches
+          fetch-depth: 0
+      - name: Move recent Search history ownership out of V3
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart')
+          text = path.read_text()
+
+          import_anchor = "import '../features/search/search_controls.dart';\n"
+          recent_import = "import '../features/search/recent_searches_store.dart';\n"
+          text_import = "import '../features/search/search_text.dart';\n"
+          if text.count(import_anchor) != 1:
+              raise SystemExit('search controls import anchor changed')
+          if recent_import not in text:
+              text = text.replace(import_anchor, import_anchor + recent_import + text_import, 1)
+
+          key_line = "  static const _recentSearchesPreferenceKey = 'wavezero.recent_searches.v1';\n"
+          if text.count(key_line) != 1:
+              raise SystemExit('recent search preference key changed')
+          text = text.replace(key_line, '', 1)
+
+          state_anchor = "  WzSearchFilter _searchFilter = WzSearchFilter.all;\n  List<String> _recentSearches = const <String>[];\n"
+          state_replacement = (
+              "  WzSearchFilter _searchFilter = WzSearchFilter.all;\n"
+              "  final WzRecentSearchesStore _recentSearchesStore = const WzRecentSearchesStore();\n"
+              "  List<String> _recentSearches = const <String>[];\n"
+          )
+          if text.count(state_anchor) != 1:
+              raise SystemExit('recent search state anchor changed')
+          text = text.replace(state_anchor, state_replacement, 1)
+
+          old_methods = (
+              "  Future<void> _loadRecentSearches() async {\n"
+              "    final prefs = await SharedPreferences.getInstance();\n"
+              "    final searches = prefs.getStringList(_recentSearchesPreferenceKey) ?? const <String>[];\n"
+              "    if (!mounted) return;\n"
+              "    setState(() => _recentSearches = searches.take(10).toList(growable: false));\n"
+              "  }\n\n"
+              "  Future<void> _rememberSearchQuery(String query) async {\n"
+              "    final normalized = query.trim().replaceAll(RegExp(r'\\s+'), ' ');\n"
+              "    if (normalized.isEmpty) return;\n"
+              "    final next = <String>[normalized, ..._recentSearches.where((item) => _normalizeWzSearch(item) != _normalizeWzSearch(normalized))].take(10).toList(growable: false);\n"
+              "    setState(() => _recentSearches = next);\n"
+              "    final prefs = await SharedPreferences.getInstance();\n"
+              "    await prefs.setStringList(_recentSearchesPreferenceKey, next);\n"
+              "  }\n\n"
+              "  Future<void> _clearRecentSearches() async {\n"
+              "    setState(() => _recentSearches = const <String>[]);\n"
+              "    final prefs = await SharedPreferences.getInstance();\n"
+              "    await prefs.remove(_recentSearchesPreferenceKey);\n"
+              "  }\n"
+          )
+          new_methods = (
+              "  Future<void> _loadRecentSearches() async {\n"
+              "    final searches = await _recentSearchesStore.load();\n"
+              "    if (!mounted) return;\n"
+              "    setState(() => _recentSearches = searches);\n"
+              "  }\n\n"
+              "  Future<void> _rememberSearchQuery(String query) async {\n"
+              "    final canonical = canonicalizeWzRecentSearch(query);\n"
+              "    if (canonical.isEmpty) return;\n"
+              "    final next = await _recentSearchesStore.remember(current: _recentSearches, query: canonical);\n"
+              "    if (!mounted) return;\n"
+              "    setState(() => _recentSearches = next);\n"
+              "  }\n\n"
+              "  Future<void> _clearRecentSearches() async {\n"
+              "    setState(() => _recentSearches = const <String>[]);\n"
+              "    await _recentSearchesStore.clear();\n"
+              "  }\n"
+          )
+          if text.count(old_methods) != 1:
+              raise SystemExit('recent search methods changed')
+          text = text.replace(old_methods, new_methods, 1)
+
+          normalize_start = "String _normalizeWzSearch(String value) {\n"
+          normalize_end = "\n\nString _searchSourceLabel(WzSearchSource source) => switch (source) {"
+          if text.count(normalize_start) != 1:
+              raise SystemExit('search normalization function start changed')
+          start = text.index(normalize_start)
+          try:
+              end = text.index(normalize_end, start)
+          except ValueError:
+              raise SystemExit('search normalization function end changed')
+          text = text[:start] + "String _searchSourceLabel(WzSearchSource source) => switch (source) {" + text[end + len(normalize_end):]
+
+          if '_normalizeWzSearch' not in text:
+              raise SystemExit('expected Search normalization call sites missing')
+          text = text.replace('_normalizeWzSearch', 'normalizeWzSearch')
+
+          for stale in ('_recentSearchesPreferenceKey', '_normalizeWzSearch'):
+              if stale in text:
+                  raise SystemExit(f'stale Search ownership symbol remains: {stale}')
+          if text.count(recent_import) != 1 or text.count(text_import) != 1:
+              raise SystemExit('Search feature imports missing after patch')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/one-shot-recent-searches-extract.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/flutter/wavezero_app/lib/app/wavezero_live_metrics_app_v3.dart .github/workflows/one-shot-recent-searches-extract.yml
+          git commit -m "Use extracted recent Search history"
+          git push origin HEAD:refactor/extract-recent-searches
