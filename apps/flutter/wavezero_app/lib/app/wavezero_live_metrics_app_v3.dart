@@ -39,6 +39,7 @@ import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
 import '../features/playback/sleep_timer_presentation.dart';
 import '../features/queue/queue_session_store.dart';
+import '../features/queue/queue_position.dart';
 import '../features/queue/smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
@@ -564,23 +565,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
 
-  int get _queueIndex {
-    final id = _queueCurrentTrackId ?? _selectedTrackId;
-    if (id == null) return -1;
-    return _queue.indexWhere((track) => track.trackId == id);
-  }
+  WzQueuePosition get _queuePosition => resolveWzQueuePosition(
+        queue: _queue,
+        currentTrackId: _queueCurrentTrackId,
+        selectedTrackId: _selectedTrackId,
+        shuffleEnabled: _shuffleEnabled,
+      );
 
-  CatalogTrackSummary? get _currentQueueTrack {
-    final index = _queueIndex;
-    if (index < 0 || index >= _queue.length) return null;
-    return _queue[index];
-  }
-
-  CatalogTrackSummary? get _upNextQueueTrack {
-    final index = _queueIndex;
-    if (index < 0 || index >= _queue.length - 1) return null;
-    return _queue[index + 1];
-  }
+  int get _queueIndex => _queuePosition.index;
+  CatalogTrackSummary? get _currentQueueTrack => _queuePosition.currentTrack;
+  CatalogTrackSummary? get _upNextQueueTrack => _queuePosition.upNextTrack;
 
   SmartQueueDecision _smartQueueDecision() => decideSmartQueueCandidate(
         smartPreloadEnabled: _prefetchEnabled,
@@ -593,10 +587,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         metrics: _metrics,
       );
 
-  bool get _canPrevious => _queueIndex > 0;
-  bool get _canNext => _queueIndex >= 0 && _queueIndex < _queue.length - 1;
-  bool get _canShuffleNext => _shuffleEnabled && _queue.length > 1 && _queueIndex >= 0;
-  bool get _canPlayNextControl => _canNext || _canShuffleNext;
+  bool get _canPrevious => _queuePosition.canPrevious;
+  bool get _canNext => _queuePosition.canNext;
+  bool get _canShuffleNext => _queuePosition.canShuffleNext;
+  bool get _canPlayNextControl => _queuePosition.canPlayNext;
 
   String get _sleepTimerStatusLabel => WzSleepTimerPresentation.statusLabel(
         deadline: _sleepTimerDeadline,
