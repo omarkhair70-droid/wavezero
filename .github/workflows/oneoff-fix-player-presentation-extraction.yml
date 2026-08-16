@@ -1,0 +1,31 @@
+name: One-off fix Player presentation extraction
+
+on:
+  push:
+    branches:
+      - refactor/extract-player-presentation
+    paths:
+      - .github/workflows/oneoff-fix-player-presentation-extraction.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/extract-player-presentation
+      - name: Fix Player extraction syntax
+        run: python3 .github/scripts/fix_player_presentation_extraction.py
+      - name: Remove one-off automation files
+        run: rm .github/scripts/fix_player_presentation_extraction.py .github/workflows/oneoff-fix-player-presentation-extraction.yml
+      - name: Commit fix
+        run: |
+          git config user.name "omarkhair70-droid"
+          git config user.email "omar.khair70@gmail.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix Player presentation extraction syntax"
+          git push origin HEAD:refactor/extract-player-presentation
