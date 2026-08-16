@@ -1,0 +1,29 @@
+name: One-shot retire V3 generation naming
+
+on:
+  push:
+    branches:
+      - refactor/retire-v3-generation-name
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/retire-v3-generation-name
+          fetch-depth: 0
+      - name: Rename active app to stable product naming
+        shell: bash
+        run: |
+          python tools/patch_retire_v3_name.py
+          rm tools/patch_retire_v3_name.py
+          rm .github/workflows/one-shot-retire-v3-name.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Retire Flutter V3 generation naming'
+          git push origin HEAD:refactor/retire-v3-generation-name
