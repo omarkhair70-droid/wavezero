@@ -1,0 +1,24 @@
+name: One-off hide unfinished surfaces
+
+on: push
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: product/hide-unfinished-surfaces
+          fetch-depth: 0
+      - run: python3 tools/oneoff_hide_unfinished_surfaces.py
+      - run: |
+          rm .github/workflows/_oneoff_hide_unfinished_surfaces.yml
+          rm tools/oneoff_hide_unfinished_surfaces.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Hide unfinished sources from consumers"
+          git push origin HEAD:product/hide-unfinished-surfaces
