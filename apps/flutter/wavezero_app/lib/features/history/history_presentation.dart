@@ -9,10 +9,10 @@ String wzHistorySourceLabel(WzListeningHistorySource source) => switch (source) 
 
 String friendlyWzHistoryTime(
   int timestampMs, {
-  required DateTime now,
+  DateTime? now,
 }) {
   final timestamp = DateTime.fromMillisecondsSinceEpoch(timestampMs);
-  final elapsed = now.difference(timestamp);
+  final elapsed = (now ?? DateTime.now()).difference(timestamp);
   if (elapsed.inMinutes < 1) return 'Just now';
   if (elapsed.inHours < 1) return '${elapsed.inMinutes}m ago';
   if (elapsed.inDays < 1) return '${elapsed.inHours}h ago';
