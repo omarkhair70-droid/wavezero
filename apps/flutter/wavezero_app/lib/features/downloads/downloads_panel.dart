@@ -28,13 +28,13 @@ class WzDownloadsPanel extends StatelessWidget {
   final VoidCallback onManageStorage;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
+  Widget build(BuildContext context) => WzGlassCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: WzSpacing.sm,
+              runSpacing: WzSpacing.sm,
               crossAxisAlignment: WrapCrossAlignment.center,
               alignment: WrapAlignment.spaceBetween,
               children: [
@@ -43,41 +43,32 @@ class WzDownloadsPanel extends StatelessWidget {
                   child: const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Downloads', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                      Text('Downloads', style: WzText.title),
                       SizedBox(height: 4),
-                      Text(
-                        'Cached tracks available for offline playback.',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Color(0xFF98A1B8), fontSize: 13),
-                      ),
+                      Text('The music that is already here with you.', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
                     ],
                   ),
                 ),
-                Text('${downloads.length} • ${formatWzCacheBytes(cacheBytes)}', style: WzText.caption),
-                Wrap(
-                  spacing: WzSpacing.xs,
-                  runSpacing: WzSpacing.xs,
+                WzStatusPill(label: '${downloads.length} • ${formatWzCacheBytes(cacheBytes)}', active: downloads.isNotEmpty, icon: Icons.download_done_rounded),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: onManageStorage,
-                      icon: const Icon(Icons.storage),
-                      label: const Text('Manage Storage'),
-                    ),
-                    IconButton.outlined(
+                    OutlinedButton.icon(onPressed: onManageStorage, icon: const Icon(Icons.storage_rounded), label: const Text('Manage Storage')),
+                    const SizedBox(width: WzSpacing.xs),
+                    WzSculptedIconButton(
                       tooltip: 'Clear all downloads',
+                      icon: Icons.clear_all,
+                      size: 42,
+                      iconSize: 19,
                       onPressed: downloads.isEmpty || controlsDisabled ? null : onClearAll,
-                      icon: const Icon(Icons.clear_all),
                     ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: WzSpacing.md),
             if (downloads.isEmpty)
-              WzEmptyCatalogMessage(
-                message: 'No downloads yet. Download tracks from Library to listen offline.',
-              )
+              const WzEmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
             else
               ...downloads.map(
                 (track) => _DownloadRow(
@@ -93,12 +84,7 @@ class WzDownloadsPanel extends StatelessWidget {
 }
 
 class _DownloadRow extends StatelessWidget {
-  const _DownloadRow({
-    required this.track,
-    required this.disabled,
-    required this.onPlay,
-    required this.onDelete,
-  });
+  const _DownloadRow({required this.track, required this.disabled, required this.onPlay, required this.onDelete});
 
   final CachedTrackMetadata track;
   final bool disabled;
@@ -108,62 +94,55 @@ class _DownloadRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0B0E18),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFF20273A)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        padding: const EdgeInsets.all(11),
+        decoration: WzSurface.sculpted(),
+        child: Row(
           children: [
-            Row(
-              children: [
-                WzArtwork(
-                  artworkUrl: track.artworkUrl,
-                  size: 48,
-                  trackId: track.trackId,
-                  title: track.title,
-                  artist: track.artistName,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        track.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${track.subtitle} • ${wzProductQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: WzText.caption,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(WzRadius.md), boxShadow: WzSurface.softShadows),
+              child: WzArtwork(
+                artworkUrl: track.artworkUrl,
+                size: 52,
+                trackId: track.trackId,
+                title: track.title,
+                artist: track.artistName,
+              ),
             ),
-            const SizedBox(height: 6),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 4,
-              runSpacing: 4,
+            const SizedBox(width: WzSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${track.subtitle} • ${wzProductQualityLabel(track.qualityLabel)}${track.codec == null ? '' : ' • ${track.codec}'}${track.bitrateKbps == null ? '' : ' • ${track.bitrateKbps}kbps'} • ${wzDownloadSourceLabel(track.downloadSource)}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: WzText.caption,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: WzSpacing.sm),
+            Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
+                WzSculptedIconButton(
                   tooltip: 'Play downloaded track',
+                  icon: Icons.play_arrow_rounded,
+                  size: 40,
+                  iconSize: 19,
                   onPressed: disabled ? null : onPlay,
-                  icon: const Icon(Icons.play_arrow, color: Color(0xFF8D7CFF)),
                 ),
-                IconButton(
+                const SizedBox(height: 6),
+                WzSculptedIconButton(
                   tooltip: 'Remove from device',
+                  icon: Icons.delete_outline_rounded,
+                  size: 40,
+                  iconSize: 18,
                   onPressed: disabled ? null : onDelete,
-                  icon: const Icon(Icons.delete_outline, color: Color(0xFFFF8F8F)),
                 ),
               ],
             ),
