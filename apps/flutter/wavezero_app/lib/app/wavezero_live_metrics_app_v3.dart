@@ -38,6 +38,7 @@ import '../features/device_music/device_music_track.dart';
 import '../features/device_music/device_music_projection.dart';
 import '../features/collections/collections_service.dart';
 import '../features/collections/collection_resolution.dart';
+import '../features/collections/collection_mutations.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/history/history_selection.dart';
 import '../features/settings/app_mode_preferences.dart';
@@ -975,14 +976,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _toggleLikedTrack(CatalogTrackSummary track) async {
     final liked = _likedCollection;
-    final exists = liked.tracks.any((entry) => entry.trackId == track.trackId);
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final nextTracks = exists
-        ? liked.tracks.where((entry) => entry.trackId != track.trackId).toList(growable: false)
-        : [...liked.tracks.where((entry) => entry.trackId != track.trackId), _snapshotForTrack(track)];
-    final nextCollections = _collections
-        .map((collection) => collection.id == liked.id ? collection.copyWith(updatedAtMs: now, tracks: nextTracks) : collection)
-        .toList(growable: false);
+    final exists = wzCollectionContainsTrack(liked, track.trackId);
+    final nextCollections = wzToggleCollectionTrack(
+      collections: _collections,
+      collectionId: liked.id,
+      snapshot: _snapshotForTrack(track),
+      removeExisting: exists,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
     await _persistCollections(nextCollections);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(exists ? 'Removed from Liked Tracks' : 'Added to Collection')));
@@ -1002,33 +1003,42 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _addTrackToCollection(WzCollection collection, CatalogTrackSummary track) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final snapshot = _snapshotForTrack(track);
-    final next = collection.tracks.where((entry) => entry.trackId != track.trackId).toList(growable: true)..add(snapshot);
-    final nextCollections = _collections
-        .map((item) => item.id == collection.id ? item.copyWith(updatedAtMs: now, tracks: next) : item)
-        .toList(growable: false);
+    final nextCollections = wzUpsertCollectionTrack(
+      collections: _collections,
+      collectionId: collection.id,
+      snapshot: _snapshotForTrack(track),
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
     await _persistCollections(nextCollections);
   }
 
   Future<void> _removeTrackFromCollection(WzCollection collection, WzCollectionTrackSnapshot track) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final nextCollections = _collections
-        .map((item) => item.id == collection.id ? item.copyWith(updatedAtMs: now, tracks: item.tracks.where((entry) => entry.trackId != track.trackId).toList(growable: false)) : item)
-        .toList(growable: false);
+    final nextCollections = wzRemoveCollectionTrack(
+      collections: _collections,
+      collectionId: collection.id,
+      trackId: track.trackId,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
     await _persistCollections(nextCollections);
   }
 
   Future<void> _renameCollection(WzCollection collection, String name) async {
     if (collection.type == WzCollectionType.liked) return;
     final trimmed = name.trim().isEmpty ? 'My Collection' : name.trim();
-    final now = DateTime.now().millisecondsSinceEpoch;
-    await _persistCollections(_collections.map((item) => item.id == collection.id ? item.copyWith(name: trimmed, updatedAtMs: now) : item).toList(growable: false));
+    await _persistCollections(wzRenameCollection(
+      collections: _collections,
+      collectionId: collection.id,
+      name: trimmed,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    ));
   }
 
   Future<void> _deleteCollection(WzCollection collection) async {
     if (collection.type == WzCollectionType.liked) return;
-    await _persistCollections(_collections.where((item) => item.id != collection.id).toList(growable: false));
+    await _persistCollections(wzDeleteCollection(
+      collections: _collections,
+      collectionId: collection.id,
+    ));
     if (!mounted) return;
     setState(() => _selectedCollectionId = likedTracksCollectionId);
   }
