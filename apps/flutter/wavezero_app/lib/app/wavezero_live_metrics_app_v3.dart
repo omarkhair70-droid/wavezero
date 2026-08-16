@@ -28,6 +28,7 @@ import '../features/search/search_text.dart';
 import '../features/search/search_results.dart';
 import '../features/search/search_index.dart';
 import '../features/playback/playback_preferences.dart';
+import '../features/playback/audio_effect_preferences.dart';
 import '../features/downloads/cache_service.dart';
 import '../features/downloads/downloads_presentation.dart';
 import '../features/downloads/smart_download_policy.dart';
@@ -175,7 +176,6 @@ class _PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<_PlayerScreen> {
   static const _refreshInterval = Duration(milliseconds: 500);
   static const _autoAdvanceThresholdMs = 1200;
-  static const _audioEffectPreferenceKey = 'wavezero.selected_audio_effect_profile';
   static const int _defaultCatalogLimit = 300;
   static const int _initialVisibleTrackCount = 200;
   static const int _libraryPageSize = 100;
@@ -223,6 +223,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   WzLibrarySortMode _librarySortMode = WzLibrarySortMode.recentlyAdded;
 
   final WzPlaybackPreferences _playbackPreferences = const WzPlaybackPreferences();
+  final WzAudioEffectPreferences _audioEffectPreferences = const WzAudioEffectPreferences();
   final WzAppModePreferences _appModePreferences = const WzAppModePreferences();
 
   final WzPlaybackOperationController _operationController = WzPlaybackOperationController();
@@ -1366,8 +1367,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _initAudioEffects() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final storedProfile = parseAudioEffectProfile(prefs.getString(_audioEffectPreferenceKey));
+      final storedProfile = await _audioEffectPreferences.load();
       if (!mounted) return;
       setState(() {
         _selectedAudioEffectProfile = storedProfile;
@@ -1407,8 +1407,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
     if (persist) {
       try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_audioEffectPreferenceKey, profile.id);
+        await _audioEffectPreferences.save(profile);
       } catch (error) {
         if (mounted) {
           setState(() => _lastAudioEffectApplyResult = 'Effect selected but preference was not persisted: $error');
