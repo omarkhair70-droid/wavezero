@@ -19,6 +19,7 @@ import '../playback/playback_metrics.dart';
 import '../playback/test_track.dart';
 import '../features/playback/auto_advance_trigger.dart';
 import '../features/playback/playback_modes.dart';
+import '../features/library/library_controls.dart';
 import '../features/playback/playback_preferences.dart';
 import '../cache/cache_service.dart';
 import '../cloud_vault/cloud_vault_models.dart';
@@ -201,8 +202,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int _deviceMusicLastScanCount = 0;
   String? _deviceMusicLastError;
   int? _deviceMusicImportedAtMs;
-  _LibrarySourceFilter _librarySourceFilter = _LibrarySourceFilter.all;
-  _LibrarySortMode _librarySortMode = _LibrarySortMode.recentlyAdded;
+  WzLibrarySourceFilter _librarySourceFilter = WzLibrarySourceFilter.all;
+  WzLibrarySortMode _librarySortMode = WzLibrarySortMode.recentlyAdded;
 
   final WzPlaybackPreferences _playbackPreferences = const WzPlaybackPreferences();
 
@@ -351,11 +352,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   List<CatalogTrackSummary> get _libraryTracks {
     return switch (_librarySourceFilter) {
-      _LibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks, ..._cachedCatalogTracks, ..._cloudCatalogTracks],
-      _LibrarySourceFilter.api => _catalog,
-      _LibrarySourceFilter.device => _deviceCatalogTracks,
-      _LibrarySourceFilter.downloads => _cachedCatalogTracks,
-      _LibrarySourceFilter.cloud => _cloudCatalogTracks,
+      WzLibrarySourceFilter.all => [..._catalog, ..._deviceCatalogTracks, ..._cachedCatalogTracks, ..._cloudCatalogTracks],
+      WzLibrarySourceFilter.api => _catalog,
+      WzLibrarySourceFilter.device => _deviceCatalogTracks,
+      WzLibrarySourceFilter.downloads => _cachedCatalogTracks,
+      WzLibrarySourceFilter.cloud => _cloudCatalogTracks,
     };
   }
 
@@ -1438,7 +1439,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _deviceMusicImportedAtMs = scan.scannedAtMs ?? DateTime.now().millisecondsSinceEpoch;
         _visibleTrackCount = _initialVisibleTrackCount;
         _invalidateCatalogMemos();
-        if (scan.tracks.isNotEmpty) _librarySourceFilter = _LibrarySourceFilter.device;
+        if (scan.tracks.isNotEmpty) _librarySourceFilter = WzLibrarySourceFilter.device;
         _catalogStatus = scan.status == 'success'
             ? 'Imported ${scan.tracks.length} device music tracks from Android MediaStore.'
             : 'Device music scan ${scan.status}${scan.error == null ? '' : ': ${scan.error}'}';
@@ -2065,12 +2066,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       final left = a.$2;
       final right = b.$2;
       final result = switch (_librarySortMode) {
-        _LibrarySortMode.recentlyAdded => addedRank(right).compareTo(addedRank(left)),
-        _LibrarySortMode.titleAz => compareNullableString(left.title, right.title),
-        _LibrarySortMode.artistAz => compareNullableString(left.artistName ?? left.albumName, right.artistName ?? right.albumName),
-        _LibrarySortMode.longestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: true),
-        _LibrarySortMode.shortestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: false),
-        _LibrarySortMode.quality => compareNullableString(left.primaryAsset?.qualityLabel, right.primaryAsset?.qualityLabel),
+        WzLibrarySortMode.recentlyAdded => addedRank(right).compareTo(addedRank(left)),
+        WzLibrarySortMode.titleAz => compareNullableString(left.title, right.title),
+        WzLibrarySortMode.artistAz => compareNullableString(left.artistName ?? left.albumName, right.artistName ?? right.albumName),
+        WzLibrarySortMode.longestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: true),
+        WzLibrarySortMode.shortestDuration => compareNullableDuration(left.durationMs, right.durationMs, longestFirst: false),
+        WzLibrarySortMode.quality => compareNullableString(left.primaryAsset?.qualityLabel, right.primaryAsset?.qualityLabel),
       };
       return result == 0 ? a.$1.compareTo(b.$1) : result;
     }
@@ -3629,19 +3630,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
 enum QueueAdvanceSource { manual, next, previous, auto, shuffle }
 
-enum _LibrarySourceFilter { all, api, device, downloads, cloud }
-
-extension _LibrarySourceFilterLabel on _LibrarySourceFilter {
-  String get label => switch (this) {
-        _LibrarySourceFilter.all => 'All',
-        _LibrarySourceFilter.api => 'Catalog',
-        _LibrarySourceFilter.device => 'Device music',
-        _LibrarySourceFilter.downloads => 'Downloaded',
-        _LibrarySourceFilter.cloud => 'Cloud',
-      };
-}
-
-
 enum WzSearchResultType { track, deviceTrack, downloadedTrack, cloudTrack, collection, historyEntry, artistLike, unknown }
 
 enum WzSearchSource { apiCatalog, deviceMusic, downloads, cloudVault, collections, history, legalDemo }
@@ -3770,19 +3758,6 @@ int _searchRank(WzSearchResult result, String query) {
   if (result.source == WzSearchSource.history || result.source == WzSearchSource.downloads || result.source == WzSearchSource.deviceMusic) return 50;
   if (source.contains(q) || license.contains(q)) return 60;
   return 80;
-}
-
-enum _LibrarySortMode { recentlyAdded, titleAz, artistAz, longestDuration, shortestDuration, quality }
-
-extension _LibrarySortModeLabel on _LibrarySortMode {
-  String get label => switch (this) {
-        _LibrarySortMode.recentlyAdded => 'Recently added / imported',
-        _LibrarySortMode.titleAz => 'Title A-Z',
-        _LibrarySortMode.artistAz => 'Artist A-Z',
-        _LibrarySortMode.longestDuration => 'Longest duration',
-        _LibrarySortMode.shortestDuration => 'Shortest duration',
-        _LibrarySortMode.quality => 'Quality',
-      };
 }
 
 CatalogTrackSummary _catalogSummaryFromCachedTrack(CachedTrackMetadata track) {
@@ -7889,13 +7864,13 @@ class _CatalogListCard extends StatelessWidget {
   final bool refreshDisabled;
   final bool addToQueueDisabled;
   final TextEditingController searchController;
-  final _LibrarySourceFilter librarySourceFilter;
-  final _LibrarySortMode librarySortMode;
+  final WzLibrarySourceFilter librarySourceFilter;
+  final WzLibrarySortMode librarySortMode;
   final String devicePermissionStatus;
   final String deviceScanStatus;
   final String? deviceLastError;
-  final ValueChanged<_LibrarySourceFilter> onSourceFilterChanged;
-  final ValueChanged<_LibrarySortMode> onSortModeChanged;
+  final ValueChanged<WzLibrarySourceFilter> onSourceFilterChanged;
+  final ValueChanged<WzLibrarySortMode> onSortModeChanged;
   final VoidCallback onClearSearch;
   final VoidCallback onOpenFullSearch;
   final VoidCallback onOpenCloudVault;
@@ -7947,11 +7922,11 @@ class _CatalogListCard extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'All', detail: '$combinedTrackCount tracks', status: 'Unified library', icon: Icons.library_music, active: librarySourceFilter == _LibrarySourceFilter.all)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue, active: librarySourceFilter == _LibrarySourceFilter.api)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Device music', detail: '$deviceTrackCount imported', status: devicePermissionStatus == 'granted' ? 'Device access ready • $deviceScanStatus' : 'Device access optional • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == _LibrarySourceFilter.device)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done, active: librarySourceFilter == _LibrarySourceFilter.downloads)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Saved metadata • playback coming soon', icon: Icons.cloud_done_outlined, active: librarySourceFilter == _LibrarySourceFilter.cloud)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'All', detail: '$combinedTrackCount tracks', status: 'Unified library', icon: Icons.library_music, active: librarySourceFilter == WzLibrarySourceFilter.all)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Catalog', detail: '$apiTrackCount tracks', status: status, icon: Icons.cloud_queue, active: librarySourceFilter == WzLibrarySourceFilter.api)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Device music', detail: '$deviceTrackCount imported', status: devicePermissionStatus == 'granted' ? 'Device access ready • $deviceScanStatus' : 'Device access optional • $deviceScanStatus', icon: Icons.phone_android, active: librarySourceFilter == WzLibrarySourceFilter.device)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done, active: librarySourceFilter == WzLibrarySourceFilter.downloads)),
+                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Saved metadata • playback coming soon', icon: Icons.cloud_done_outlined, active: librarySourceFilter == WzLibrarySourceFilter.cloud)),
                 ],
               );
             },
@@ -7960,7 +7935,7 @@ class _CatalogListCard extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _LibrarySourceFilter.values
+            children: WzLibrarySourceFilter.values
                 .map((filter) => ChoiceChip(
                       avatar: Icon(_librarySourceFilterIcon(filter), size: 16),
                       label: Text(_librarySourceFilterShortLabel(filter), maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -8006,10 +7981,10 @@ class _CatalogListCard extends StatelessWidget {
           const SizedBox(height: 12),
           _FeaturedDemoLibraryShelf(picks: curatedPicks, onPlayPick: onPlayCuratedPick),
           const SizedBox(height: 12),
-          DropdownButtonFormField<_LibrarySortMode>(
+          DropdownButtonFormField<WzLibrarySortMode>(
             value: librarySortMode,
             decoration: const InputDecoration(labelText: 'Sort library'),
-            items: _LibrarySortMode.values
+            items: WzLibrarySortMode.values
                 .map((mode) => DropdownMenuItem(value: mode, child: Text(mode.label)))
                 .toList(growable: false),
             onChanged: (mode) {
@@ -8083,20 +8058,20 @@ class _CatalogListCard extends StatelessWidget {
   }
 }
 
-IconData _librarySourceFilterIcon(_LibrarySourceFilter filter) => switch (filter) {
-      _LibrarySourceFilter.all => Icons.library_music,
-      _LibrarySourceFilter.api => Icons.cloud_queue,
-      _LibrarySourceFilter.device => Icons.phone_android,
-      _LibrarySourceFilter.downloads => Icons.download_done,
-      _LibrarySourceFilter.cloud => Icons.cloud_done_outlined,
+IconData _librarySourceFilterIcon(WzLibrarySourceFilter filter) => switch (filter) {
+      WzLibrarySourceFilter.all => Icons.library_music,
+      WzLibrarySourceFilter.api => Icons.cloud_queue,
+      WzLibrarySourceFilter.device => Icons.phone_android,
+      WzLibrarySourceFilter.downloads => Icons.download_done,
+      WzLibrarySourceFilter.cloud => Icons.cloud_done_outlined,
     };
 
-String _librarySourceFilterShortLabel(_LibrarySourceFilter filter) => switch (filter) {
-      _LibrarySourceFilter.all => 'All',
-      _LibrarySourceFilter.api => 'Catalog',
-      _LibrarySourceFilter.device => 'Device',
-      _LibrarySourceFilter.downloads => 'Downloads',
-      _LibrarySourceFilter.cloud => 'Cloud',
+String _librarySourceFilterShortLabel(WzLibrarySourceFilter filter) => switch (filter) {
+      WzLibrarySourceFilter.all => 'All',
+      WzLibrarySourceFilter.api => 'Catalog',
+      WzLibrarySourceFilter.device => 'Device',
+      WzLibrarySourceFilter.downloads => 'Downloads',
+      WzLibrarySourceFilter.cloud => 'Cloud',
     };
 
 class _SourceBadge extends StatelessWidget {
