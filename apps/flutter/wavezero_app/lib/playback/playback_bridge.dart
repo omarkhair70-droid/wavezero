@@ -240,8 +240,12 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
       final metrics = PlaybackMetrics.fromJson(
         result ?? const <Object?, Object?>{},
       );
-      if (_lastBridgeError == null) return metrics;
-      return metrics.copyWith(playbackError: _lastBridgeError);
+      // A successful native metrics round-trip proves the bridge is reachable
+      // again. Do not keep surfacing an older transport/plugin failure after
+      // communication has recovered. Any real native playbackError already
+      // present in the returned metrics remains intact.
+      _lastBridgeError = null;
+      return metrics;
     } on MissingPluginException catch (error) {
       return _errorMetrics('Android playback bridge is not available: $error');
     } on PlatformException catch (error) {
