@@ -124,6 +124,7 @@ class WzArtwork extends StatelessWidget {
     this.title,
     this.artist,
     this.mood,
+    this.fit = BoxFit.cover,
   });
 
   final String? artworkUrl;
@@ -132,6 +133,7 @@ class WzArtwork extends StatelessWidget {
   final String? title;
   final String? artist;
   final String? mood;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +158,7 @@ class WzArtwork extends StatelessWidget {
             )
           : Image.network(
               url,
-              fit: BoxFit.cover,
+              fit: fit,
               errorBuilder: (_, __, ___) => WzWaveZeroCoverArt(
                 trackId: trackId,
                 title: title,
