@@ -39,6 +39,7 @@ import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
 import '../features/playback/sleep_timer_presentation.dart';
 import '../features/queue/queue_session_store.dart';
+import '../features/queue/queue_session_restore.dart';
 import '../features/queue/queue_mutations.dart';
 import '../features/queue/queue_position.dart';
 import '../features/queue/smart_queue_policy.dart';
@@ -1921,7 +1922,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _findTrack(catalog.tracks, restored?.selectedTrackId) ??
             _findTrack(catalog.tracks, _selectedTrackId) ??
             (catalog.tracks.isEmpty ? null : catalog.tracks.first);
-        final restoredQueue = restored == null ? const <CatalogTrackSummary>[] : _queueFromSnapshot(catalog.tracks, restored);
+        final restoredQueue = restored == null
+            ? const <CatalogTrackSummary>[]
+            : resolveWzQueueFromSnapshot(catalogTracks: catalog.tracks, snapshot: restored);
         final startupQueue = restoredQueue.isNotEmpty
             ? restoredQueue.take(_initialVisibleTrackCount).toList(growable: false)
             : (preferred == null ? const <CatalogTrackSummary>[] : <CatalogTrackSummary>[preferred]);
@@ -2019,25 +2022,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final snapshot = await widget.sessionStore.load();
     _sessionRecoveryMs ??= _elapsedSince(_sessionRecoveryStartedAtMs);
     if (snapshot == null) return null;
-    final validIds = catalogTracks.map((track) => track.trackId).toSet();
-    final restoredIds = snapshot.queueTrackIds.where(validIds.contains).toList(growable: false);
-    if (restoredIds.isEmpty && snapshot.currentTrackId == null && snapshot.selectedTrackId == null) return null;
-    return QueueSessionSnapshot(
-      queueTrackIds: restoredIds,
-      currentTrackId: validIds.contains(snapshot.currentTrackId) ? snapshot.currentTrackId : null,
-      selectedTrackId: validIds.contains(snapshot.selectedTrackId) ? snapshot.selectedTrackId : null,
-      autoAdvanceEnabled: snapshot.autoAdvanceEnabled,
+    return sanitizeWzQueueSessionSnapshot(
+      catalogTracks: catalogTracks,
+      snapshot: snapshot,
     );
   }
 
   int? _elapsedSince(int? startedAtMs) {
     if (startedAtMs == null) return null;
     return DateTime.now().millisecondsSinceEpoch - startedAtMs;
-  }
-
-  List<CatalogTrackSummary> _queueFromSnapshot(List<CatalogTrackSummary> catalogTracks, QueueSessionSnapshot snapshot) {
-    final byId = {for (final track in catalogTracks) track.trackId: track};
-    return snapshot.queueTrackIds.map((id) => byId[id]).whereType<CatalogTrackSummary>().toList(growable: false);
   }
 
   int _libraryAddedRank(CatalogTrackSummary track) {
