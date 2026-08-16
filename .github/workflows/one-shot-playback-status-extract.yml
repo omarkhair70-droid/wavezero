@@ -35,10 +35,13 @@ jobs:
 
           start_marker = "  String get _statusText {\n"
           end_marker = "\n\n  @override\n  void initState() {"
-          if text.count(start_marker) != 1 or text.count(end_marker) != 1:
-              raise SystemExit('playback status getter boundaries changed')
+          if text.count(start_marker) != 1:
+              raise SystemExit('playback status getter start changed')
           start = text.index(start_marker)
-          end = text.index(end_marker, start)
+          try:
+              end = text.index(end_marker, start)
+          except ValueError:
+              raise SystemExit('playback status getter end changed')
           replacement = (
               "  String get _statusText => WzPlaybackStatusPresentation.headline(\n"
               "        lastError: _lastError,\n"
