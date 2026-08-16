@@ -63,8 +63,8 @@ void main() {
     expect(wzHistorySourceLabel(WzListeningHistorySource.cached), 'Downloaded');
     expect(
       friendlyWzHistoryTime(
-        1_000_000,
-        now: DateTime.fromMillisecondsSinceEpoch(1_000_000 + 30 * 60 * 1000),
+        1000000,
+        now: DateTime.fromMillisecondsSinceEpoch(1000000 + 30 * 60 * 1000),
       ),
       '30m ago',
     );
