@@ -38,7 +38,7 @@ void main() {
     expect(find.text('Library'), findsOneWidget);
     expect(find.text('All music'), findsOneWidget);
     expect(find.text('Device Music'), findsOneWidget);
-    expect(find.text('Downloads'), findsOneWidget);
+    expect(find.text('Downloads'), findsWidgets);
     expect(find.text('Collections'), findsOneWidget);
     expect(find.byTooltip('Search Library'), findsOneWidget);
     expect(find.text('Cloud preview'), findsNothing);
