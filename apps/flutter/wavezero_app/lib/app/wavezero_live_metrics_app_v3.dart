@@ -41,6 +41,8 @@ import '../features/collections/collection_resolution.dart';
 import '../features/collections/collection_mutations.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/history/history_selection.dart';
+import '../features/history/history_resolution.dart';
+import '../features/history/history_presentation.dart';
 import '../features/settings/app_mode_preferences.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
@@ -441,7 +443,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       historyEntries: _listeningHistory,
       resolveHistoryEntry: _resolveHistoryEntry,
       isDeviceTrack: _isDeviceCatalogTrack,
-      historySourceLabel: _historySourceLabel,
+      historySourceLabel: wzHistorySourceLabel,
     );
     _searchIndexMemoKey = key;
     _searchIndexMemo = results;
@@ -832,37 +834,25 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       wzResolveCollectionTrack(libraryTracks: _libraryTracks, snapshot: snapshot);
 
   CatalogTrackSummary? _resolveHistoryEntry(WzListeningHistoryEntry entry) {
-    for (final track in _libraryTracks) {
-      if (track.trackId == entry.trackId) return track;
-    }
-
     final restoredDeviceTrack = _findDeviceTrack(entry.trackId);
-    return restoredDeviceTrack == null ? null : wzCatalogSummaryFromDeviceTrack(restoredDeviceTrack);
+    return wzResolveHistoryEntry(
+      libraryTracks: _libraryTracks,
+      entry: entry,
+      fallbackTrack: restoredDeviceTrack == null ? null : wzCatalogSummaryFromDeviceTrack(restoredDeviceTrack),
+    );
   }
 
   WzListeningHistoryEntry _historySnapshotForManifest(
     CatalogTrackManifest manifest, {
     required WzListeningHistorySource source,
     required String? playableUrl,
-  }) {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return WzListeningHistoryEntry(
-      trackId: manifest.trackId,
-      title: manifest.title,
-      subtitle: manifest.subtitle,
-      artworkUrl: manifest.artworkUrl,
-      source: source,
-      primaryUrl: playableUrl ?? manifest.streamUrl,
-      qualityLabel: manifest.qualityLabel,
-      codec: manifest.codec,
-      license: source == WzListeningHistorySource.device ? LicenseMetadata.userDevice : manifest.license,
-      lastPlayedAtMs: now,
-      firstPlayedAtMs: now,
-      playCount: 1,
-      lastPositionMs: 0,
-      durationMs: manifest.durationMs,
-    );
-  }
+  }) =>
+      wzHistorySnapshotForManifest(
+        manifest,
+        source: source,
+        playableUrl: playableUrl,
+        nowMs: DateTime.now().millisecondsSinceEpoch,
+      );
 
   Future<void> _recordListeningHistory(WzListeningHistoryEntry snapshot) async {
     final next = await _listeningHistoryService.recordPlay(snapshot);
@@ -3486,30 +3476,6 @@ bool _isDeviceCatalogTrack(CatalogTrackSummary track) => track.source == 'device
 bool _isCachedCatalogTrack(CatalogTrackSummary track) => track.source == 'cached' || track.primaryAsset?.assetId.startsWith('cached-') == true;
 
 
-String _historySourceLabel(WzListeningHistorySource source) => switch (source) {
-      WzListeningHistorySource.api => 'Catalog',
-      WzListeningHistorySource.device => 'Device music',
-      WzListeningHistorySource.cached => 'Downloaded',
-      WzListeningHistorySource.unknown => 'Unknown',
-    };
-
-String _friendlyHistoryTime(int timestampMs) {
-  final elapsed = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(timestampMs));
-  if (elapsed.inMinutes < 1) return 'Just now';
-  if (elapsed.inHours < 1) return '${elapsed.inMinutes}m ago';
-  if (elapsed.inDays < 1) return '${elapsed.inHours}h ago';
-  if (elapsed.inDays < 7) return '${elapsed.inDays}d ago';
-  return '${DateTime.fromMillisecondsSinceEpoch(timestampMs).month}/${DateTime.fromMillisecondsSinceEpoch(timestampMs).day}';
-}
-
-String _historyPositionLabel(WzListeningHistoryEntry entry) {
-  if (entry.lastPositionMs <= 0) return entry.durationMs == null ? 'Ready to play' : 'Start from beginning';
-  final total = entry.durationMs;
-  final position = _formatDuration(entry.lastPositionMs);
-  if (total == null || total <= 0) return 'Resume at $position';
-  return 'Resume at $position of ${_formatDuration(total)}';
-}
-
 String _formatDuration(int ms) {
   final totalSeconds = (ms / 1000).floor();
   final minutes = totalSeconds ~/ 60;
@@ -3834,14 +3800,14 @@ class _ContinueListeningCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-            WzStatusPill(label: _historySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
+            WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
             WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
             if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
           ]),
           const SizedBox(height: WzSpacing.sm),
           Text(entry.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
           const SizedBox(height: WzSpacing.xxs),
-          Text('${entry.subtitle} • ${_historyPositionLabel(entry)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
+          Text('${entry.subtitle} • ${wzHistoryPositionLabel(entry)}', maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.body),
           if (!available) ...[
             const SizedBox(height: WzSpacing.xs),
             const Text('Track is not available right now.', style: WzText.caption),
@@ -4224,14 +4190,14 @@ class _HistoryEntryTile extends StatelessWidget {
                   children: [
                     Expanded(child: Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle)),
                     const SizedBox(width: WzSpacing.xs),
-                    Text(_friendlyHistoryTime(entry.lastPlayedAtMs), style: WzText.caption),
+                    Text(friendlyWzHistoryTime(entry.lastPlayedAtMs), style: WzText.caption),
                   ],
                 ),
                 const SizedBox(height: WzSpacing.xxs),
                 Text(entry.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
                 const SizedBox(height: WzSpacing.xs),
                 Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-                  WzStatusPill(label: _historySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
+                  WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album),
                   WzStatusPill(label: '${entry.playCount} play${entry.playCount == 1 ? '' : 's'}', icon: Icons.repeat),
                   if (entry.qualityLabel != null) WzStatusPill(label: _productQualityLabel(entry.qualityLabel!), icon: Icons.high_quality),
                   WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy),
