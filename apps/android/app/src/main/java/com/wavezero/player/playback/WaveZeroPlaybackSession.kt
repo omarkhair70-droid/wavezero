@@ -4,6 +4,17 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 
+/**
+ * Process-scoped owner for WaveZero's native playback engine.
+ *
+ * Both the Flutter activity bridge and [WaveZeroMediaSessionService] use this
+ * same [AudioPlayerManager]. A service instance can be stopped or recreated
+ * while the Flutter activity is still alive, so service teardown must not
+ * release this manager out from under the activity's MethodChannel handler.
+ * Android process death remains the normal final cleanup boundary for the
+ * long-lived playback session; [release] is reserved for explicit process/test
+ * teardown where no client can still hold the manager.
+ */
 object WaveZeroPlaybackSession {
     @Volatile
     private var manager: AudioPlayerManager? = null

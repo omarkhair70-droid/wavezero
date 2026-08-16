@@ -1,103 +1,94 @@
 # WaveZero Roadmap
 
-This roadmap is the working execution plan for WaveZero after the Phase 0D Max Stack bridge work.
+This roadmap reflects the product after PR #91. For the detailed cleanup sequence and protected behavior map, see [`CONSOLIDATION_PLAN.md`](CONSOLIDATION_PLAN.md).
 
-## Architecture Direction
+## Architecture direction
 
-WaveZero is a native audio platform with a Flutter experience layer and a Rust deterministic core.
+WaveZero is an Android-first music experience with:
 
-- Flutter owns the main product UI and experience layer.
-- Android Media3 owns Android decoded playback and operating-system integration.
-- Future iOS AVFoundation owns iOS decoded playback and operating-system integration.
-- Rust owns deterministic shared logic: queue decisions, prefetch decisions, cache policy, network scoring, normalized metrics, and future DSP/intelligence primitives.
-- Cloud/edge infrastructure will own catalog APIs, signed manifests, storage, encoding, and delivery.
+- Flutter owning the consumer UI and app-level product orchestration.
+- Android Media3/ExoPlayer owning decoded Android playback, MediaSession, notification controls, audio focus, and native playback lifecycle.
+- Rust `wavezero-core` owning deterministic shared playback decision models where they are deliberately used.
+- `wavezero-ffi` remaining a future runtime boundary scaffold until generated bindings are intentionally integrated.
+- Rust API/content infrastructure owning catalog/content-mode foundations.
+- Future cloud/edge infrastructure owning hosted catalog storage, signed media delivery, encoding, and production operations when those systems are actually implemented.
 
-## Completed Phases
+## Playback milestones already implemented
 
-### Phase 1G — Player State Machine and UX Cleanup
+### Player state and UX cleanup
 
-Status: Completed
+Status: Implemented.
 
-Outcome:
+- Operation-state model separates long-running product operations from normal playback controls.
+- Catalog/search remain usable while audio is playing.
+- Metrics refresh does not intentionally block normal controls.
 
-- A Flutter operation-state model separates player, catalog, queue, seek, manual-track, and metrics operations.
-- The player shows clearer state/status copy.
-- Catalog search stays usable while audio is playing.
-- Metrics refresh no longer blocks normal controls.
-- Native playback bridge ownership remains unchanged.
+### Persistent queue and session recovery
 
-### Phase 1I — Persistent Queue and Session Recovery
+Status: Implemented.
 
-Status: Completed
+- Queue, selected/current track, and auto-advance state persist locally.
+- Restored catalog tracks are resolved against the current catalog when possible.
 
-Outcome:
+### Predictive manifest preload
 
-- The queue, selected/current track, and auto-advance preference persist on-device.
-- The player restores queued tracks after catalog load by matching stored track IDs against the current API catalog.
-- Lightweight session recovery status is visible in the Flutter shell.
-- Persistence remains client-side; accounts, backend storage, and databases are still outside the product scope.
+Status: Implemented.
 
-## Next Phases
+- Flutter predicts the up-next track from current queue state.
+- The next catalog manifest can be prefetched before a transition.
+- Manifest-preload metrics remain separate from true native audio preparation.
 
-### Phase 2A — Predictive Preload + Instant Next Foundation
+### Native dual-player prebuffer and prepared handoff
 
-Status: In progress
+Status: Implemented; hardening continues.
 
-Goal:
+- Android owns a secondary ExoPlayer for the predicted next track.
+- Native readiness is reported only after the secondary player reaches a prepared/ready state.
+- Explicit Next can hand off to the prepared player when the candidate still matches.
+- Auto-advance can use the prepared-player path when ready.
+- The prepared player becomes the primary player and MediaSession is reattached to the new primary player.
+- Safe fallback remains available when the candidate is stale or not ready.
 
-Use the current queue position to predict the next track and prefetch its catalog manifest so Next can avoid redundant API work before handing playback to the existing native bridge.
+This replaces the old roadmap statement that prepared-player handoff was still deferred.
 
-Scope:
+## Product milestones already implemented
 
-- Add a Smart Preload toggle in the Flutter player shell, enabled by default.
-- Detect the next queued track whenever the current track, queue, or auto-advance setting changes.
-- Prefetch the predicted next track manifest on the Flutter side.
-- Track prefetch hit/miss counts and show manifest-prefetch status separately from true audio preparation.
-- Preserve the existing Media3/ExoPlayer playback bridge and normal fallback path.
+The active Flutter app now includes foundations for:
 
-Non-goals:
+- Home / Library / Now / Queue / Downloads consumer navigation.
+- Device Music through Android MediaStore.
+- Local downloads/cache and offline playback.
+- Search, collections, listening history, themes, settings, and developer diagnostics.
+- Shuffle, repeat, and sleep timer controls.
+- Audio quality selection and Smart Downloads.
+- Cloud Vault product/data-model foundation.
+- Large-catalog performance safeguards.
+- Curated demo shelves and deterministic generated artwork fallbacks.
 
-- No native dual-player audio prebuffering in Phase 2A.
-- No Hi-Res Lossless.
-- No Rust decoder rewrite.
-- No P2P/IPFS.
-- No auth.
-- No cloud sync.
-- No database.
+## Current priority — consolidation and hardening
 
-### Phase 2B — Native Dual-Player Prebuffer / True Audio Preloading
+Do not add another large feature wave before the active product is easier to maintain and release.
 
-Status: In progress — Phase 2B foundation has a safe secondary ExoPlayer that prepares the predicted next track and reports native readiness. The primary Media3 player remains canonical; prepared-player handoff/swap is explicitly deferred to Phase 2B.1, so Next still records a safe fallback miss until that handoff exists.
+Current order:
 
-Goal:
+1. Stabilize native playback/session lifetime and other P0 behavior bugs.
+2. Correct stale consumer status/documentation truth.
+3. Decompose the large Flutter V3 screen/state owner into feature modules without rewriting behavior.
+4. Harden native service/security boundaries and decide the Audio Effects product truth.
+5. Decide whether Rust becomes a real shipping runtime decision layer or remains a documented deterministic/reference engine.
+6. Modularize the Rust API and wire production persistence only when required.
+7. Add Flutter/Android CI and release engineering.
+8. Build the narrow local-first Nova music/clip selection integration.
 
-Add a safe native playback-layer implementation for true audio preloading, likely with a second prepared player or Media3-supported prebuffer path, while keeping the Flutter Phase 2A manifest prefetch metrics honest.
+## Deferred product work
 
-Scope:
+These remain future work and should not be presented as complete today:
 
-- Investigate a native dual-player or Media3 preloading strategy.
-- Explicitly report audioPreparedBeforeNext only when native audio was actually prepared before the transition.
-- Preserve background playback, notification controls, lock-screen controls, queue recovery, and accurate playback metrics.
-
-Non-goals:
-
-- No Hi-Res Lossless.
-- No Rust decoder rewrite.
-- No P2P/IPFS.
-- No auth.
-- No cloud sync.
-- No database.
-
-### Phase 1H — Local Library and Add Track UX
-
-Status: Planned
-
-Goal:
-
-Replace manual URL editing with a cleaner local-library workflow.
-
-Scope:
-
-- Add a clearer local-track entry workflow.
-- Reduce manual setup visibility for normal use.
-- Keep production storage and upload outside this phase.
+- Real native DSP/effects implementation.
+- Google Drive/Dropbox/OneDrive/Nextcloud provider integrations.
+- Hosted production catalog/database operations.
+- R2 signed media delivery and production encoding pipeline.
+- Auth/accounts and cloud sync.
+- Artist upload/dashboard workflows.
+- Payments/subscriptions and DRM/licensing integrations.
+- iOS AVFoundation playback adapter.
