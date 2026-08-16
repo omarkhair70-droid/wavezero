@@ -342,11 +342,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         catalogTracks: _catalog,
         deviceTracks: _deviceCatalogTracks,
         downloadedTracks: _cachedCatalogTracks,
-        cloudTracks: _cloudCatalogTracks,
+        cloudTracks: _developerMode ? _cloudCatalogTracks : const <CatalogTrackSummary>[],
       );
 
   int get _libraryTotalTrackCount => _libraryTracks.length;
-  int get _libraryCombinedTrackCount => _catalog.length + _deviceMusicTracks.length + _cachedLibrary.length + _cloudVaultTracks.length;
+  int get _libraryCombinedTrackCount => _catalog.length + _deviceMusicTracks.length + _cachedLibrary.length + (_developerMode ? _cloudVaultTracks.length : 0);
   bool get _largeCatalogMode => _libraryCombinedTrackCount > _catalogLimit;
   int get _catalogLimit => _PlayerScreenState._defaultCatalogLimit;
   int get _effectiveVisibleTrackCount => math.min(_visibleTrackCount, _filteredTrackCount);
@@ -394,6 +394,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _deviceMusicTracks.length,
         _cachedLibrary.length,
         _cloudVaultTracks.length,
+        _developerMode,
         _collections.length,
         _listeningHistory.length,
       );
@@ -406,7 +407,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       catalogTracks: _searchableCatalogTracks,
       deviceTracks: _deviceCatalogTracks,
       downloadedTracks: _cachedCatalogTracks,
-      cloudTracks: _cloudCatalogTracks,
+      cloudTracks: _developerMode ? _cloudCatalogTracks : const <CatalogTrackSummary>[],
       collections: _collections,
       historyEntries: _listeningHistory,
       resolveHistoryEntry: _resolveHistoryEntry,
@@ -561,7 +562,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       });
     });
     _poller = Timer.periodic(_refreshInterval, (_) => _refreshMetrics());
-    _loadCatalog(fallbackToDemo: true);
+    _loadCatalog(fallbackToDemo: false);
     unawaited(_initCache());
     unawaited(_initAudioEffects());
     unawaited(_refreshDeviceMusicPermissionStatus());
@@ -569,7 +570,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_loadCollections());
     unawaited(_loadListeningHistory());
     unawaited(_loadRecentSearches());
-    unawaited(_loadCloudVault());
     unawaited(_loadPlaybackModePrefs());
   }
 
@@ -678,6 +678,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _openCloudVaultPage() async {
+    if (!_developerMode) return;
+    await _loadCloudVault();
+    if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => WzCloudVaultPage(
         tracks: _cloudVaultTracks,
@@ -1129,7 +1132,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (!mounted) return;
     setState(() {
       _appMode = mode;
-      if (mode == WzAppMode.consumer && _selectedTab == WzAppTab.engine) _selectedTab = WzAppTab.home;
+      if (mode == WzAppMode.consumer) {
+        if (_selectedTab == WzAppTab.engine) _selectedTab = WzAppTab.home;
+        if (_librarySourceFilter == WzLibrarySourceFilter.cloud) _librarySourceFilter = WzLibrarySourceFilter.all;
+        _cloudVaultTracks = const <CloudVaultTrack>[];
+        _invalidateCatalogMemos();
+      }
     });
     messenger.showSnackBar(SnackBar(content: Text(mode == WzAppMode.developer ? 'Developer mode enabled' : 'Consumer mode enabled')));
   }
@@ -2811,7 +2819,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             apiTrackCount: _catalog.length,
             deviceTrackCount: _deviceMusicTracks.length,
             cachedTrackCount: _cachedLibrary.length,
-            cloudTrackCount: _cloudVaultTracks.length,
+            cloudTrackCount: _developerMode ? _cloudVaultTracks.length : 0,
+            showCloudSource: _developerMode,
             combinedTrackCount: _libraryCombinedTrackCount,
             visibleTrackCount: _effectiveVisibleTrackCount,
             filteredTrackCount: _filteredTrackCount,

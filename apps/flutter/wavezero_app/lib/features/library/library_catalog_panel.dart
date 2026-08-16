@@ -55,6 +55,7 @@ class WzLibraryCatalogPanel extends StatelessWidget {
     required this.onOpenCollections,
     required this.onCache,
     required this.onDeleteCachedTrack,
+    this.showCloudSource = false,
     this.offlineMode = false,
   });
 
@@ -99,6 +100,7 @@ class WzLibraryCatalogPanel extends StatelessWidget {
   final VoidCallback onOpenCollections;
   final ValueChanged<CatalogTrackSummary> onCache;
   final ValueChanged<CatalogTrackSummary> onDeleteCachedTrack;
+  final bool showCloudSource;
   final bool offlineMode;
 
   @override
@@ -128,6 +130,7 @@ class WzLibraryCatalogPanel extends StatelessWidget {
             onOpenCollections: onOpenCollections,
             onOpenFullSearch: onOpenFullSearch,
             onOpenCloudVault: onOpenCloudVault,
+            showCloudSource: showCloudSource,
           ),
           const SizedBox(height: 12),
           WzFeaturedDemoLibraryShelf(picks: curatedPicks, onPlayPick: onPlayCuratedPick),

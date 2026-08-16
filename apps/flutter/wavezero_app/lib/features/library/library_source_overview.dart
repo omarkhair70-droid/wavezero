@@ -25,6 +25,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
     required this.onOpenCollections,
     required this.onOpenFullSearch,
     required this.onOpenCloudVault,
+    this.showCloudSource = false,
   });
 
   final int apiTrackCount;
@@ -46,6 +47,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
   final VoidCallback onOpenCollections;
   final VoidCallback onOpenFullSearch;
   final VoidCallback onOpenCloudVault;
+  final bool showCloudSource;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -97,7 +99,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Downloads', detail: '$cachedTrackCount cached', status: '${(cacheBytes / 1024).toStringAsFixed(1)} KB stored', icon: Icons.download_done_rounded, active: librarySourceFilter == WzLibrarySourceFilter.downloads)),
-                  SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Saved metadata • playback coming soon', icon: Icons.cloud_done_outlined, active: librarySourceFilter == WzLibrarySourceFilter.cloud)),
+                  if (showCloudSource) SizedBox(width: cardWidth, child: _LibrarySourceSummaryCard(title: 'Cloud', detail: '$cloudTrackCount local entries', status: 'Developer preview source', icon: Icons.cloud_done_outlined, active: librarySourceFilter == WzLibrarySourceFilter.cloud)),
                 ],
               );
             },
@@ -107,6 +109,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
             spacing: WzSpacing.xs,
             runSpacing: WzSpacing.xs,
             children: WzLibrarySourceFilter.values
+                .where((filter) => showCloudSource || filter != WzLibrarySourceFilter.cloud)
                 .map(
                   (filter) => ChoiceChip(
                     avatar: Icon(wzLibrarySourceFilterIcon(filter), size: 16),
@@ -126,7 +129,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
               FilledButton.tonalIcon(onPressed: refreshDisabled ? null : onImportDeviceMusic, icon: const Icon(Icons.perm_media_rounded), label: Text(deviceTrackCount == 0 ? 'Import Device music' : 'Rescan Device music')),
               OutlinedButton.icon(onPressed: onOpenCollections, icon: const Icon(Icons.playlist_play_rounded), label: const Text('Collections / Playlists')),
               OutlinedButton.icon(onPressed: onOpenFullSearch, icon: const Icon(Icons.search_rounded), label: const Text('Open full search')),
-              OutlinedButton.icon(onPressed: onOpenCloudVault, icon: const Icon(Icons.cloud_done_outlined), label: const Text('Cloud Vault')),
+              if (showCloudSource) OutlinedButton.icon(onPressed: onOpenCloudVault, icon: const Icon(Icons.cloud_done_outlined), label: const Text('Cloud Vault')),
               WzStatusPill(label: devicePermissionStatus == 'granted' ? 'Device access ready' : 'Device access optional', active: devicePermissionStatus == 'granted', icon: Icons.phone_android_rounded),
               WzStatusPill(label: 'Device music • $deviceScanStatus • $deviceTrackCount tracks', active: deviceTrackCount > 0, icon: Icons.library_music_rounded),
             ],
