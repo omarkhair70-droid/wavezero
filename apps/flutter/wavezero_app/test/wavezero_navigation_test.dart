@@ -2,21 +2,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wavezero_app/app/navigation/wavezero_navigation.dart';
 
 void main() {
-  test('consumer shell keeps the five primary destinations in order', () {
+  test('consumer shell exposes only the three primary music destinations', () {
     expect(
       wzConsumerShellDestinations.map((destination) => destination.tab).toList(),
       [
         WzAppTab.home,
+        WzAppTab.search,
         WzAppTab.library,
-        WzAppTab.now,
-        WzAppTab.queue,
-        WzAppTab.downloads,
       ],
     );
     expect(
       wzConsumerShellDestinations.map((destination) => destination.label).toList(),
-      ['Home', 'Library', 'Now', 'Queue', 'Downloads'],
+      ['Home', 'Search', 'Library'],
     );
+  });
+
+  test('secondary product routes stay available without occupying shell navigation', () {
+    final primaryTabs = wzConsumerShellDestinations.map((destination) => destination.tab).toSet();
+    expect(primaryTabs, isNot(contains(WzAppTab.now)));
+    expect(primaryTabs, isNot(contains(WzAppTab.queue)));
+    expect(primaryTabs, isNot(contains(WzAppTab.downloads)));
+    expect(primaryTabs, isNot(contains(WzAppTab.storage)));
+    expect(primaryTabs, isNot(contains(WzAppTab.history)));
+    expect(primaryTabs, isNot(contains(WzAppTab.settings)));
   });
 
   test('developer shell only extends consumer navigation with Engine', () {
