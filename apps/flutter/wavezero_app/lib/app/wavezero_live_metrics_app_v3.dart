@@ -49,6 +49,7 @@ import '../features/history/listening_history_page.dart';
 import '../features/settings/app_mode_preferences.dart';
 import '../shared/media/media_presentation.dart';
 import '../shared/widgets/wavezero_artwork.dart';
+import '../shared/widgets/wavezero_empty_message.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
@@ -4111,7 +4112,7 @@ class _CloudVaultPage extends StatelessWidget {
                   ),
                   const SizedBox(height: WzSpacing.sm),
                   if (tracks.isEmpty) ...[
-                    const _EmptyCatalogMessage(message: 'No cloud music connected yet.\nYour device music and downloads still work offline.'),
+                    const WzEmptyCatalogMessage(message: 'No cloud music connected yet.\nYour device music and downloads still work offline.'),
                   ] else ...[
                     ...tracks.map((track) => _CloudVaultTrackRow(
                           track: track,
@@ -6282,7 +6283,7 @@ class _QueueCard extends StatelessWidget {
             ),
           const SizedBox(height: 12),
           if (queue.isEmpty)
-            const _EmptyCatalogMessage(message: 'Queue is empty. Add tracks from Library or Search to choose what plays next.')
+            const WzEmptyCatalogMessage(message: 'Queue is empty. Add tracks from Library or Search to choose what plays next.')
           else
             ...queue.indexed.map((entry) => _QueueRow(
                   track: entry.$2,
@@ -6527,7 +6528,7 @@ class _StorageManagerPage extends StatelessWidget {
               ),
               const SizedBox(height: WzSpacing.md),
               if (downloads.isEmpty)
-                const _EmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
+                const WzEmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
               else
                 ...downloads.map((track) => _StorageTrackRow(
                       track: track,
@@ -6690,7 +6691,7 @@ class _DownloadsCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (downloads.isEmpty)
-              const _EmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
+              const WzEmptyCatalogMessage(message: 'No downloads yet. Download tracks from Library to listen offline.')
             else
               ...downloads.map((track) => _DownloadRow(
                     track: track,
@@ -7253,11 +7254,11 @@ class _CatalogListCard extends StatelessWidget {
             WzStatusPill(label: 'Showing first $visibleTrackCount tracks', active: true, icon: Icons.library_music),
           const SizedBox(height: 12),
           if (totalTrackCount == 0)
-            _EmptyCatalogMessage(
+            WzEmptyCatalogMessage(
               message: offlineMode ? 'No downloads are ready offline yet. Save tracks from Library before going offline.' : 'Your catalog is waiting. Refresh when you are online or import device music to begin.',
             )
           else if (tracks.isEmpty)
-            _EmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear it to return to ${librarySourceFilter.label}.' : 'No tracks available in ${librarySourceFilter.label} yet.')
+            WzEmptyCatalogMessage(message: hasQuery ? 'No tracks match this search. Clear it to return to ${librarySourceFilter.label}.' : 'No tracks available in ${librarySourceFilter.label} yet.')
           else ...[
             SizedBox(
               height: math.min(560.0, math.max(220.0, tracks.length * 96.0)),
@@ -7920,19 +7921,6 @@ class _Panel extends StatelessWidget {
           ],
         ),
         child: Padding(padding: padding, child: child),
-      );
-}
-
-class _EmptyCatalogMessage extends StatelessWidget {
-  const _EmptyCatalogMessage({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: _WzTokens.surfaceMuted, borderRadius: BorderRadius.circular(_WzTokens.radiusMd)),
-        child: Text(message, style: _WzTokens.body),
       );
 }
 
