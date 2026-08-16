@@ -33,7 +33,7 @@ import '../design/wavezero_design_system.dart';
 import '../features/device_music/device_music_service.dart';
 import '../features/device_music/device_music_track.dart';
 import '../features/collections/collections_service.dart';
-import 'listening_history_service.dart';
+import '../features/history/listening_history_service.dart';
 import '../features/playback/playback_operation_controller.dart';
 import '../features/playback/player_operation_state.dart';
 import '../features/playback/playback_status.dart';
