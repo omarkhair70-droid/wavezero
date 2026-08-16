@@ -25,28 +25,7 @@ class WzHomeCuratedDemoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (shelves.isEmpty) {
-      return WzGlassCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const WzSectionHeader(
-              title: 'WaveZero Picks',
-              subtitle: 'Curated picks will appear when the demo catalog is loaded.',
-              icon: Icons.auto_awesome_rounded,
-            ),
-            const SizedBox(height: WzSpacing.sm),
-            const Text('Curated picks will appear when the demo catalog is loaded.', style: WzText.body),
-            const SizedBox(height: WzSpacing.sm),
-            OutlinedButton.icon(
-              onPressed: onOpenLibrary,
-              icon: const Icon(Icons.library_music_rounded),
-              label: const Text('Open Library'),
-            ),
-          ],
-        ),
-      );
-    }
+    if (shelves.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -56,10 +35,6 @@ class WzHomeCuratedDemoSection extends StatelessWidget {
           subtitle: 'A few voices chosen to make starting feel effortless.',
           icon: Icons.auto_awesome_rounded,
         ),
-        const SizedBox(height: WzSpacing.xs),
-        const Text(CuratedDemoPicks.consumerCopy, style: WzText.caption),
-        const SizedBox(height: WzSpacing.xxs),
-        const Text(CuratedDemoPicks.artworkCopy, style: WzText.caption),
         const SizedBox(height: WzSpacing.sm),
         ...shelves.map(
           (shelf) => Padding(

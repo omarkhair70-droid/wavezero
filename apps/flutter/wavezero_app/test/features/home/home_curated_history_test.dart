@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wavezero_app/features/home/home_sections.dart';
 
 void main() {
-  testWidgets('empty curated Home section keeps WaveZero Picks fallback', (tester) async {
+  testWidgets('empty curated Home section stays out of the consumer experience', (tester) async {
     var openedLibrary = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -18,11 +18,10 @@ void main() {
       ),
     );
 
-    expect(find.text('WaveZero Picks'), findsOneWidget);
-    expect(find.text('Curated picks will appear when the demo catalog is loaded.'), findsNWidgets(2));
-
-    await tester.tap(find.text('Open Library'));
-    expect(openedLibrary, isTrue);
+    expect(find.text('WaveZero Picks'), findsNothing);
+    expect(find.textContaining('demo catalog'), findsNothing);
+    expect(find.text('Open Library'), findsNothing);
+    expect(openedLibrary, isFalse);
   });
 
   testWidgets('empty Home history keeps local-only listening copy', (tester) async {
