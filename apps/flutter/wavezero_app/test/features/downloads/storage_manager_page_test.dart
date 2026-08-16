@@ -6,20 +6,22 @@ void main() {
   testWidgets('empty Storage Manager keeps offline and Smart Downloads controls', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: WzStorageManagerPage(
-          downloads: const [],
-          onBack: () {},
-          cacheBytes: 0,
-          trackBytes: const {},
-          manualDownloadedCount: 0,
-          smartDownloadedCount: 0,
-          offlineReadyCount: 0,
-          smartDownloadsEnabled: true,
-          controlsDisabled: false,
-          onSmartDownloadsChanged: (_) {},
-          onPlay: (_) {},
-          onDelete: (_) {},
-          onClearAll: () async {},
+        home: Scaffold(
+          body: WzStorageManagerPage(
+            downloads: const [],
+            onBack: () {},
+            cacheBytes: 0,
+            trackBytes: const {},
+            manualDownloadedCount: 0,
+            smartDownloadedCount: 0,
+            offlineReadyCount: 0,
+            smartDownloadsEnabled: true,
+            controlsDisabled: false,
+            onSmartDownloadsChanged: (_) {},
+            onPlay: (_) {},
+            onDelete: (_) {},
+            onClearAll: () async {},
+          ),
         ),
       ),
     );
