@@ -18,28 +18,30 @@ class WzHomeHero extends StatelessWidget {
   final WzThemeConfig themeConfig;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
-        padding: const EdgeInsets.all(WzSpacing.md),
+  Widget build(BuildContext context) => WzGlassCard(
+        padding: const EdgeInsets.fromLTRB(WzSpacing.lg, WzSpacing.lg, WzSpacing.lg, WzSpacing.xl),
         gradient: themeConfig.shellGradient,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            const Text('WaveZero', maxLines: 1, softWrap: false, overflow: TextOverflow.ellipsis, style: WzText.title),
-            const SizedBox(height: WzSpacing.xs),
-            const Text(
-              'A smart music experience engine.',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 15, color: WzColors.textMuted, height: 1.35),
-            ),
-            const SizedBox(height: WzSpacing.md),
-            const Wrap(
-              spacing: WzSpacing.xs,
-              runSpacing: WzSpacing.xs,
-              children: [
-                WzStatusPill(label: 'Native playback', active: true, icon: Icons.phone_android),
-                WzStatusPill(label: 'Music-first playback • offline-aware library', active: true, icon: Icons.auto_awesome),
-              ],
+            const Positioned(right: -18, top: -18, child: _HomePulseSculpture()),
+            Padding(
+              padding: const EdgeInsets.only(right: 112),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('WaveZero', style: WzText.eyebrow),
+                  const SizedBox(height: WzSpacing.sm),
+                  Text(
+                    'The voice is close.\nThe music is with you.',
+                    style: WzText.display.copyWith(fontSize: 31, height: 1.08),
+                  ),
+                  const SizedBox(height: WzSpacing.sm),
+                  Text(
+                    'A light, personal place for the music already around you.',
+                    style: WzText.body.copyWith(fontSize: 14),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -63,39 +65,34 @@ class WzHomeContinueListeningSummary extends StatelessWidget {
   final VoidCallback onOpenNow;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
+  Widget build(BuildContext context) => WzPressableSurface(
+        onTap: onOpenNow,
+        radius: WzRadius.sculpted,
+        decoration: WzSurface.sculpted(selected: isPlaying),
         padding: const EdgeInsets.all(WzSpacing.md),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: WzColors.accentGradient,
-                borderRadius: BorderRadius.circular(WzRadius.lg),
-                boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 20, offset: Offset(0, 10))],
-              ),
-              child: Icon(isPlaying ? Icons.equalizer : Icons.album_rounded, color: Colors.white),
+            WzSculptedIcon(
+              icon: isPlaying ? Icons.graphic_eq_rounded : Icons.album_rounded,
+              size: 54,
+              iconSize: 23,
+              color: isPlaying ? WzColors.accent : WzColors.textPrimary,
             ),
             const SizedBox(width: WzSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    isPlaying ? 'Continue listening' : 'Ready when you are',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: WzText.eyebrow,
-                  ),
-                  const SizedBox(height: WzSpacing.xxs),
+                  Text(isPlaying ? 'With you now' : 'Ready when you are', style: WzText.eyebrow),
+                  const SizedBox(height: 3),
                   Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                  const SizedBox(height: 2),
                   Text('$subtitle • $sourceLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
                 ],
               ),
             ),
             const SizedBox(width: WzSpacing.sm),
-            IconButton.filledTonal(tooltip: 'Open Now', onPressed: onOpenNow, icon: const Icon(Icons.open_in_full)),
+            const Icon(Icons.arrow_forward_rounded, color: WzColors.textMuted, size: 20),
           ],
         ),
       );
@@ -128,24 +125,28 @@ class WzHomeCurrentListeningCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = metrics.trackTitle ?? manifest?.title ?? 'No track loaded';
-    return WzPanel(
+    return WzGlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const WzSectionHeader(
             title: 'Current listening',
-            subtitle: 'Pick up from the mini player or choose something from Library.',
-            icon: Icons.album,
+            subtitle: 'Your music stays close, even when you move around the app.',
+            icon: Icons.waves_rounded,
           ),
           LayoutBuilder(
             builder: (context, constraints) {
-              final compact = constraints.maxWidth < 340;
-              final art = WzArtwork(
-                artworkUrl: manifest?.artworkUrl,
-                size: compact ? 84 : 108,
-                trackId: manifest?.trackId,
-                title: manifest?.title,
-                artist: manifest?.artistName,
+              final compact = constraints.maxWidth < 360;
+              final art = Container(
+                padding: const EdgeInsets.all(5),
+                decoration: WzSurface.sculpted(selected: metrics.isPlaying),
+                child: WzArtwork(
+                  artworkUrl: manifest?.artworkUrl,
+                  size: compact ? 88 : 112,
+                  trackId: manifest?.trackId,
+                  title: manifest?.title,
+                  artist: manifest?.artistName,
+                ),
               );
               final identity = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +154,7 @@ class WzHomeCurrentListeningCard extends StatelessWidget {
                   Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
                   const SizedBox(height: WzSpacing.xs),
                   Text(
-                    manifest?.subtitle ?? 'Choose a track from Library to start listening.',
+                    manifest?.subtitle ?? 'Choose something from Library and let it fill the space.',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: WzText.body,
@@ -161,10 +162,7 @@ class WzHomeCurrentListeningCard extends StatelessWidget {
                 ],
               );
               if (compact) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [art, const SizedBox(height: WzSpacing.sm), identity],
-                );
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [art, const SizedBox(height: WzSpacing.md), identity]);
               }
               return Row(children: [art, const SizedBox(width: WzSpacing.md), Expanded(child: identity)]);
             },
@@ -174,27 +172,13 @@ class WzHomeCurrentListeningCard extends StatelessWidget {
             spacing: WzSpacing.xs,
             runSpacing: WzSpacing.xs,
             children: [
-              WzStatusPill(
-                label: status,
-                active: metrics.isPlaying,
-                warning: status == 'Error',
-                icon: metrics.isPlaying ? Icons.play_arrow : Icons.pause,
-              ),
-              WzStatusPill(
-                label: 'Quality: ${wzProductQualityLabel(qualityLabel)}',
-                active: qualityLabel != 'unknown',
-                icon: Icons.high_quality,
-              ),
-              if (devicePlayback) const WzStatusPill(label: 'Device music', active: true, icon: Icons.phone_android),
-              if (playingFromCache) const WzStatusPill(label: 'Downloaded', active: true, icon: Icons.offline_pin),
-              if (offlineReady) const WzStatusPill(label: 'Offline Ready', active: true, icon: Icons.download_done),
-              WzStatusPill(label: 'Device music: $deviceTrackCount', active: deviceTrackCount > 0, icon: Icons.perm_media),
-              WzStatusPill(
-                label: devicePermissionStatus == 'granted' ? 'Device access ready' : 'Device access optional',
-                active: devicePermissionStatus == 'granted',
-                warning: devicePermissionStatus.contains('denied'),
-                icon: Icons.privacy_tip,
-              ),
+              WzStatusPill(label: status, active: metrics.isPlaying, warning: status == 'Error', icon: metrics.isPlaying ? Icons.graphic_eq_rounded : Icons.pause_rounded),
+              WzStatusPill(label: wzProductQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality_rounded),
+              if (devicePlayback) const WzStatusPill(label: 'On this device', active: true, icon: Icons.phone_android_rounded),
+              if (playingFromCache) const WzStatusPill(label: 'Downloaded', active: true, icon: Icons.offline_pin_rounded),
+              if (offlineReady) const WzStatusPill(label: 'Offline', active: true, icon: Icons.download_done_rounded),
+              if (deviceTrackCount > 0) WzStatusPill(label: '$deviceTrackCount local tracks', active: true, icon: Icons.perm_media_rounded),
+              if (devicePermissionStatus.contains('denied')) const WzStatusPill(label: 'Device access optional', warning: true, icon: Icons.privacy_tip_outlined),
             ],
           ),
         ],
@@ -226,47 +210,34 @@ class WzHomeCollectionsOfflineSection extends StatelessWidget {
       (collection) => collection.type == WzCollectionType.liked,
       orElse: () => WzCollection.liked(),
     );
-    return WzPanel(
+
+    return WzGlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const WzSectionHeader(
-            title: 'Collections & Offline Ready',
-            subtitle: 'Saved music and downloads without duplicating the player.',
-            icon: Icons.collections_bookmark,
+            title: 'Yours',
+            subtitle: 'The things you kept, liked, and made available offline.',
+            icon: Icons.favorite_border_rounded,
           ),
           Wrap(
             spacing: WzSpacing.sm,
             runSpacing: WzSpacing.sm,
             children: [
-              WzMiniMetric(label: 'Liked Tracks', value: '${liked.trackCount}', active: liked.trackCount > 0, icon: Icons.favorite),
-              WzMiniMetric(label: 'Collections', value: '$userCollectionCount', active: userCollectionCount > 0, icon: Icons.playlist_play),
-              WzMiniMetric(
-                label: 'Offline Ready',
-                value: offlineTrackCount > 0 ? '$offlineTrackCount tracks' : 'No downloads yet',
-                active: offlineTrackCount > 0,
-                icon: Icons.download_done,
-              ),
-              WzMiniMetric(label: 'Storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage),
+              WzMiniMetric(label: 'Liked', value: '${liked.trackCount}', active: liked.trackCount > 0, icon: Icons.favorite_rounded),
+              WzMiniMetric(label: 'Collections', value: '$userCollectionCount', active: userCollectionCount > 0, icon: Icons.playlist_play_rounded),
+              WzMiniMetric(label: 'Offline', value: offlineTrackCount > 0 ? '$offlineTrackCount tracks' : 'None yet', active: offlineTrackCount > 0, icon: Icons.download_done_rounded),
+              WzMiniMetric(label: 'Storage', value: formatWzCacheBytes(cacheBytes), active: cacheBytes > 0, icon: Icons.sd_storage_rounded),
             ],
           ),
           const SizedBox(height: WzSpacing.md),
-          Wrap(
-            spacing: WzSpacing.sm,
-            runSpacing: WzSpacing.sm,
+          Row(
             children: [
-              WzPrimaryAction(label: 'Open Collections', icon: Icons.playlist_play, onPressed: onOpenCollections),
-              OutlinedButton.icon(onPressed: onOpenDownloads, icon: const Icon(Icons.download_done), label: const Text('Open Downloads')),
+              Expanded(child: _HomeLinkAction(label: 'Collections', icon: Icons.playlist_play_rounded, onTap: onOpenCollections)),
+              const SizedBox(width: WzSpacing.sm),
+              Expanded(child: _HomeLinkAction(label: 'Downloads', icon: Icons.download_done_rounded, onTap: onOpenDownloads)),
             ],
           ),
-          if (userCollectionCount == 0 && liked.trackCount == 0) ...[
-            const SizedBox(height: WzSpacing.sm),
-            const Text('No collections yet. Save tracks from Library, Search, or Now Playing.', style: WzText.caption),
-          ],
-          if (offlineTrackCount == 0) ...[
-            const SizedBox(height: WzSpacing.xs),
-            const Text('No downloads yet. Download tracks from Library to listen offline.', style: WzText.caption),
-          ],
         ],
       ),
     );
@@ -294,43 +265,23 @@ class WzHomeSmartListeningCards extends StatelessWidget {
   final String qualityLabel;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
+  Widget build(BuildContext context) => WzGlassCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const WzSectionHeader(
-              title: 'Smart listening',
-              subtitle: 'Offline comfort, playback readiness, and quality at a glance.',
-              icon: Icons.auto_awesome,
+              title: 'Under the surface',
+              subtitle: 'WaveZero quietly keeps playback ready without making the experience feel technical.',
+              icon: Icons.auto_awesome_rounded,
             ),
             Wrap(
               spacing: WzSpacing.sm,
               runSpacing: WzSpacing.sm,
               children: [
-                WzMiniMetric(
-                  label: 'Smart Downloads',
-                  value: smartDownloadsEnabled ? '$smartDownloadsCompleted cached' : 'Off',
-                  active: smartDownloadsEnabled,
-                  icon: Icons.download_for_offline,
-                ),
-                WzMiniMetric(
-                  label: 'Next track ready',
-                  value: prefetchEnabled ? (prefetchedTrackTitle ?? 'Ready') : 'Off',
-                  active: prefetchEnabled,
-                  icon: Icons.offline_bolt,
-                ),
-                WzMiniMetric(
-                  label: 'Offline Ready',
-                  value: offlineReady ? '$offlineTrackCount tracks' : 'No downloads yet',
-                  active: offlineReady,
-                  icon: Icons.offline_pin,
-                ),
-                WzMiniMetric(
-                  label: 'Audio Quality',
-                  value: wzProductQualityLabel(qualityLabel),
-                  active: qualityLabel != 'unknown',
-                  icon: Icons.high_quality,
-                ),
+                WzMiniMetric(label: 'Smart downloads', value: smartDownloadsEnabled ? '$smartDownloadsCompleted ready' : 'Off', active: smartDownloadsEnabled, icon: Icons.download_for_offline_rounded),
+                WzMiniMetric(label: 'Next track', value: prefetchEnabled ? (prefetchedTrackTitle ?? 'Ready') : 'Off', active: prefetchEnabled, icon: Icons.bolt_rounded),
+                WzMiniMetric(label: 'Offline', value: offlineReady ? '$offlineTrackCount ready' : 'Empty', active: offlineReady, icon: Icons.offline_pin_rounded),
+                WzMiniMetric(label: 'Quality', value: wzProductQualityLabel(qualityLabel), active: qualityLabel != 'unknown', icon: Icons.high_quality_rounded),
               ],
             ),
           ],
@@ -345,29 +296,89 @@ class WzHomeQuickActions extends StatelessWidget {
   final bool showDeveloperTools;
 
   @override
-  Widget build(BuildContext context) => WzPanel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget build(BuildContext context) {
+    final actions = <({String label, IconData icon, WzAppTab tab})>[
+      (label: 'Search', icon: Icons.search_rounded, tab: WzAppTab.search),
+      (label: 'Library', icon: Icons.library_music_rounded, tab: WzAppTab.library),
+      (label: 'Collections', icon: Icons.playlist_play_rounded, tab: WzAppTab.collections),
+      (label: 'Now', icon: Icons.play_circle_outline_rounded, tab: WzAppTab.now),
+      (label: 'Queue', icon: Icons.queue_music_rounded, tab: WzAppTab.queue),
+      (label: 'Offline', icon: Icons.download_done_rounded, tab: WzAppTab.downloads),
+      (label: 'Settings', icon: Icons.tune_rounded, tab: WzAppTab.settings),
+      if (showDeveloperTools) (label: 'Engine', icon: Icons.engineering_rounded, tab: WzAppTab.engine),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const WzSectionHeader(title: 'Move through WaveZero', subtitle: 'Everything is one soft step away.', icon: Icons.blur_on_rounded),
+        Wrap(
+          spacing: WzSpacing.sm,
+          runSpacing: WzSpacing.sm,
+          children: actions
+              .map(
+                (action) => SizedBox(
+                  width: 132,
+                  child: _HomeLinkAction(label: action.label, icon: action.icon, onTap: () => onNavigate(action.tab)),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomePulseSculpture extends StatelessWidget {
+  const _HomePulseSculpture();
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 128,
+        height: 128,
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            const WzSectionHeader(
-              title: 'Start here',
-              subtitle: 'Find music, organize collections, or manage offline listening.',
-              icon: Icons.bolt,
+            Container(
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: WzColors.accentGradient,
+                border: Border.all(color: Colors.white),
+                boxShadow: WzSurface.softShadows,
+              ),
             ),
-            Wrap(
-              spacing: WzSpacing.sm,
-              runSpacing: WzSpacing.sm,
-              children: [
-                WzPrimaryAction(label: 'Search music', icon: Icons.search, onPressed: () => onNavigate(WzAppTab.search)),
-                WzPrimaryAction(label: 'Library', icon: Icons.library_music, onPressed: () => onNavigate(WzAppTab.library)),
-                WzPrimaryAction(label: 'Collections', icon: Icons.playlist_play, onPressed: () => onNavigate(WzAppTab.collections)),
-                WzPrimaryAction(label: 'Now Playing', icon: Icons.play_circle_fill, onPressed: () => onNavigate(WzAppTab.now)),
-                WzPrimaryAction(label: 'Queue', icon: Icons.queue_music, onPressed: () => onNavigate(WzAppTab.queue)),
-                WzPrimaryAction(label: 'Downloads', icon: Icons.download_done, onPressed: () => onNavigate(WzAppTab.downloads)),
-                WzPrimaryAction(label: 'Settings', icon: Icons.settings, onPressed: () => onNavigate(WzAppTab.settings)),
-                if (showDeveloperTools) WzPrimaryAction(label: 'Engine', icon: Icons.engineering, onPressed: () => onNavigate(WzAppTab.engine)),
-              ],
+            Container(
+              width: 78,
+              height: 78,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.72)),
             ),
+            const Icon(Icons.graphic_eq_rounded, color: WzColors.accent, size: 30),
+          ],
+        ),
+      );
+}
+
+class _HomeLinkAction extends StatelessWidget {
+  const _HomeLinkAction({required this.label, required this.icon, required this.onTap});
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => WzPressableSurface(
+        onTap: onTap,
+        radius: WzRadius.lg,
+        decoration: WzSurface.sculpted(),
+        padding: const EdgeInsets.symmetric(horizontal: WzSpacing.sm, vertical: WzSpacing.md),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: WzColors.textPrimary),
+            const SizedBox(width: 8),
+            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption.copyWith(color: WzColors.textPrimary, fontWeight: FontWeight.w700))),
           ],
         ),
       );
