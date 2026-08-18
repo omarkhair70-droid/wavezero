@@ -8,6 +8,7 @@ class WzQueuePosition {
     required this.canPrevious,
     required this.canNext,
     required this.canShuffleNext,
+    this.transitionPending = false,
   });
 
   final int index;
@@ -16,6 +17,7 @@ class WzQueuePosition {
   final bool canPrevious;
   final bool canNext;
   final bool canShuffleNext;
+  final bool transitionPending;
 
   bool get canPlayNext => canNext || canShuffleNext;
 }
@@ -26,8 +28,32 @@ WzQueuePosition resolveWzQueuePosition({
   required String? selectedTrackId,
   required bool shuffleEnabled,
 }) {
-  final id = currentTrackId ?? selectedTrackId;
-  final index = id == null ? -1 : queue.indexWhere((track) => track.trackId == id);
+  final currentIndex = currentTrackId == null
+      ? -1
+      : queue.indexWhere((track) => track.trackId == currentTrackId);
+  final selectedIndex = selectedTrackId == null
+      ? -1
+      : queue.indexWhere((track) => track.trackId == selectedTrackId);
+  final transitionPending =
+      currentTrackId != null &&
+      selectedTrackId != null &&
+      currentTrackId != selectedTrackId &&
+      currentIndex >= 0 &&
+      selectedIndex >= 0;
+
+  if (transitionPending) {
+    return WzQueuePosition(
+      index: -1,
+      currentTrack: queue[selectedIndex],
+      upNextTrack: null,
+      canPrevious: false,
+      canNext: false,
+      canShuffleNext: false,
+      transitionPending: true,
+    );
+  }
+
+  final index = currentIndex >= 0 ? currentIndex : selectedIndex;
   final currentTrack = index >= 0 && index < queue.length ? queue[index] : null;
   final upNextTrack = index >= 0 && index < queue.length - 1 ? queue[index + 1] : null;
   final canPrevious = index > 0;
