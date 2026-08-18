@@ -26,6 +26,11 @@ class WaveZeroMediaSessionService : MediaSessionService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val manager = WaveZeroPlaybackSession.getOrCreate(applicationContext)
+        if (intent == null && !canRestoreStickySession(manager)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         when (intent?.action) {
             ACTION_PREVIOUS -> skipPlayback(manager, manager::playPreviousFromNotification)
             ACTION_TOGGLE_PLAYBACK -> togglePlayback(manager)
@@ -41,6 +46,12 @@ class WaveZeroMediaSessionService : MediaSessionService() {
 
         showForegroundMediaNotification(manager)
         return START_STICKY
+    }
+
+    private fun canRestoreStickySession(manager: AudioPlayerManager): Boolean {
+        val snapshot = manager.metricsSnapshotMap()
+        return snapshot["currentTrackLoaded"] == true &&
+            snapshot["mediaNotificationShown"] == true
     }
 
     private fun togglePlayback(manager: AudioPlayerManager) {
