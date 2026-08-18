@@ -6,6 +6,7 @@ on:
       - 'apps/flutter/wavezero_app/**'
       - '.github/workflows/flutter-ci.yml'
       - '.github/scripts/device_polish.py'
+      - '.github/scripts/device_polish_postfix.py'
   push:
     branches:
       - main
@@ -45,58 +46,9 @@ jobs:
         if: github.event_name == 'pull_request' && github.head_ref == 'redesign/consumer-wavezero-v1'
         run: python3 ../../../.github/scripts/device_polish.py
 
-      - name: Keep smooth progress ticker idle while paused
+      - name: Apply paused-ticker polish
         if: github.event_name == 'pull_request' && github.head_ref == 'redesign/consumer-wavezero-v1'
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-
-          path = Path('lib/features/playback/consumer_player.dart')
-          text = path.read_text()
-
-          old_init = '''    _ticker = createTicker((elapsed) {
-              _tickerElapsed = elapsed;
-              if (mounted && widget.isPlaying && _dragValue == null) setState(() {});
-            })..start();
-'''
-          new_init = '''    _ticker = createTicker((elapsed) {
-              _tickerElapsed = elapsed;
-              if (mounted && widget.isPlaying && _dragValue == null) setState(() {});
-            });
-            if (widget.isPlaying) _ticker.start();
-'''
-          if old_init not in text:
-              raise SystemExit('smooth ticker init anchor not found')
-          text = text.replace(old_init, new_init, 1)
-
-          old_update = '''    if (oldWidget.positionMs != widget.positionMs ||
-                oldWidget.durationMs != widget.durationMs ||
-                oldWidget.isPlaying != widget.isPlaying) {
-              _anchorPositionMs = widget.positionMs;
-              _anchorElapsed = _tickerElapsed;
-            }
-'''
-          new_update = '''    if (oldWidget.isPlaying != widget.isPlaying) {
-              if (widget.isPlaying) {
-                _tickerElapsed = Duration.zero;
-                _anchorElapsed = Duration.zero;
-                if (!_ticker.isActive) _ticker.start();
-              } else if (_ticker.isActive) {
-                _ticker.stop();
-              }
-            }
-            if (oldWidget.positionMs != widget.positionMs ||
-                oldWidget.durationMs != widget.durationMs ||
-                oldWidget.isPlaying != widget.isPlaying) {
-              _anchorPositionMs = widget.positionMs;
-              _anchorElapsed = _tickerElapsed;
-            }
-'''
-          if old_update not in text:
-              raise SystemExit('smooth ticker update anchor not found')
-          text = text.replace(old_update, new_update, 1)
-          path.write_text(text)
-          PY
+        run: python3 ../../../.github/scripts/device_polish_postfix.py
 
       - name: Format one-time device polish
         if: github.event_name == 'pull_request' && github.head_ref == 'redesign/consumer-wavezero-v1'
@@ -123,7 +75,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           git show origin/main:.github/workflows/flutter-ci.yml > .github/workflows/flutter-ci.yml
-          rm -f .github/workflows/device-polish-once.yml .github/scripts/device_polish.py
+          rm -f .github/workflows/device-polish-once.yml .github/scripts/device_polish.py .github/scripts/device_polish_postfix.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add \
@@ -132,7 +84,8 @@ jobs:
             apps/flutter/wavezero_app/test/features/playback/consumer_player_test.dart \
             .github/workflows/flutter-ci.yml \
             .github/workflows/device-polish-once.yml \
-            .github/scripts/device_polish.py
+            .github/scripts/device_polish.py \
+            .github/scripts/device_polish_postfix.py
           git diff --cached --check
           git commit -m 'Polish device navigation and playback interactions'
           git push origin HEAD:${{ github.head_ref }}
