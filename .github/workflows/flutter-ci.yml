@@ -45,5 +45,8 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build Android debug APK
-        run: flutter build apk --debug
+      - name: Build Android release APK
+        run: >-
+          flutter build apk --release
+          --dart-define=WAVEZERO_APP_ENV=production
+          --dart-define=WAVEZERO_API_BASE_URL=https://release-validation.invalid
