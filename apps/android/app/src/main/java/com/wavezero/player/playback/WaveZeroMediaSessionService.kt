@@ -26,10 +26,15 @@ class WaveZeroMediaSessionService : MediaSessionService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val manager = WaveZeroPlaybackSession.getOrCreate(applicationContext)
+        if (intent == null && !canRestoreStickySession(manager)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         when (intent?.action) {
-            ACTION_PREVIOUS -> manager.playPreviousFromNotification()
+            ACTION_PREVIOUS -> skipPlayback(manager, manager::playPreviousFromNotification)
             ACTION_TOGGLE_PLAYBACK -> togglePlayback(manager)
-            ACTION_NEXT -> manager.playNextFromNotification()
+            ACTION_NEXT -> skipPlayback(manager, manager::playNextFromNotification)
             ACTION_STOP_AND_DISMISS -> {
                 manager.stop()
                 manager.markMediaNotificationDismissed()
@@ -43,26 +48,46 @@ class WaveZeroMediaSessionService : MediaSessionService() {
         return START_STICKY
     }
 
-    private fun togglePlayback(manager: AudioPlayerManager) {
-        val sessionPlayer = manager.mediaSession?.player
-        val shouldPause = sessionPlayer != null &&
-            sessionPlayer.playbackState != Player.STATE_ENDED &&
-            (sessionPlayer.isPlaying || sessionPlayer.playWhenReady)
+    private fun canRestoreStickySession(manager: AudioPlayerManager): Boolean {
+        val snapshot = manager.metricsSnapshotMap()
+        return snapshot["currentTrackLoaded"] == true &&
+            snapshot["mediaNotificationShown"] == true
+    }
 
-        if (shouldPause) {
+    private fun togglePlayback(manager: AudioPlayerManager) {
+        if (playbackRequested(manager)) {
             manager.pause()
         } else {
             manager.play()
         }
     }
 
+    private fun skipPlayback(
+        manager: AudioPlayerManager,
+        skip: () -> Boolean,
+    ) {
+        val shouldResume = playbackRequested(manager)
+        val changedTrack = skip()
+        if (changedTrack && !shouldResume) {
+            manager.pause()
+        }
+    }
+
+    private fun playbackRequested(manager: AudioPlayerManager): Boolean {
+        val sessionPlayer = manager.mediaSession?.player ?: return false
+        return sessionPlayer.playbackState != Player.STATE_ENDED &&
+            (sessionPlayer.isPlaying || sessionPlayer.playWhenReady)
+    }
+
     private fun showForegroundMediaNotification(manager: AudioPlayerManager) {
         val snapshot = manager.metricsSnapshotMap()
-        val isPlaying = snapshot["isPlaying"] as? Boolean ?: false
+        val isPlaying = playbackRequested(manager)
         val title = snapshot["currentTrackTitle"] as? String ?: snapshot["trackTitle"] as? String ?: DemoTrack.title
         val subtitle = snapshot["currentTrackArtist"] as? String ?: snapshot["currentTrackSource"] as? String ?: "WaveZero"
         val playPauseLabel = if (isPlaying) "Pause" else "Play"
         val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        val mediaStyle = Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2)
+        manager.mediaSession?.platformToken?.let { mediaStyle.setMediaSession(it) }
 
         val notification = Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
@@ -100,7 +125,7 @@ class WaveZeroMediaSessionService : MediaSessionService() {
                     servicePendingIntent(ACTION_STOP_AND_DISMISS),
                 ).build(),
             )
-            .setStyle(Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
+            .setStyle(mediaStyle)
             .build()
 
         manager.markMediaNotificationShown()
