@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -148,10 +149,87 @@ class ListeningHistoryService {
 
   final SharedPreferences? _prefsOverride;
   final int maxEntries;
+  Future<void> _mutationTail = Future<void>.value();
 
   Future<SharedPreferences> get _prefs async => _prefsOverride ?? await SharedPreferences.getInstance();
 
   Future<List<WzListeningHistoryEntry>> load() async {
+    await _mutationTail;
+    return _loadNow();
+  }
+
+  Future<List<WzListeningHistoryEntry>> recordPlay(WzListeningHistoryEntry snapshot) {
+    return _enqueueMutation(() async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final entries = await _loadNow();
+      WzListeningHistoryEntry? existing;
+      for (final entry in entries) {
+        if (entry.trackId == snapshot.trackId) {
+          existing = entry;
+          break;
+        }
+      }
+      final nextEntry = (existing ?? snapshot).copyWith(
+        title: snapshot.title,
+        subtitle: snapshot.subtitle,
+        albumName: snapshot.albumName,
+        artworkUrl: snapshot.artworkUrl,
+        source: snapshot.source,
+        primaryUrl: snapshot.primaryUrl,
+        qualityLabel: snapshot.qualityLabel,
+        codec: snapshot.codec,
+        license: snapshot.license,
+        lastPlayedAtMs: now,
+        firstPlayedAtMs: existing?.firstPlayedAtMs ?? snapshot.firstPlayedAtMs,
+        playCount: (existing?.playCount ?? 0) + 1,
+        lastPositionMs: snapshot.lastPositionMs,
+        durationMs: snapshot.durationMs,
+        completedCount: existing?.completedCount ?? snapshot.completedCount,
+      );
+      final next = _sortedAndCapped([
+        nextEntry,
+        ...entries.where((entry) => entry.trackId != snapshot.trackId),
+      ]);
+      await _saveNow(next);
+      return next;
+    });
+  }
+
+  Future<List<WzListeningHistoryEntry>> updatePosition(String trackId, {required int positionMs, int? durationMs}) {
+    return _enqueueMutation(() async {
+      if (trackId.isEmpty) return _loadNow();
+      final entries = await _loadNow();
+      final next = entries
+          .map((entry) => entry.trackId == trackId
+              ? entry.copyWith(lastPositionMs: positionMs < 0 ? 0 : positionMs, durationMs: durationMs ?? entry.durationMs)
+              : entry)
+          .toList(growable: false);
+      await _saveNow(next);
+      return next;
+    });
+  }
+
+  Future<void> save(List<WzListeningHistoryEntry> entries) {
+    final snapshot = List<WzListeningHistoryEntry>.of(entries, growable: false);
+    return _enqueueMutation(() => _saveNow(snapshot));
+  }
+
+  Future<List<WzListeningHistoryEntry>> remove(String trackId) {
+    return _enqueueMutation(() async {
+      final next = (await _loadNow()).where((entry) => entry.trackId != trackId).toList(growable: false);
+      await _saveNow(next);
+      return next;
+    });
+  }
+
+  Future<void> clear() {
+    return _enqueueMutation(() async {
+      final prefs = await _prefs;
+      await prefs.remove(waveZeroListeningHistoryPreferenceKey);
+    });
+  }
+
+  Future<List<WzListeningHistoryEntry>> _loadNow() async {
     final prefs = await _prefs;
     final raw = prefs.getString(waveZeroListeningHistoryPreferenceKey);
     if (raw == null || raw.trim().isEmpty) return const <WzListeningHistoryEntry>[];
@@ -169,54 +247,7 @@ class ListeningHistoryService {
     }
   }
 
-  Future<List<WzListeningHistoryEntry>> recordPlay(WzListeningHistoryEntry snapshot) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final entries = await load();
-    WzListeningHistoryEntry? existing;
-    for (final entry in entries) {
-      if (entry.trackId == snapshot.trackId) {
-        existing = entry;
-        break;
-      }
-    }
-    final nextEntry = (existing ?? snapshot).copyWith(
-      title: snapshot.title,
-      subtitle: snapshot.subtitle,
-      albumName: snapshot.albumName,
-      artworkUrl: snapshot.artworkUrl,
-      source: snapshot.source,
-      primaryUrl: snapshot.primaryUrl,
-      qualityLabel: snapshot.qualityLabel,
-      codec: snapshot.codec,
-      license: snapshot.license,
-      lastPlayedAtMs: now,
-      firstPlayedAtMs: existing?.firstPlayedAtMs ?? snapshot.firstPlayedAtMs,
-      playCount: (existing?.playCount ?? 0) + 1,
-      lastPositionMs: snapshot.lastPositionMs,
-      durationMs: snapshot.durationMs,
-      completedCount: existing?.completedCount ?? snapshot.completedCount,
-    );
-    final next = _sortedAndCapped([
-      nextEntry,
-      ...entries.where((entry) => entry.trackId != snapshot.trackId),
-    ]);
-    await save(next);
-    return next;
-  }
-
-  Future<List<WzListeningHistoryEntry>> updatePosition(String trackId, {required int positionMs, int? durationMs}) async {
-    if (trackId.isEmpty) return load();
-    final entries = await load();
-    final next = entries
-        .map((entry) => entry.trackId == trackId
-            ? entry.copyWith(lastPositionMs: positionMs < 0 ? 0 : positionMs, durationMs: durationMs ?? entry.durationMs)
-            : entry)
-        .toList(growable: false);
-    await save(next);
-    return next;
-  }
-
-  Future<void> save(List<WzListeningHistoryEntry> entries) async {
+  Future<void> _saveNow(List<WzListeningHistoryEntry> entries) async {
     final prefs = await _prefs;
     await prefs.setString(
       waveZeroListeningHistoryPreferenceKey,
@@ -227,15 +258,18 @@ class ListeningHistoryService {
     );
   }
 
-  Future<List<WzListeningHistoryEntry>> remove(String trackId) async {
-    final next = (await load()).where((entry) => entry.trackId != trackId).toList(growable: false);
-    await save(next);
-    return next;
-  }
-
-  Future<void> clear() async {
-    final prefs = await _prefs;
-    await prefs.remove(waveZeroListeningHistoryPreferenceKey);
+  Future<T> _enqueueMutation<T>(Future<T> Function() mutation) {
+    final completer = Completer<T>();
+    final previous = _mutationTail;
+    _mutationTail = () async {
+      await previous;
+      try {
+        completer.complete(await mutation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    }();
+    return completer.future;
   }
 
   List<WzListeningHistoryEntry> _sortedAndCapped(List<WzListeningHistoryEntry> entries) {
