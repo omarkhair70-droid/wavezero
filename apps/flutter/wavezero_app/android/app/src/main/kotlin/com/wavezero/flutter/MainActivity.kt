@@ -28,7 +28,6 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         appStartedAtMs = SystemClock.elapsedRealtime()
         super.onCreate(savedInstanceState)
-        requestPostNotificationsIfNeeded()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -118,18 +117,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun requestPostNotificationsIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-
-        requestPermissions(
-            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-            REQUEST_POST_NOTIFICATIONS,
-        )
-    }
-
     private companion object {
-        const val REQUEST_POST_NOTIFICATIONS = 3001
         const val REQUEST_DEVICE_MUSIC_PERMISSION = 3002
     }
 }
