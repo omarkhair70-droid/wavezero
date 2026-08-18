@@ -80,4 +80,31 @@ void main() {
     await store.clear();
     expect(await store.load(), isNull);
   });
+
+  test('unawaited-style writes preserve call order and latest snapshot wins', () async {
+    final store = QueueSessionStore();
+
+    final first = store.save(
+      const QueueSessionSnapshot(
+        queueTrackIds: ['a', 'b'],
+        currentTrackId: 'a',
+      ),
+    );
+    final clear = store.clear();
+    final latest = store.save(
+      const QueueSessionSnapshot(
+        queueTrackIds: ['c', 'd'],
+        currentTrackId: 'd',
+        selectedTrackId: 'd',
+      ),
+    );
+
+    await Future.wait([first, clear, latest]);
+    final restored = await store.load();
+
+    expect(restored, isNotNull);
+    expect(restored!.queueTrackIds, const ['c', 'd']);
+    expect(restored.currentTrackId, 'd');
+    expect(restored.selectedTrackId, 'd');
+  });
 }
