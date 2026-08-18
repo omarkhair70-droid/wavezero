@@ -47,22 +47,35 @@ class QueueSessionStore {
   static const sessionKey = 'wavezero_queue_session_v1';
 
   SharedPreferences? _preferences;
+  Future<void> _writeTail = Future<void>.value();
 
   Future<SharedPreferences> get _prefs async {
     return _preferences ??= await SharedPreferences.getInstance();
   }
 
   Future<QueueSessionSnapshot?> load() async {
+    await _writeTail;
     final raw = (await _prefs).getString(sessionKey);
     if (raw == null || raw.trim().isEmpty) return null;
     return QueueSessionSnapshot.decode(raw);
   }
 
-  Future<void> save(QueueSessionSnapshot snapshot) async {
-    await (await _prefs).setString(sessionKey, snapshot.encode());
+  Future<void> save(QueueSessionSnapshot snapshot) {
+    final encoded = snapshot.encode();
+    return _enqueueWrite(() async {
+      await (await _prefs).setString(sessionKey, encoded);
+    });
   }
 
-  Future<void> clear() async {
-    await (await _prefs).remove(sessionKey);
+  Future<void> clear() {
+    return _enqueueWrite(() async {
+      await (await _prefs).remove(sessionKey);
+    });
+  }
+
+  Future<void> _enqueueWrite(Future<void> Function() write) {
+    final result = _writeTail.then((_) => write());
+    _writeTail = result.catchError((Object _) {});
+    return result;
   }
 }
