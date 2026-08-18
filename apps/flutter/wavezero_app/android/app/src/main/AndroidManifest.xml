@@ -7,10 +7,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
-        android:label="WaveZero Flutter"
+        android:allowBackup="false"
+        android:label="WaveZero"
         android:name="${applicationName}"
         android:theme="@style/LaunchTheme"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
         android:enableOnBackInvokedCallback="true">
         <meta-data
             android:name="flutterEmbedding"
