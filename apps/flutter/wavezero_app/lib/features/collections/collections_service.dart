@@ -191,10 +191,12 @@ class CollectionsService {
   CollectionsService({SharedPreferences? prefs}) : _prefsOverride = prefs;
 
   final SharedPreferences? _prefsOverride;
+  Future<void> _writeTail = Future<void>.value();
 
   Future<SharedPreferences> get _prefs async => _prefsOverride ?? await SharedPreferences.getInstance();
 
   Future<List<WzCollection>> load() async {
+    await _writeTail;
     final prefs = await _prefs;
     final raw = prefs.getString(waveZeroCollectionsPreferenceKey);
     if (raw == null || raw.trim().isEmpty) return <WzCollection>[WzCollection.liked()];
@@ -212,16 +214,24 @@ class CollectionsService {
     }
   }
 
-  Future<void> save(List<WzCollection> collections) async {
-    final prefs = await _prefs;
-    final safeCollections = _ensureLikedCollection(collections);
-    await prefs.setString(
-      waveZeroCollectionsPreferenceKey,
-      jsonEncode(<String, Object?>{
-        'version': 1,
-        'collections': safeCollections.map((collection) => collection.toJson()).toList(growable: false),
-      }),
+  Future<void> save(List<WzCollection> collections) {
+    final safeCollections = _ensureLikedCollection(
+      List<WzCollection>.of(collections, growable: false),
     );
+    final encoded = jsonEncode(<String, Object?>{
+      'version': 1,
+      'collections': safeCollections.map((collection) => collection.toJson()).toList(growable: false),
+    });
+    return _enqueueWrite(() async {
+      final prefs = await _prefs;
+      await prefs.setString(waveZeroCollectionsPreferenceKey, encoded);
+    });
+  }
+
+  Future<void> _enqueueWrite(Future<void> Function() write) {
+    final result = _writeTail.then((_) => write());
+    _writeTail = result.catchError((Object _) {});
+    return result;
   }
 
   List<WzCollection> _ensureLikedCollection(List<WzCollection> collections) {
