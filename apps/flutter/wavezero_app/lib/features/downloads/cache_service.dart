@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -148,6 +149,9 @@ class CacheService {
   final Map<String, String> _index = {};
   final Map<String, CachedTrackMetadata> _metadata = {};
   final Map<String, TrackCacheStatus> _status = {};
+  final Map<String, Future<void>> _trackOperationTails = {};
+  Future<void> _persistTail = Future<void>.value();
+  Future<void>? _clearBarrier;
 
   String? lastCacheResult;
 
@@ -255,75 +259,102 @@ class CacheService {
     return remoteUrl;
   }
 
-  Future<bool> downloadAndCache(String trackId, String url, {CachedTrackMetadata? metadata}) async {
-    await ensureInitialized();
-    _status[trackId] = TrackCacheStatus.caching;
-    lastCacheResult = null;
-    try {
-      final uri = Uri.parse(url);
-      final resp = await http.get(uri);
-      if (resp.statusCode != 200) throw HttpException('HTTP ${resp.statusCode}');
-      final ext = _guessExtFromUrl(url) ?? '.audio';
-      final file = File('${_baseDir.path}/wz_cache_${_sanitize(trackId)}$ext');
-      await file.writeAsBytes(resp.bodyBytes);
-      _index[trackId] = file.path;
-      _status[trackId] = TrackCacheStatus.cached;
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      if (metadata != null) {
-        _metadata[trackId] = metadata.copyWith(localFilePath: file.path, cachedAt: nowMs);
-      } else {
-        final existing = _metadata[trackId];
-        if (existing != null) {
-          _metadata[trackId] = existing.copyWith(localFilePath: file.path, cachedAt: nowMs);
-        }
-      }
-      await _persistIndex();
-      lastCacheResult = 'cached:${file.path}';
-      return true;
-    } catch (error) {
-      _status[trackId] = TrackCacheStatus.failed;
-      lastCacheResult = 'error:${error.toString()}';
-      return false;
+  Future<bool> downloadAndCache(String trackId, String url, {CachedTrackMetadata? metadata}) {
+    if (_clearBarrier != null) {
+      lastCacheResult = 'skipped:clear_in_progress:$trackId';
+      return Future<bool>.value(false);
     }
-  }
-
-  Future<bool> deleteCachedTrack(String trackId) async {
-    await ensureInitialized();
-    final path = _index[trackId] ?? _metadata[trackId]?.localFilePath;
-    var deletedFile = false;
-    if (path != null && path.isNotEmpty) {
+    return _enqueueTrackOperation(trackId, () async {
+      await ensureInitialized();
+      _status[trackId] = TrackCacheStatus.caching;
+      lastCacheResult = null;
       try {
-        final f = File(path);
-        if (await f.exists()) {
-          await f.delete();
-          deletedFile = true;
+        final uri = Uri.parse(url);
+        final resp = await http.get(uri);
+        if (resp.statusCode != 200) throw HttpException('HTTP ${resp.statusCode}');
+        final ext = _guessExtFromUrl(url) ?? '.audio';
+        final file = File('${_baseDir.path}/wz_cache_${_sanitize(trackId)}$ext');
+        await file.writeAsBytes(resp.bodyBytes);
+        _index[trackId] = file.path;
+        _status[trackId] = TrackCacheStatus.cached;
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        if (metadata != null) {
+          _metadata[trackId] = metadata.copyWith(localFilePath: file.path, cachedAt: nowMs);
+        } else {
+          final existing = _metadata[trackId];
+          if (existing != null) {
+            _metadata[trackId] = existing.copyWith(localFilePath: file.path, cachedAt: nowMs);
+          }
         }
+        await _persistIndex();
+        lastCacheResult = 'cached:${file.path}';
+        return true;
       } catch (error) {
-        lastCacheResult = 'delete_error:$trackId:${error.toString()}';
+        _status[trackId] = TrackCacheStatus.failed;
+        lastCacheResult = 'error:${error.toString()}';
         return false;
       }
-    }
-    _index.remove(trackId);
-    _metadata.remove(trackId);
-    _status[trackId] = TrackCacheStatus.notCached;
-    await _persistIndex();
-    lastCacheResult = deletedFile ? 'deleted:$trackId' : 'deleted_metadata:$trackId';
-    return true;
+    });
   }
 
-  Future<void> clearCache() async {
-    await ensureInitialized();
-    for (final path in _index.values) {
+  Future<bool> deleteCachedTrack(String trackId) {
+    return _enqueueTrackOperation(trackId, () async {
+      await ensureInitialized();
+      final path = _index[trackId] ?? _metadata[trackId]?.localFilePath;
+      var deletedFile = false;
+      if (path != null && path.isNotEmpty) {
+        try {
+          final f = File(path);
+          if (await f.exists()) {
+            await f.delete();
+            deletedFile = true;
+          }
+        } catch (error) {
+          lastCacheResult = 'delete_error:$trackId:${error.toString()}';
+          return false;
+        }
+      }
+      _index.remove(trackId);
+      _metadata.remove(trackId);
+      _status[trackId] = TrackCacheStatus.notCached;
+      await _persistIndex();
+      lastCacheResult = deletedFile ? 'deleted:$trackId' : 'deleted_metadata:$trackId';
+      return true;
+    });
+  }
+
+  Future<void> clearCache() {
+    final activeClear = _clearBarrier;
+    if (activeClear != null) return activeClear;
+
+    final completer = Completer<void>();
+    final barrier = completer.future;
+    _clearBarrier = barrier;
+    final pendingTrackOperations = List<Future<void>>.of(
+      _trackOperationTails.values,
+      growable: false,
+    );
+
+    return () async {
       try {
-        final f = File(path);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
-    }
-    _index.clear();
-    _metadata.clear();
-    _status.clear();
-    lastCacheResult = 'cleared';
-    await _persistIndex();
+        await ensureInitialized();
+        await Future.wait(pendingTrackOperations);
+        for (final path in _index.values.toList(growable: false)) {
+          try {
+            final f = File(path);
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        }
+        _index.clear();
+        _metadata.clear();
+        _status.clear();
+        lastCacheResult = 'cleared';
+        await _persistIndex();
+      } finally {
+        if (identical(_clearBarrier, barrier)) _clearBarrier = null;
+        if (!completer.isCompleted) completer.complete();
+      }
+    }();
   }
 
   int cachedTrackCount() {
@@ -342,9 +373,43 @@ class CacheService {
     return total;
   }
 
-  Future<void> _persistIndex() async {
-    await _prefs.setString('wz_cache_index', jsonEncode(_index));
-    await _prefs.setString('wz_cache_metadata', jsonEncode(_metadata.map((key, value) => MapEntry(key, value.toJson()))));
+  Future<void> _persistIndex() {
+    final encodedIndex = jsonEncode(_index);
+    final encodedMetadata = jsonEncode(
+      _metadata.map((key, value) => MapEntry(key, value.toJson())),
+    );
+    final result = _persistTail.then((_) async {
+      await _prefs.setString('wz_cache_index', encodedIndex);
+      await _prefs.setString('wz_cache_metadata', encodedMetadata);
+    });
+    _persistTail = result.catchError((Object _) {});
+    return result;
+  }
+
+  Future<T> _enqueueTrackOperation<T>(
+    String trackId,
+    Future<T> Function() operation,
+  ) {
+    final previous = _trackOperationTails[trackId] ?? Future<void>.value();
+    final clearBarrier = _clearBarrier;
+    final completer = Completer<T>();
+    late final Future<void> tail;
+    tail = () async {
+      await previous;
+      if (clearBarrier != null) await clearBarrier;
+      try {
+        completer.complete(await operation());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    }();
+    _trackOperationTails[trackId] = tail;
+    tail.whenComplete(() {
+      if (identical(_trackOperationTails[trackId], tail)) {
+        _trackOperationTails.remove(trackId);
+      }
+    });
+    return completer.future;
   }
 
   String? _guessExtFromUrl(String url) {
