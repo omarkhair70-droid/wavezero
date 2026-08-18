@@ -21,9 +21,23 @@ void main() {
     );
   }
 
-  test('current track id takes precedence over selected track id', () {
+  test('mismatched queue and selected ids mark a handoff pending', () {
     final position = resolve(currentTrackId: 'b', selectedTrackId: 'a');
 
+    expect(position.transitionPending, isTrue);
+    expect(position.index, -1);
+    expect(position.currentTrack?.trackId, 'a');
+    expect(position.upNextTrack, isNull);
+    expect(position.canPrevious, isFalse);
+    expect(position.canNext, isFalse);
+    expect(position.canShuffleNext, isFalse);
+    expect(position.canPlayNext, isFalse);
+  });
+
+  test('current track remains authoritative when selected track is outside queue', () {
+    final position = resolve(currentTrackId: 'b', selectedTrackId: 'outside');
+
+    expect(position.transitionPending, isFalse);
     expect(position.index, 1);
     expect(position.currentTrack?.trackId, 'b');
     expect(position.upNextTrack?.trackId, 'c');
@@ -34,10 +48,21 @@ void main() {
   test('selected track id is used when there is no current queue track id', () {
     final position = resolve(currentTrackId: null, selectedTrackId: 'a');
 
+    expect(position.transitionPending, isFalse);
     expect(position.index, 0);
     expect(position.currentTrack?.trackId, 'a');
     expect(position.upNextTrack?.trackId, 'b');
     expect(position.canPrevious, isFalse);
+    expect(position.canNext, isTrue);
+  });
+
+  test('matching current and selected ids resolve normal controls', () {
+    final position = resolve(currentTrackId: 'b', selectedTrackId: 'b');
+
+    expect(position.transitionPending, isFalse);
+    expect(position.index, 1);
+    expect(position.currentTrack?.trackId, 'b');
+    expect(position.canPrevious, isTrue);
     expect(position.canNext, isTrue);
   });
 
