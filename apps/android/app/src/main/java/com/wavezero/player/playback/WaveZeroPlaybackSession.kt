@@ -2,6 +2,7 @@ package com.wavezero.player.playback
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
 
 /**
@@ -49,7 +50,14 @@ object WaveZeroPlaybackSession {
     private fun startMediaSessionService(context: Context, action: String) {
         val appContext = context.applicationContext
         val intent = Intent(appContext, WaveZeroMediaSessionService::class.java).setAction(action)
-        appContext.startService(intent)
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            action != WaveZeroMediaSessionService.ACTION_STOP_AND_DISMISS
+        ) {
+            appContext.startForegroundService(intent)
+        } else {
+            appContext.startService(intent)
+        }
     }
 
     @Synchronized
