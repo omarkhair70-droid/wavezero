@@ -389,6 +389,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         : const <CatalogTrackSummary>[],
   );
 
+  List<CatalogTrackSummary> get _resolvableLibraryTracks =>
+      composeWzLibraryTracks(
+        filter: WzLibrarySourceFilter.all,
+        catalogTracks: _catalog,
+        deviceTracks: _deviceCatalogTracks,
+        downloadedTracks: _cachedCatalogTracks,
+        cloudTracks: _developerMode
+            ? _cloudCatalogTracks
+            : const <CatalogTrackSummary>[],
+      );
+
   int get _libraryTotalTrackCount => _libraryTracks.length;
   int get _libraryCombinedTrackCount =>
       _catalog.length +
@@ -907,14 +918,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   CatalogTrackSummary? _resolveCollectionTrack(
     WzCollectionTrackSnapshot snapshot,
   ) => wzResolveCollectionTrack(
-    libraryTracks: _libraryTracks,
+    libraryTracks: _resolvableLibraryTracks,
     snapshot: snapshot,
   );
 
   CatalogTrackSummary? _resolveHistoryEntry(WzListeningHistoryEntry entry) {
     final restoredDeviceTrack = _findDeviceTrack(entry.trackId);
     return wzResolveHistoryEntry(
-      libraryTracks: _libraryTracks,
+      libraryTracks: _resolvableLibraryTracks,
       entry: entry,
       fallbackTrack: restoredDeviceTrack == null
           ? null
@@ -1158,6 +1169,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _deleteCollection(WzCollection collection) async {
     if (collection.type == WzCollectionType.liked) return;
+    final deletingOpenDetail =
+        _selectedTab == WzAppTab.collectionDetail &&
+        _selectedCollectionId == collection.id;
     await _persistCollections(
       wzDeleteCollection(
         collections: _collections,
@@ -1166,6 +1180,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     );
     if (!mounted) return;
     setState(() => _selectedCollectionId = likedTracksCollectionId);
+    if (deletingOpenDetail) _navigateBack(fallback: WzAppTab.collections);
   }
 
   Future<void> _showRenameCollectionDialog(WzCollection collection) async {
@@ -1290,17 +1305,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       name: _userCollections.isEmpty ? 'My Collection' : 'New Collection',
     );
     if (!mounted) return;
-    setState(() {
-      _selectedCollectionId = collection.id;
-      _selectedTab = WzAppTab.collectionDetail;
-    });
+    _selectedCollectionId = collection.id;
+    _navigateTo(WzAppTab.collectionDetail);
   }
 
   void _openCollection(WzCollection collection) {
-    setState(() {
-      _selectedCollectionId = collection.id;
-      _selectedTab = WzAppTab.collectionDetail;
-    });
+    _selectedCollectionId = collection.id;
+    _navigateTo(WzAppTab.collectionDetail);
   }
 
   Future<void> _playCollectionSnapshot(
