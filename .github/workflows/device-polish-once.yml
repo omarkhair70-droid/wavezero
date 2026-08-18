@@ -1,11 +1,11 @@
 name: WaveZero one-time device polish
 
 on:
-  push:
-    branches:
-      - redesign/consumer-wavezero-v1
+  pull_request:
+    types: [synchronize]
     paths:
       - '.github/workflows/device-polish-once.yml'
+      - 'apps/flutter/wavezero_app/**'
 
 permissions:
   contents: write
