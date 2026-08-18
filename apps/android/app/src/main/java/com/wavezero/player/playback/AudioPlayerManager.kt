@@ -106,6 +106,7 @@ class AudioPlayerManager(
 
                 Player.STATE_ENDED -> {
                     playCommandInFlight = false
+                    positionJob?.cancel()
                     publish(metricsTracker.markNotPlaying(player.currentPosition))
                     mutablePlaybackState.value = PlaybackState(
                         status = PlaybackStatus.Ended,
@@ -113,10 +114,13 @@ class AudioPlayerManager(
                     )
                 }
 
-                Player.STATE_IDLE -> mutablePlaybackState.value = PlaybackState(
-                    status = PlaybackStatus.Idle,
-                    trackTitle = currentTrackTitle,
-                )
+                Player.STATE_IDLE -> {
+                    if (!player.playWhenReady) positionJob?.cancel()
+                    mutablePlaybackState.value = PlaybackState(
+                        status = PlaybackStatus.Idle,
+                        trackTitle = currentTrackTitle,
+                    )
+                }
             }
         }
 
@@ -134,6 +138,7 @@ class AudioPlayerManager(
                     trackTitle = currentTrackTitle,
                 )
             } else {
+                if (!player.playWhenReady) positionJob?.cancel()
                 publish(metricsTracker.markNotPlaying(player.currentPosition))
                 if (mutablePlaybackState.value.status == PlaybackStatus.Playing) {
                     mutablePlaybackState.value = PlaybackState(
@@ -150,6 +155,7 @@ class AudioPlayerManager(
                 return
             }
 
+            positionJob?.cancel()
             clearNativePrebuffer(NativePrebufferClearReason.NativePlaybackError)
             playCommandInFlight = false
             publish(metricsTracker.markError(error.message ?: error.errorCodeName))
@@ -165,6 +171,12 @@ class AudioPlayerManager(
             val trackId = nativePrebufferTrackId ?: return
             when (playbackState) {
                 Player.STATE_READY -> {
+                    if (
+                        prebufferPlayer.playbackState != Player.STATE_READY ||
+                        prebufferPlayer.currentMediaItem?.mediaId != trackId
+                    ) {
+                        return
+                    }
                     val startedAt = nativePrebufferStartedAtMs ?: SystemClock.elapsedRealtime()
                     publish(metricsTracker.markNativePrebufferReady(trackId, SystemClock.elapsedRealtime() - startedAt))
                 }
@@ -346,6 +358,7 @@ class AudioPlayerManager(
         softStopped = false
         playCommandInFlight = false
         player.pause()
+        positionJob?.cancel()
         publish(metricsTracker.markNotPlaying(player.currentPosition))
         mutablePlaybackState.value = PlaybackState(
             status = PlaybackStatus.Paused,
@@ -543,7 +556,8 @@ class AudioPlayerManager(
             nativePrebufferUrl == hlsUrl &&
             metricsTracker.snapshot().nativePrebufferReady &&
             prebufferPlayer.playbackState == Player.STATE_READY &&
-            prebufferPlayer.mediaItemCount > 0
+            prebufferPlayer.mediaItemCount > 0 &&
+            prebufferPlayer.currentMediaItem?.mediaId == trackId
     }
 
     private fun ensureCurrentMediaItemLoaded() {
@@ -675,5 +689,4 @@ class AudioPlayerManager(
         const val MEDIA_SESSION_ID = "wavezero-playback"
     }
 }
-
 
