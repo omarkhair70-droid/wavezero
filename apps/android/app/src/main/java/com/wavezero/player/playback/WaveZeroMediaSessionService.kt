@@ -86,6 +86,8 @@ class WaveZeroMediaSessionService : MediaSessionService() {
         val subtitle = snapshot["currentTrackArtist"] as? String ?: snapshot["currentTrackSource"] as? String ?: "WaveZero"
         val playPauseLabel = if (isPlaying) "Pause" else "Play"
         val playPauseIcon = if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+        val mediaStyle = Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2)
+        manager.mediaSession?.platformToken?.let { mediaStyle.setMediaSession(it) }
 
         val notification = Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
@@ -123,7 +125,7 @@ class WaveZeroMediaSessionService : MediaSessionService() {
                     servicePendingIntent(ACTION_STOP_AND_DISMISS),
                 ).build(),
             )
-            .setStyle(Notification.MediaStyle().setShowActionsInCompactView(0, 1, 2))
+            .setStyle(mediaStyle)
             .build()
 
         manager.markMediaNotificationShown()
