@@ -5,17 +5,12 @@ on:
     paths:
       - 'apps/flutter/wavezero_app/**'
       - '.github/workflows/flutter-ci.yml'
-      - '.github/scripts/device_polish.py'
-      - '.github/scripts/device_polish_postfix.py'
   push:
     branches:
       - main
     paths:
       - 'apps/flutter/wavezero_app/**'
       - '.github/workflows/flutter-ci.yml'
-
-permissions:
-  contents: write
 
 jobs:
   flutter:
@@ -29,9 +24,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
 
       - name: Install Flutter stable
         uses: subosito/flutter-action@v2
@@ -41,22 +33,6 @@ jobs:
 
       - name: Flutter version
         run: flutter --version
-
-      - name: Apply one-time device polish
-        if: github.event_name == 'pull_request' && github.head_ref == 'redesign/consumer-wavezero-v1'
-        run: python3 ../../../.github/scripts/device_polish.py
-
-      - name: Apply paused-ticker polish
-        if: github.event_name == 'pull_request' && github.head_ref == 'redesign/consumer-wavezero-v1'
-        run: python3 ../../../.github/scripts/device_polish_postfix.py
-
-      - name: Format one-time device polish
-        if: github.event_name == 'pull_request' && github.head_ref == 'redesign/consumer-wavezero-v1'
-        run: |
-          dart format \
-            lib/app/wavezero_app.dart \
-            lib/features/playback/consumer_player.dart \
-            test/features/playback/consumer_player_test.dart
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -69,23 +45,3 @@ jobs:
 
       - name: Build Android debug APK
         run: flutter build apk --debug
-
-      - name: Commit validated device polish
-        if: github.event_name == 'pull_request' && github.head_ref == 'redesign/consumer-wavezero-v1'
-        working-directory: ${{ github.workspace }}
-        run: |
-          git show origin/main:.github/workflows/flutter-ci.yml > .github/workflows/flutter-ci.yml
-          rm -f .github/workflows/device-polish-once.yml .github/scripts/device_polish.py .github/scripts/device_polish_postfix.py
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
-            apps/flutter/wavezero_app/lib/app/wavezero_app.dart \
-            apps/flutter/wavezero_app/lib/features/playback/consumer_player.dart \
-            apps/flutter/wavezero_app/test/features/playback/consumer_player_test.dart \
-            .github/workflows/flutter-ci.yml \
-            .github/workflows/device-polish-once.yml \
-            .github/scripts/device_polish.py \
-            .github/scripts/device_polish_postfix.py
-          git diff --cached --check
-          git commit -m 'Polish device navigation and playback interactions'
-          git push origin HEAD:${{ github.head_ref }}

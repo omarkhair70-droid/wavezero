@@ -5,7 +5,9 @@ import 'package:wavezero_app/features/playback/playback_modes.dart';
 import 'package:wavezero_app/playback/playback_metrics.dart';
 
 void main() {
-  testWidgets('consumer mini player opens and keeps play pause immediate', (tester) async {
+  testWidgets('consumer mini player opens and keeps play pause immediate', (
+    tester,
+  ) async {
     var opened = false;
     var toggled = false;
 
@@ -13,7 +15,10 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: WzConsumerMiniPlayer(
-            metrics: const PlaybackMetrics(trackTitle: 'Close voice', isPlaying: false),
+            metrics: const PlaybackMetrics(
+              trackTitle: 'Close voice',
+              isPlaying: false,
+            ),
             manifest: null,
             progressValue: .35,
             controlsDisabled: false,
@@ -32,7 +37,9 @@ void main() {
     expect(opened, isTrue);
   });
 
-  testWidgets('consumer player keeps like and queue interactions alive', (tester) async {
+  testWidgets('consumer player keeps like and queue interactions alive', (
+    tester,
+  ) async {
     var liked = false;
     var queueOpened = false;
 
@@ -41,7 +48,10 @@ void main() {
         home: Scaffold(
           body: SingleChildScrollView(
             child: WzConsumerPlayerSurface(
-              metrics: const PlaybackMetrics(trackTitle: 'ولا عاش ولا كان', durationMs: 180000),
+              metrics: const PlaybackMetrics(
+                trackTitle: 'ولا عاش ولا كان',
+                durationMs: 180000,
+              ),
               manifest: null,
               nextTrack: null,
               progressValue: .25,
@@ -83,4 +93,59 @@ void main() {
     await tester.tap(upNext);
     expect(queueOpened, isTrue);
   });
+
+  testWidgets(
+    'consumer player interpolates progress between playback snapshots',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: WzConsumerPlayerSurface(
+                metrics: const PlaybackMetrics(
+                  trackTitle: 'Smooth track',
+                  isPlaying: true,
+                  currentPositionMs: 1000,
+                  durationMs: 10000,
+                ),
+                manifest: null,
+                nextTrack: null,
+                progressValue: .1,
+                displayedPositionMs: 1000,
+                durationMs: 10000,
+                controlsDisabled: false,
+                canPlayPrevious: false,
+                canPlayNext: false,
+                onPlayPause: () {},
+                onPrevious: () {},
+                onNext: () {},
+                onSeekChanged: (_) {},
+                onSeekEnd: (_) {},
+                canSaveTrack: false,
+                liked: false,
+                onToggleLike: null,
+                onAddToCollection: null,
+                onAddToQueue: null,
+                onOpenQueue: () {},
+                shuffleEnabled: false,
+                repeatMode: WzRepeatMode.off,
+                sleepTimerActive: false,
+                onShuffleChanged: (_) {},
+                onCycleRepeatMode: () {},
+                onOpenSleepTimer: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final before = tester.widget<Slider>(find.byType(Slider)).value;
+      await tester.pump(const Duration(milliseconds: 500));
+      final after = tester.widget<Slider>(find.byType(Slider)).value;
+
+      expect(before, closeTo(.1, .01));
+      expect(after, greaterThan(.13));
+      expect(after, lessThan(.18));
+    },
+  );
 }

@@ -78,9 +78,12 @@ import 'theme/wavezero_theme.dart';
 import 'theme/wavezero_theme_preferences.dart';
 
 class WaveZeroApp extends StatefulWidget {
-  const WaveZeroApp({super.key, PlaybackBridge? playbackBridge, QueueSessionStore? sessionStore})
-      : _playbackBridge = playbackBridge,
-        _sessionStore = sessionStore;
+  const WaveZeroApp({
+    super.key,
+    PlaybackBridge? playbackBridge,
+    QueueSessionStore? sessionStore,
+  }) : _playbackBridge = playbackBridge,
+       _sessionStore = sessionStore;
 
   final PlaybackBridge? _playbackBridge;
   final QueueSessionStore? _sessionStore;
@@ -127,7 +130,8 @@ class _WaveZeroAppState extends State<WaveZeroApp> {
   }
 
   PlaybackBridge _defaultBridge() {
-    if (defaultTargetPlatform == TargetPlatform.android) return PlatformChannelPlaybackBridge();
+    if (defaultTargetPlatform == TargetPlatform.android)
+      return PlatformChannelPlaybackBridge();
     return MockPlaybackBridge();
   }
 }
@@ -189,7 +193,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<WzSearchResult>? _filteredSearchMemo;
   int _filteredSearchMemoKey = 0;
   final DeviceMusicService _deviceMusicService = DeviceMusicService();
-  DeviceMusicPermissionStatus _deviceMusicPermissionStatus = const DeviceMusicPermissionStatus(status: 'unknown');
+  DeviceMusicPermissionStatus _deviceMusicPermissionStatus =
+      const DeviceMusicPermissionStatus(status: 'unknown');
   String _deviceMusicScanStatus = 'not_scanned';
   List<DeviceMusicTrack> _deviceMusicTracks = const [];
   final CloudVaultService _cloudVaultService = const CloudVaultService();
@@ -200,16 +205,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   WzLibrarySourceFilter _librarySourceFilter = WzLibrarySourceFilter.all;
   WzLibrarySortMode _librarySortMode = WzLibrarySortMode.recentlyAdded;
 
-  final WzPlaybackPreferences _playbackPreferences = const WzPlaybackPreferences();
-  final WzAudioEffectPreferences _audioEffectPreferences = const WzAudioEffectPreferences();
+  final WzPlaybackPreferences _playbackPreferences =
+      const WzPlaybackPreferences();
+  final WzAudioEffectPreferences _audioEffectPreferences =
+      const WzAudioEffectPreferences();
   final WzAppModePreferences _appModePreferences = const WzAppModePreferences();
 
-  final WzPlaybackOperationController _operationController = WzPlaybackOperationController();
+  final WzPlaybackOperationController _operationController =
+      WzPlaybackOperationController();
   PlayerOperation get _operation => _operationController.current;
   bool _refreshingMetrics = false;
   bool _showMetrics = false;
   WzAppMode _appMode = WzAppMode.consumer;
   WzAppTab _selectedTab = WzAppTab.home;
+  final List<WzAppTab> _navigationHistory = <WzAppTab>[];
   bool _autoAdvanceEnabled = true;
   bool _shuffleEnabled = false;
   WzRepeatMode _repeatMode = WzRepeatMode.off;
@@ -240,8 +249,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   AudioQualityTier _preferredAudioQuality = AudioQualityTier.high;
   String _lastQualityFallbackReason = 'No catalog asset selected yet.';
   AudioEffectProfile _selectedAudioEffectProfile = AudioEffectProfile.off;
-  NativeAudioEffectStatus _nativeAudioEffectStatus = NativeAudioEffectStatus.off;
-  String _lastAudioEffectApplyResult = 'Audio effects are off; original playback is preserved.';
+  NativeAudioEffectStatus _nativeAudioEffectStatus =
+      NativeAudioEffectStatus.off;
+  String _lastAudioEffectApplyResult =
+      'Audio effects are off; original playback is preserved.';
   String? _currentAssetUrl;
   String? _currentCachedQuality;
   final Set<String> _autoCacheInFlight = <String>{};
@@ -282,7 +293,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   String _catalogQuery = '';
   String _catalogStatus = 'Catalog not loaded yet.';
   WzSearchFilter _searchFilter = WzSearchFilter.all;
-  final WzRecentSearchesStore _recentSearchesStore = const WzRecentSearchesStore();
+  final WzRecentSearchesStore _recentSearchesStore =
+      const WzRecentSearchesStore();
   List<String> _recentSearches = const <String>[];
   String _queueStatus = 'Queue is ready.';
   String _sessionStatus = 'Session recovery pending.';
@@ -291,19 +303,25 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   List<WzCollection> _collections = <WzCollection>[WzCollection.liked()];
   String? _selectedCollectionId = likedTracksCollectionId;
 
-  final ListeningHistoryService _listeningHistoryService = ListeningHistoryService();
-  List<WzListeningHistoryEntry> _listeningHistory = const <WzListeningHistoryEntry>[];
+  final ListeningHistoryService _listeningHistoryService =
+      ListeningHistoryService();
+  List<WzListeningHistoryEntry> _listeningHistory =
+      const <WzListeningHistoryEntry>[];
 
   WzCollection get _likedCollection => _collections.firstWhere(
-        (collection) => collection.type == WzCollectionType.liked,
-        orElse: () => WzCollection.liked(),
-      );
+    (collection) => collection.type == WzCollectionType.liked,
+    orElse: () => WzCollection.liked(),
+  );
 
-  List<WzCollection> get _userCollections => _collections.where((collection) => collection.type == WzCollectionType.user).toList(growable: false);
+  List<WzCollection> get _userCollections => _collections
+      .where((collection) => collection.type == WzCollectionType.user)
+      .toList(growable: false);
 
-  WzListeningHistoryEntry? get _continueListeningEntry => wzContinueListeningEntry(_listeningHistory);
+  WzListeningHistoryEntry? get _continueListeningEntry =>
+      wzContinueListeningEntry(_listeningHistory);
 
-  WzListeningHistoryEntry? get _mostPlayedHistoryEntry => wzMostPlayedHistoryEntry(_listeningHistory);
+  WzListeningHistoryEntry? get _mostPlayedHistoryEntry =>
+      wzMostPlayedHistoryEntry(_listeningHistory);
 
   WzCollection? get _selectedCollection {
     final id = _selectedCollectionId;
@@ -315,43 +333,72 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   CatalogTrackSummary? get _currentKnownTrack {
-    final id = _manifest?.trackId ?? _metrics.currentTrackId ?? _queueCurrentTrackId ?? _selectedTrackId;
-    if (id == null) return null;
-    final snapshot = WzCollectionTrackSnapshot(
-      trackId: id,
-      title: _manifest?.title ?? _metrics.trackTitle ?? 'Current track',
-      subtitle: _manifest?.subtitle ?? 'WaveZero track',
-      source: WzCollectionTrackSource.unknown,
-      qualityLabel: _manifest?.qualityLabel,
-      codec: _manifest?.codec,
-      license: _manifest?.license ?? LicenseMetadata.unknown,
-      addedAtMs: DateTime.now().millisecondsSinceEpoch,
-    );
-    return _resolveCollectionTrack(snapshot);
+    final id =
+        _manifest?.trackId ??
+        _metrics.currentTrackId ??
+        _queueCurrentTrackId ??
+        _selectedTrackId;
+    if (id == null || id.isEmpty) return null;
+
+    final candidates = <CatalogTrackSummary>[
+      ..._queue,
+      ..._catalog,
+      ..._deviceCatalogTracks,
+      ..._cachedCatalogTracks,
+      if (_developerMode) ..._cloudCatalogTracks,
+    ];
+    for (final track in candidates) {
+      if (track.trackId == id) return track;
+    }
+
+    final manifest = _manifest;
+    if (manifest != null && manifest.trackId == id) {
+      return CatalogTrackSummary(
+        trackId: manifest.trackId,
+        title: manifest.title,
+        artistId: manifest.artistId,
+        artistName: manifest.artistName,
+        durationMs: manifest.durationMs,
+        artworkUrl: manifest.artworkUrl,
+        source: isWzDeviceTrackId(manifest.trackId) ? 'device' : 'api',
+        license: manifest.license,
+      );
+    }
+    return null;
   }
 
-  List<CatalogTrackSummary> get _deviceCatalogTracks =>
-      _deviceMusicTracks.map(wzCatalogSummaryFromDeviceTrack).toList(growable: false);
+  List<CatalogTrackSummary> get _deviceCatalogTracks => _deviceMusicTracks
+      .map(wzCatalogSummaryFromDeviceTrack)
+      .toList(growable: false);
 
-  List<CatalogTrackSummary> get _cachedCatalogTracks =>
-      _cachedLibrary.map(wzCatalogSummaryFromCachedTrack).toList(growable: false);
+  List<CatalogTrackSummary> get _cachedCatalogTracks => _cachedLibrary
+      .map(wzCatalogSummaryFromCachedTrack)
+      .toList(growable: false);
 
-  List<CatalogTrackSummary> get _cloudCatalogTracks =>
-      _cloudVaultTracks.map((track) => track.toCatalogSummary()).toList(growable: false);
+  List<CatalogTrackSummary> get _cloudCatalogTracks => _cloudVaultTracks
+      .map((track) => track.toCatalogSummary())
+      .toList(growable: false);
 
   List<CatalogTrackSummary> get _libraryTracks => composeWzLibraryTracks(
-        filter: _librarySourceFilter,
-        catalogTracks: _catalog,
-        deviceTracks: _deviceCatalogTracks,
-        downloadedTracks: _cachedCatalogTracks,
-        cloudTracks: _developerMode ? _cloudCatalogTracks : const <CatalogTrackSummary>[],
-      );
+    filter: _librarySourceFilter,
+    catalogTracks: _catalog,
+    deviceTracks: _deviceCatalogTracks,
+    downloadedTracks: _cachedCatalogTracks,
+    cloudTracks: _developerMode
+        ? _cloudCatalogTracks
+        : const <CatalogTrackSummary>[],
+  );
 
   int get _libraryTotalTrackCount => _libraryTracks.length;
-  int get _libraryCombinedTrackCount => _catalog.length + _deviceMusicTracks.length + _cachedLibrary.length + (_developerMode ? _cloudVaultTracks.length : 0);
+  int get _libraryCombinedTrackCount =>
+      _catalog.length +
+      _deviceMusicTracks.length +
+      _cachedLibrary.length +
+      (_developerMode ? _cloudVaultTracks.length : 0);
   bool get _largeCatalogMode => _libraryCombinedTrackCount > _catalogLimit;
   int get _catalogLimit => _PlayerScreenState._defaultCatalogLimit;
-  int get _effectiveVisibleTrackCount => math.min(_visibleTrackCount, _filteredTrackCount);
+  int get _effectiveVisibleTrackCount =>
+      math.min(_visibleTrackCount, _filteredTrackCount);
 
   void _invalidateCatalogMemos() {
     _filteredCatalogMemo = null;
@@ -360,16 +407,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   int _libraryMemoKey() => Object.hash(
-        _catalog.length,
-        _deviceMusicTracks.length,
-        _cachedLibrary.length,
-        _cloudVaultTracks.length,
-        _librarySourceFilter,
-        _librarySortMode,
-        _catalogQuery,
-        _visibleTrackCount,
-        _deviceMusicImportedAtMs,
-      );
+    _catalog.length,
+    _deviceMusicTracks.length,
+    _cachedLibrary.length,
+    _cloudVaultTracks.length,
+    _librarySourceFilter,
+    _librarySortMode,
+    _catalogQuery,
+    _visibleTrackCount,
+    _deviceMusicImportedAtMs,
+  );
 
   List<CatalogTrackSummary> get _filteredCatalog {
     final key = _libraryMemoKey();
@@ -378,28 +425,37 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final query = _catalogQuery.trim();
     final List<CatalogTrackSummary> matching = query.isEmpty
         ? _libraryTracks
-        : _libraryTracks.where((track) => track.matchesQuery(query)).toList(growable: false);
+        : _libraryTracks
+              .where((track) => track.matchesQuery(query))
+              .toList(growable: false);
     _filteredTrackCount = matching.length;
-    final sorted = sortWzLibraryTracks(matching, mode: _librarySortMode, addedRank: _libraryAddedRank);
+    final sorted = sortWzLibraryTracks(
+      matching,
+      mode: _librarySortMode,
+      addedRank: _libraryAddedRank,
+    );
     final visible = sorted.take(_visibleTrackCount).toList(growable: false);
     _filteredCatalogMemoKey = key;
     _filteredCatalogMemo = visible;
     return visible;
   }
 
-  List<CatalogTrackSummary> get _searchableCatalogTracks => _catalog.take(_defaultCatalogLimit).toList(growable: false);
-  List<ResolvedCuratedDemoShelf> get _resolvedCuratedShelves => CuratedDemoPicks.resolveShelves(_catalog);
-  List<ResolvedCuratedDemoPick> get _featuredCuratedPicks => CuratedDemoPicks.resolveFeatured(_catalog, limit: 12);
+  List<CatalogTrackSummary> get _searchableCatalogTracks =>
+      _catalog.take(_defaultCatalogLimit).toList(growable: false);
+  List<ResolvedCuratedDemoShelf> get _resolvedCuratedShelves =>
+      CuratedDemoPicks.resolveShelves(_catalog);
+  List<ResolvedCuratedDemoPick> get _featuredCuratedPicks =>
+      CuratedDemoPicks.resolveFeatured(_catalog, limit: 12);
 
   int _searchIndexKey() => Object.hash(
-        _catalog.length,
-        _deviceMusicTracks.length,
-        _cachedLibrary.length,
-        _cloudVaultTracks.length,
-        _developerMode,
-        _collections.length,
-        _listeningHistory.length,
-      );
+    _catalog.length,
+    _deviceMusicTracks.length,
+    _cachedLibrary.length,
+    _cloudVaultTracks.length,
+    _developerMode,
+    _collections.length,
+    _listeningHistory.length,
+  );
 
   List<WzSearchResult> get _allSearchResults {
     final key = _searchIndexKey();
@@ -409,7 +465,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       catalogTracks: _searchableCatalogTracks,
       deviceTracks: _deviceCatalogTracks,
       downloadedTracks: _cachedCatalogTracks,
-      cloudTracks: _developerMode ? _cloudCatalogTracks : const <CatalogTrackSummary>[],
+      cloudTracks: _developerMode
+          ? _cloudCatalogTracks
+          : const <CatalogTrackSummary>[],
       collections: _collections,
       historyEntries: _listeningHistory,
       resolveHistoryEntry: _resolveHistoryEntry,
@@ -421,7 +479,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return results;
   }
 
-  int _filteredSearchKey() => Object.hash(_searchIndexKey(), _searchFilter, _debouncedFullSearchQuery);
+  int _filteredSearchKey() =>
+      Object.hash(_searchIndexKey(), _searchFilter, _debouncedFullSearchQuery);
 
   List<WzSearchResult> get _filteredSearchResults {
     final query = _debouncedFullSearchQuery;
@@ -431,69 +490,82 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final memo = _filteredSearchMemo;
     if (memo != null && _filteredSearchMemoKey == key) return memo;
     final matches = _allSearchResults
-        .where((result) => wzSearchFilterAllows(_searchFilter, result) && result.searchText.contains(normalized))
+        .where(
+          (result) =>
+              wzSearchFilterAllows(_searchFilter, result) &&
+              result.searchText.contains(normalized),
+        )
         .toList(growable: false);
     final indexed = matches.indexed.toList(growable: false);
     indexed.sort((a, b) {
-      final rank = wzSearchRank(a.$2, query).compareTo(wzSearchRank(b.$2, query));
+      final rank = wzSearchRank(
+        a.$2,
+        query,
+      ).compareTo(wzSearchRank(b.$2, query));
       if (rank != 0) return rank;
       final title = a.$2.searchText.compareTo(b.$2.searchText);
       if (title != 0) return title;
       return a.$1.compareTo(b.$1);
     });
-    final limited = indexed.map((item) => item.$2).take(_searchResultLimit).toList(growable: false);
+    final limited = indexed
+        .map((item) => item.$2)
+        .take(_searchResultLimit)
+        .toList(growable: false);
     _filteredSearchMemoKey = key;
     _filteredSearchMemo = limited;
     return limited;
   }
 
   WzQueuePosition get _queuePosition => resolveWzQueuePosition(
-        queue: _queue,
-        currentTrackId: _queueCurrentTrackId,
-        selectedTrackId: _selectedTrackId,
-        shuffleEnabled: _shuffleEnabled,
-      );
+    queue: _queue,
+    currentTrackId: _queueCurrentTrackId,
+    selectedTrackId: _selectedTrackId,
+    shuffleEnabled: _shuffleEnabled,
+  );
 
   int get _queueIndex => _queuePosition.index;
   CatalogTrackSummary? get _currentQueueTrack => _queuePosition.currentTrack;
   CatalogTrackSummary? get _upNextQueueTrack => _queuePosition.upNextTrack;
 
   SmartQueueDecision _smartQueueDecision() => decideSmartQueueCandidate(
-        smartPreloadEnabled: _prefetchEnabled,
-        queue: _queue,
-        catalogTrackIds: _catalogTrackIds,
-        currentTrackId: _queueCurrentTrackId,
-        selectedTrackId: _selectedTrackId,
-        previousCandidateTrackId: _smartQueueCandidateTrackId ?? _prefetchedTrackId,
-        manifestPrefetched: _manifestPrefetched,
-        metrics: _metrics,
-      );
+    smartPreloadEnabled: _prefetchEnabled,
+    queue: _queue,
+    catalogTrackIds: _catalogTrackIds,
+    currentTrackId: _queueCurrentTrackId,
+    selectedTrackId: _selectedTrackId,
+    previousCandidateTrackId: _smartQueueCandidateTrackId ?? _prefetchedTrackId,
+    manifestPrefetched: _manifestPrefetched,
+    metrics: _metrics,
+  );
 
   bool get _canPrevious => _queuePosition.canPrevious;
   bool get _canNext => _queuePosition.canNext;
   bool get _canPlayNextControl => _queuePosition.canPlayNext;
 
   String get _sleepTimerStatusLabel => WzSleepTimerPresentation.statusLabel(
-        deadline: _sleepTimerDeadline,
-        now: DateTime.now(),
-      );
+    deadline: _sleepTimerDeadline,
+    now: DateTime.now(),
+  );
 
   String get _sleepTimerSettingsLabel => WzSleepTimerPresentation.settingsLabel(
-        deadline: _sleepTimerDeadline,
-        now: DateTime.now(),
-      );
+    deadline: _sleepTimerDeadline,
+    now: DateTime.now(),
+  );
   bool get _playerDisabled => _operation.disablesPlayerControls;
   bool get _catalogRefreshDisabled => _operation.disablesCatalogRefresh;
   bool get _queueDisabled => _operation.disablesQueueControls;
   bool get _manualDisabled => _operation.disablesManualTrackControls;
   bool get _developerMode => _appMode == WzAppMode.developer;
-  bool get _showDeveloperControls => widget.appConfig.showDeveloperEntry || _developerMode;
-  bool get _allowManualApiSetup => widget.appConfig.allowManualApiSetup && _developerMode;
+  bool get _showDeveloperControls =>
+      widget.appConfig.showDeveloperEntry || _developerMode;
+  bool get _allowManualApiSetup =>
+      widget.appConfig.allowManualApiSetup && _developerMode;
 
   String get _consumerLibraryHeaderStatus {
     if (_offlineLibraryAvailable) return 'Offline Ready';
     if (_deviceMusicTracks.isNotEmpty) return 'Device music ready';
-    if (_catalog.isNotEmpty) return _contentStatus?.friendlyLabel ?? 'Catalog ready';
+    if (_catalog.isNotEmpty)
+      return _contentStatus?.friendlyLabel ?? 'Catalog ready';
 
     final normalized = _catalogStatus.toLowerCase();
     if (normalized.contains('loading')) return 'Loading library';
@@ -506,26 +578,29 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return 'Library ready';
   }
 
-  bool get _consumerLibraryHeaderWarning => _consumerLibraryHeaderStatus == 'Catalog unavailable';
-  bool get _consumerLibraryHeaderActive => !_consumerLibraryHeaderWarning && _consumerLibraryHeaderStatus != 'Loading library';
+  bool get _consumerLibraryHeaderWarning =>
+      _consumerLibraryHeaderStatus == 'Catalog unavailable';
+  bool get _consumerLibraryHeaderActive =>
+      !_consumerLibraryHeaderWarning &&
+      _consumerLibraryHeaderStatus != 'Loading library';
 
   String get _statusText => WzPlaybackStatusPresentation.headline(
-        lastError: _lastError,
-        playbackError: _metrics.playbackError,
-        operation: _operation,
-        isPlaying: _metrics.isPlaying,
-        hasLoadedTrack: _manifest != null || _metrics.trackTitle != null,
-      );
+    lastError: _lastError,
+    playbackError: _metrics.playbackError,
+    operation: _operation,
+    isPlaying: _metrics.isPlaying,
+    hasLoadedTrack: _manifest != null || _metrics.trackTitle != null,
+  );
 
   String get _statusDetail => WzPlaybackStatusPresentation.detail(
-        lastError: _lastError,
-        playbackError: _metrics.playbackError,
-        developerMode: _developerMode,
-        refreshingMetrics: _refreshingMetrics,
-        upNextTitle: _upNextQueueTrack?.title,
-        queueStatus: _queueStatus,
-        consumerError: friendlyWzLoadError,
-      );
+    lastError: _lastError,
+    playbackError: _metrics.playbackError,
+    developerMode: _developerMode,
+    refreshingMetrics: _refreshingMetrics,
+    upNextTitle: _upNextQueueTrack?.title,
+    queueStatus: _queueStatus,
+    consumerError: friendlyWzLoadError,
+  );
 
   @override
   void initState() {
@@ -533,13 +608,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _sessionRecoveryStartedAtMs = DateTime.now().millisecondsSinceEpoch;
     _titleController = TextEditingController(text: waveZeroTestTrack.title);
     _urlController = TextEditingController(text: waveZeroTestTrack.url);
-    _apiBaseUrlController = TextEditingController(text: widget.appConfig.apiBaseUrl);
+    _apiBaseUrlController = TextEditingController(
+      text: widget.appConfig.apiBaseUrl,
+    );
     _searchController = TextEditingController();
     _fullSearchController = TextEditingController();
     _cloudSeedTitleController = TextEditingController();
     _cloudSeedArtistController = TextEditingController();
     _cloudSeedUrlController = TextEditingController();
-    _cloudSeedProviderController = TextEditingController(text: CloudVaultProvider.manualUrl.label);
+    _cloudSeedProviderController = TextEditingController(
+      text: CloudVaultProvider.manualUrl.label,
+    );
     _searchController.addListener(() {
       _librarySearchDebounce?.cancel();
       _librarySearchDebounce = Timer(_searchDebounce, () {
@@ -588,16 +667,24 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final title = _cloudSeedTitleController.text.trim();
     final playableUrl = _cloudSeedUrlController.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add a title for the developer preview track.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add a title for the developer preview track.'),
+        ),
+      );
       return;
     }
     final now = DateTime.now().millisecondsSinceEpoch;
     final track = CloudVaultTrack(
       cloudTrackId: 'cloud-manual-$now',
       title: title,
-      artistName: _cloudSeedArtistController.text.trim().isEmpty ? null : _cloudSeedArtistController.text.trim(),
+      artistName: _cloudSeedArtistController.text.trim().isEmpty
+          ? null
+          : _cloudSeedArtistController.text.trim(),
       provider: CloudVaultProvider.manualUrl,
-      providerFileId: _cloudSeedProviderController.text.trim().isEmpty ? null : _cloudSeedProviderController.text.trim(),
+      providerFileId: _cloudSeedProviderController.text.trim().isEmpty
+          ? null
+          : _cloudSeedProviderController.text.trim(),
       sourceUri: playableUrl.isEmpty ? null : playableUrl,
       playableUri: playableUrl.isEmpty ? null : playableUrl,
       importedAtMs: now,
@@ -612,26 +699,41 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _cloudSeedTitleController.clear();
     _cloudSeedArtistController.clear();
     _cloudSeedUrlController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Developer preview cloud track added locally.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Developer preview cloud track added locally.'),
+      ),
+    );
   }
 
   Future<void> _removeCloudVaultTrack(CloudVaultTrack track) async {
     final next = await _cloudVaultService.removeTrack(track.cloudTrackId);
     if (!mounted) return;
     setState(() => _cloudVaultTracks = next);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Removed from Cloud Vault.')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Removed from Cloud Vault.')));
   }
 
   Future<void> _clearCloudVaultTracks() async {
     await _cloudVaultService.clearTracks();
     if (!mounted) return;
     setState(() => _cloudVaultTracks = const <CloudVaultTrack>[]);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud Vault entries cleared from this device.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Cloud Vault entries cleared from this device.'),
+      ),
+    );
   }
 
-  Future<void> _playCloudVaultTrack(CloudVaultTrack track, {bool autoPlay = true}) async {
+  Future<void> _playCloudVaultTrack(
+    CloudVaultTrack track, {
+    bool autoPlay = true,
+  }) async {
     if (!track.isResolvable) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud playback is not connected yet.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cloud playback is not connected yet.')),
+      );
       return;
     }
     final manifest = CatalogTrackManifest(
@@ -653,9 +755,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     );
     return _runOperation(PlayerOperation.loadingManualTrack, () async {
       await _clearNativeNextPrebuffer();
-      await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
-      await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: 'cloud_vault');
-      final next = await _cloudVaultService.markPlayed(track.cloudTrackId, DateTime.now().millisecondsSinceEpoch);
+      await widget.playbackBridge.loadTrack(
+        title: manifest.title,
+        url: manifest.streamUrl,
+      );
+      await _pushNotificationMetadata(
+        manifest,
+        url: manifest.streamUrl,
+        source: 'cloud_vault',
+      );
+      final next = await _cloudVaultService.markPlayed(
+        track.cloudTrackId,
+        DateTime.now().millisecondsSinceEpoch,
+      );
       if (!mounted) return;
       setState(() {
         _cloudVaultTracks = next;
@@ -673,7 +785,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   void _addCloudVaultTrackToQueue(CloudVaultTrack track) {
     if (!track.isResolvable) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cloud playback is not connected yet.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cloud playback is not connected yet.')),
+      );
       return;
     }
     _addToQueue(track.toCatalogSummary());
@@ -683,21 +797,25 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (!_developerMode) return;
     await _loadCloudVault();
     if (!mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => WzCloudVaultPage(
-        tracks: _cloudVaultTracks,
-        developerMode: _developerMode,
-        titleController: _cloudSeedTitleController,
-        artistController: _cloudSeedArtistController,
-        playableUrlController: _cloudSeedUrlController,
-        providerLabelController: _cloudSeedProviderController,
-        onAddDeveloperTrack: _addDeveloperCloudSeed,
-        onPlay: _playCloudVaultTrack,
-        onAddToQueue: _addCloudVaultTrackToQueue,
-        onRemove: (track) => unawaited(_removeCloudVaultTrack(track)),
-        onClearAll: _cloudVaultTracks.isEmpty ? null : () => unawaited(_clearCloudVaultTracks()),
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WzCloudVaultPage(
+          tracks: _cloudVaultTracks,
+          developerMode: _developerMode,
+          titleController: _cloudSeedTitleController,
+          artistController: _cloudSeedArtistController,
+          playableUrlController: _cloudSeedUrlController,
+          providerLabelController: _cloudSeedProviderController,
+          onAddDeveloperTrack: _addDeveloperCloudSeed,
+          onPlay: _playCloudVaultTrack,
+          onAddToQueue: _addCloudVaultTrackToQueue,
+          onRemove: (track) => unawaited(_removeCloudVaultTrack(track)),
+          onClearAll: _cloudVaultTracks.isEmpty
+              ? null
+              : () => unawaited(_clearCloudVaultTracks()),
+        ),
       ),
-    ));
+    );
   }
 
   Future<void> _loadListeningHistory() async {
@@ -726,7 +844,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _rememberSearchQuery(String query) async {
     final canonical = canonicalizeWzRecentSearch(query);
     if (canonical.isEmpty) return;
-    final next = buildWzRecentSearches(current: _recentSearches, query: canonical);
+    final next = buildWzRecentSearches(
+      current: _recentSearches,
+      query: canonical,
+    );
     setState(() => _recentSearches = next);
     await _recentSearchesStore.save(next);
   }
@@ -738,7 +859,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   void _openSearch({String? query}) {
     if (query != null) _fullSearchController.text = query;
-    setState(() => _selectedTab = WzAppTab.search);
+    _navigateTo(WzAppTab.search);
   }
 
   Future<void> _loadCollections() async {
@@ -755,16 +876,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     await _collectionsService.save(collections);
   }
 
-  bool _isLiked(String trackId) => wzCollectionContainsTrack(_likedCollection, trackId);
+  bool _isLiked(String trackId) =>
+      wzCollectionContainsTrack(_likedCollection, trackId);
 
   WzCollectionTrackSnapshot _snapshotForTrack(CatalogTrackSummary track) {
     final source = isWzDeviceCatalogTrack(track)
         ? WzCollectionTrackSource.device
         : isWzCachedCatalogTrack(track)
-            ? WzCollectionTrackSource.cached
-            : track.source == 'api'
-                ? WzCollectionTrackSource.api
-                : WzCollectionTrackSource.unknown;
+        ? WzCollectionTrackSource.cached
+        : track.source == 'api'
+        ? WzCollectionTrackSource.api
+        : WzCollectionTrackSource.unknown;
     return WzCollectionTrackSnapshot(
       trackId: track.trackId,
       title: track.title,
@@ -775,20 +897,28 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       primaryUrl: track.primaryAsset?.manifestUrl,
       qualityLabel: track.primaryAsset?.qualityLabel,
       codec: track.primaryAsset?.codec,
-      license: isWzDeviceCatalogTrack(track) ? LicenseMetadata.userDevice : track.license,
+      license: isWzDeviceCatalogTrack(track)
+          ? LicenseMetadata.userDevice
+          : track.license,
       addedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
   }
 
-  CatalogTrackSummary? _resolveCollectionTrack(WzCollectionTrackSnapshot snapshot) =>
-      wzResolveCollectionTrack(libraryTracks: _libraryTracks, snapshot: snapshot);
+  CatalogTrackSummary? _resolveCollectionTrack(
+    WzCollectionTrackSnapshot snapshot,
+  ) => wzResolveCollectionTrack(
+    libraryTracks: _libraryTracks,
+    snapshot: snapshot,
+  );
 
   CatalogTrackSummary? _resolveHistoryEntry(WzListeningHistoryEntry entry) {
     final restoredDeviceTrack = _findDeviceTrack(entry.trackId);
     return wzResolveHistoryEntry(
       libraryTracks: _libraryTracks,
       entry: entry,
-      fallbackTrack: restoredDeviceTrack == null ? null : wzCatalogSummaryFromDeviceTrack(restoredDeviceTrack),
+      fallbackTrack: restoredDeviceTrack == null
+          ? null
+          : wzCatalogSummaryFromDeviceTrack(restoredDeviceTrack),
     );
   }
 
@@ -796,13 +926,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     CatalogTrackManifest manifest, {
     required WzListeningHistorySource source,
     required String? playableUrl,
-  }) =>
-      wzHistorySnapshotForManifest(
-        manifest,
-        source: source,
-        playableUrl: playableUrl,
-        nowMs: DateTime.now().millisecondsSinceEpoch,
-      );
+  }) => wzHistorySnapshotForManifest(
+    manifest,
+    source: source,
+    playableUrl: playableUrl,
+    nowMs: DateTime.now().millisecondsSinceEpoch,
+  );
 
   Future<void> _recordListeningHistory(WzListeningHistoryEntry snapshot) async {
     final next = await _listeningHistoryService.recordPlay(snapshot);
@@ -811,35 +940,57 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _saveCurrentHistoryPosition() async {
-    final trackId = _manifest?.trackId ?? _metrics.currentTrackId ?? _selectedTrackId;
+    final trackId =
+        _manifest?.trackId ?? _metrics.currentTrackId ?? _selectedTrackId;
     if (trackId == null || trackId.isEmpty) return;
-    final position = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
+    final position = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble())
+        .round();
     final duration = _metrics.durationMs ?? _manifest?.durationMs;
-    final next = await _listeningHistoryService.updatePosition(trackId, positionMs: position, durationMs: duration);
+    final next = await _listeningHistoryService.updatePosition(
+      trackId,
+      positionMs: position,
+      durationMs: duration,
+    );
     if (!mounted) return;
     setState(() => _listeningHistory = next);
   }
 
-  Future<void> _playHistoryEntry(WzListeningHistoryEntry entry, {bool autoPlay = true}) async {
+  Future<void> _playHistoryEntry(
+    WzListeningHistoryEntry entry, {
+    bool autoPlay = true,
+  }) async {
     final resolved = _resolveHistoryEntry(entry);
     if (resolved == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
-    await _loadCatalogTrack(trackId: resolved.trackId, autoPlay: autoPlay, status: 'Loaded from listening history: ${resolved.title}');
-    if (entry.lastPositionMs > 0) await _seekTo(entry.lastPositionMs.toDouble());
+    await _loadCatalogTrack(
+      trackId: resolved.trackId,
+      autoPlay: autoPlay,
+      status: 'Loaded from listening history: ${resolved.title}',
+    );
+    if (entry.lastPositionMs > 0)
+      await _seekTo(entry.lastPositionMs.toDouble());
   }
 
   Future<void> _addHistoryEntryToQueue(WzListeningHistoryEntry entry) async {
     final resolved = _resolveHistoryEntry(entry);
     if (resolved == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
     _addToQueue(resolved);
   }
 
-  CatalogTrackSummary? _trackForSearchResult(WzSearchResult result) => result.track ?? (result.historyEntry == null ? null : _resolveHistoryEntry(result.historyEntry!));
+  CatalogTrackSummary? _trackForSearchResult(WzSearchResult result) =>
+      result.track ??
+      (result.historyEntry == null
+          ? null
+          : _resolveHistoryEntry(result.historyEntry!));
 
   Future<void> _playSearchResult(WzSearchResult result) async {
     await _rememberSearchQuery(_fullSearchController.text);
@@ -849,10 +1000,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
     final track = _trackForSearchResult(result);
     if (track == null || !result.available) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
-    await _loadCatalogTrack(trackId: track.trackId, autoPlay: true, status: 'Loaded from search: ${track.title}');
+    await _loadCatalogTrack(
+      trackId: track.trackId,
+      autoPlay: true,
+      status: 'Loaded from search: ${track.title}',
+    );
   }
 
   Future<void> _queueSearchResult(WzSearchResult result) async {
@@ -863,7 +1020,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
     final track = _trackForSearchResult(result);
     if (track == null || !result.available) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
     _addToQueue(track);
@@ -877,7 +1036,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
     final track = _trackForSearchResult(result);
     if (track == null || !result.available) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
     await _showAddToCollectionSheet(track);
@@ -889,10 +1050,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     if (collection != null) _openCollection(collection);
   }
 
-  Future<void> _addHistoryEntryToCollection(WzListeningHistoryEntry entry) async {
+  Future<void> _addHistoryEntryToCollection(
+    WzListeningHistoryEntry entry,
+  ) async {
     final resolved = _resolveHistoryEntry(entry);
     if (resolved == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
     await _showAddToCollectionSheet(resolved);
@@ -902,14 +1067,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final next = await _listeningHistoryService.remove(entry.trackId);
     if (!mounted) return;
     setState(() => _listeningHistory = next);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Removed from Listening History')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Removed from Listening History')),
+    );
   }
 
   Future<void> _clearListeningHistory() async {
     await _listeningHistoryService.clear();
     if (!mounted) return;
     setState(() => _listeningHistory = const <WzListeningHistoryEntry>[]);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Listening history cleared')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Listening history cleared')));
   }
 
   Future<void> _toggleLikedTrack(CatalogTrackSummary track) async {
@@ -924,10 +1093,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     );
     await _persistCollections(nextCollections);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(exists ? 'Removed from Liked Tracks' : 'Added to Collection')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          exists ? 'Removed from Liked Tracks' : 'Added to Collection',
+        ),
+      ),
+    );
   }
 
-  Future<WzCollection> _createCollection({String name = 'New Collection'}) async {
+  Future<WzCollection> _createCollection({
+    String name = 'New Collection',
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final collection = WzCollection(
       id: 'collection-$now',
@@ -940,7 +1117,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return collection;
   }
 
-  Future<void> _addTrackToCollection(WzCollection collection, CatalogTrackSummary track) async {
+  Future<void> _addTrackToCollection(
+    WzCollection collection,
+    CatalogTrackSummary track,
+  ) async {
     final nextCollections = wzUpsertCollectionTrack(
       collections: _collections,
       collectionId: collection.id,
@@ -950,7 +1130,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     await _persistCollections(nextCollections);
   }
 
-  Future<void> _removeTrackFromCollection(WzCollection collection, WzCollectionTrackSnapshot track) async {
+  Future<void> _removeTrackFromCollection(
+    WzCollection collection,
+    WzCollectionTrackSnapshot track,
+  ) async {
     final nextCollections = wzRemoveCollectionTrack(
       collections: _collections,
       collectionId: collection.id,
@@ -963,17 +1146,24 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _renameCollection(WzCollection collection, String name) async {
     if (collection.type == WzCollectionType.liked) return;
     final trimmed = name.trim().isEmpty ? 'My Collection' : name.trim();
-    await _persistCollections(wzRenameCollection(
-      collections: _collections,
-      collectionId: collection.id,
-      name: trimmed,
-      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await _persistCollections(
+      wzRenameCollection(
+        collections: _collections,
+        collectionId: collection.id,
+        name: trimmed,
+        updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
   }
 
   Future<void> _deleteCollection(WzCollection collection) async {
     if (collection.type == WzCollectionType.liked) return;
-    await _persistCollections(wzDeleteCollection(collections: _collections, collectionId: collection.id));
+    await _persistCollections(
+      wzDeleteCollection(
+        collections: _collections,
+        collectionId: collection.id,
+      ),
+    );
     if (!mounted) return;
     setState(() => _selectedCollectionId = likedTracksCollectionId);
   }
@@ -984,10 +1174,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Rename collection'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Collection name')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Collection name'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(controller.text), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -1001,10 +1201,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Delete ${collection.name}?'),
-        content: const Text('This removes the collection only. Downloads, cache files, and device music stay on this device.'),
+        content: const Text(
+          'This removes the collection only. Downloads, cache files, and device music stay on this device.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton.tonal(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -1024,29 +1232,50 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             children: [
               Text('Add to collection', style: WzText.title),
               const SizedBox(height: WzSpacing.xs),
-              Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
+              Text(
+                track.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WzText.body,
+              ),
               const SizedBox(height: WzSpacing.md),
-              ..._collections.map((collection) => ListTile(
-                    leading: Icon(collection.type == WzCollectionType.liked ? Icons.favorite : Icons.playlist_play),
-                    title: Text(collection.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text('${collection.trackCount} tracks'),
-                    onTap: () async {
-                      Navigator.of(context).pop();
-                      await _addTrackToCollection(collection, track);
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added to ${collection.name}')));
-                    },
-                  )),
+              ..._collections.map(
+                (collection) => ListTile(
+                  leading: Icon(
+                    collection.type == WzCollectionType.liked
+                        ? Icons.favorite
+                        : Icons.playlist_play,
+                  ),
+                  title: Text(
+                    collection.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text('${collection.trackCount} tracks'),
+                  onTap: () async {
+                    Navigator.of(context).pop();
+                    await _addTrackToCollection(collection, track);
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Added to ${collection.name}')),
+                    );
+                  },
+                ),
+              ),
               ListTile(
                 leading: const Icon(Icons.add),
                 title: const Text('Create New Collection'),
-                subtitle: const Text('Creates “New Collection” and adds this track.'),
+                subtitle: const Text(
+                  'Creates “New Collection” and adds this track.',
+                ),
                 onTap: () async {
                   Navigator.of(context).pop();
                   final collection = await _createCollection();
                   await _addTrackToCollection(collection, track);
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to Collection')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Added to Collection')),
+                  );
                 },
               ),
             ],
@@ -1057,7 +1286,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _createCollectionFromPage() async {
-    final collection = await _createCollection(name: _userCollections.isEmpty ? 'My Collection' : 'New Collection');
+    final collection = await _createCollection(
+      name: _userCollections.isEmpty ? 'My Collection' : 'New Collection',
+    );
     if (!mounted) return;
     setState(() {
       _selectedCollectionId = collection.id;
@@ -1072,19 +1303,32 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
   }
 
-  Future<void> _playCollectionSnapshot(WzCollectionTrackSnapshot snapshot, {bool autoPlay = true}) async {
+  Future<void> _playCollectionSnapshot(
+    WzCollectionTrackSnapshot snapshot, {
+    bool autoPlay = true,
+  }) async {
     final resolved = _resolveCollectionTrack(snapshot);
     if (resolved == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
-    await _loadCatalogTrack(trackId: resolved.trackId, autoPlay: autoPlay, status: 'Loaded from collection: ${resolved.title}');
+    await _loadCatalogTrack(
+      trackId: resolved.trackId,
+      autoPlay: autoPlay,
+      status: 'Loaded from collection: ${resolved.title}',
+    );
   }
 
-  Future<void> _addCollectionSnapshotToQueue(WzCollectionTrackSnapshot snapshot) async {
+  Future<void> _addCollectionSnapshotToQueue(
+    WzCollectionTrackSnapshot snapshot,
+  ) async {
     final resolved = _resolveCollectionTrack(snapshot);
     if (resolved == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now.')),
+      );
       return;
     }
     _addToQueue(resolved);
@@ -1116,15 +1360,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       unawaited(_updatePredictivePreloadCandidate());
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added $added tracks. $unavailable unavailable.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Added $added tracks. $unavailable unavailable.')),
+    );
   }
 
   Future<void> _loadAppMode() async {
-    final mode = await _appModePreferences.load(allowDeveloper: widget.appConfig.showDeveloperEntry);
+    final mode = await _appModePreferences.load(
+      allowDeveloper: widget.appConfig.showDeveloperEntry,
+    );
     if (!mounted) return;
     setState(() {
       _appMode = mode;
-      if (_appMode == WzAppMode.consumer && _selectedTab == WzAppTab.engine) _selectedTab = WzAppTab.home;
+      if (_appMode == WzAppMode.consumer && _selectedTab == WzAppTab.engine)
+        _selectedTab = WzAppTab.home;
     });
   }
 
@@ -1136,15 +1385,25 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _appMode = mode;
       if (mode == WzAppMode.consumer) {
         if (_selectedTab == WzAppTab.engine) _selectedTab = WzAppTab.home;
-        if (_librarySourceFilter == WzLibrarySourceFilter.cloud) _librarySourceFilter = WzLibrarySourceFilter.all;
+        if (_librarySourceFilter == WzLibrarySourceFilter.cloud)
+          _librarySourceFilter = WzLibrarySourceFilter.all;
         _cloudVaultTracks = const <CloudVaultTrack>[];
         _invalidateCatalogMemos();
       }
     });
-    messenger.showSnackBar(SnackBar(content: Text(mode == WzAppMode.developer ? 'Developer mode enabled' : 'Consumer mode enabled')));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          mode == WzAppMode.developer
+              ? 'Developer mode enabled'
+              : 'Consumer mode enabled',
+        ),
+      ),
+    );
   }
 
-  Future<void> _toggleAppMode() => _setAppMode(_developerMode ? WzAppMode.consumer : WzAppMode.developer);
+  Future<void> _toggleAppMode() =>
+      _setAppMode(_developerMode ? WzAppMode.consumer : WzAppMode.developer);
 
   Future<void> _setShuffleEnabled(bool enabled) async {
     await _playbackPreferences.setShuffleEnabled(enabled);
@@ -1153,7 +1412,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _shuffleEnabled = enabled;
       _queueStatus = enabled ? 'Shuffle on.' : 'Shuffle off.';
     });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(enabled ? 'Shuffle on' : 'Shuffle off')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(enabled ? 'Shuffle on' : 'Shuffle off')),
+    );
     unawaited(_updatePredictivePreloadCandidate());
   }
 
@@ -1166,7 +1427,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _repeatMode = mode;
       _queueStatus = mode.label;
     });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mode.label)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(mode.label)));
   }
 
   Future<void> _showSleepTimerPicker() async {
@@ -1176,24 +1438,49 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(WzSpacing.md, 0, WzSpacing.md, WzSpacing.md),
+          padding: const EdgeInsets.fromLTRB(
+            WzSpacing.md,
+            0,
+            WzSpacing.md,
+            WzSpacing.md,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text('Sleep timer', style: WzText.title),
               const SizedBox(height: WzSpacing.xs),
-              Text(_sleepTimerDeadline == null ? 'Pause playback after a selected time.' : _sleepTimerStatusLabel, style: WzText.caption),
+              Text(
+                _sleepTimerDeadline == null
+                    ? 'Pause playback after a selected time.'
+                    : _sleepTimerStatusLabel,
+                style: WzText.caption,
+              ),
               const SizedBox(height: WzSpacing.md),
-              ...WzSleepTimerPreset.values.map((preset) => ListTile(
-                    leading: Icon(preset == WzSleepTimerPreset.off ? Icons.timer_off : Icons.bedtime),
-                    title: Text(preset == WzSleepTimerPreset.off ? 'Sleep timer off' : preset.label),
-                    trailing: _sleepTimerPreset == preset && (preset == WzSleepTimerPreset.off || _sleepTimerDeadline != null) ? const Icon(Icons.check) : null,
-                    onTap: () {
-                      Navigator.of(sheetContext).pop();
-                      unawaited(_setSleepTimerPreset(preset));
-                    },
-                  )),
+              ...WzSleepTimerPreset.values.map(
+                (preset) => ListTile(
+                  leading: Icon(
+                    preset == WzSleepTimerPreset.off
+                        ? Icons.timer_off
+                        : Icons.bedtime,
+                  ),
+                  title: Text(
+                    preset == WzSleepTimerPreset.off
+                        ? 'Sleep timer off'
+                        : preset.label,
+                  ),
+                  trailing:
+                      _sleepTimerPreset == preset &&
+                          (preset == WzSleepTimerPreset.off ||
+                              _sleepTimerDeadline != null)
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    unawaited(_setSleepTimerPreset(preset));
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -1211,7 +1498,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _sleepTimerPreset = WzSleepTimerPreset.off;
         _sleepTimerDeadline = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer off')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Sleep timer off')));
       return;
     }
     final deadline = DateTime.now().add(duration);
@@ -1220,7 +1508,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _sleepTimerDeadline = deadline;
     });
     _sleepTimer = Timer(duration, () => unawaited(_handleSleepTimerEnded()));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sleep in ${duration.inMinutes}m')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Sleep in ${duration.inMinutes}m')));
   }
 
   Future<void> _handleSleepTimerEnded() async {
@@ -1235,13 +1525,38 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       unawaited(_saveCurrentHistoryPosition());
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer ended')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Sleep timer ended')));
   }
 
-  void _navigateTo(WzAppTab tab) {
+  void _navigateTo(WzAppTab tab, {bool remember = true}) {
     if (tab == WzAppTab.engine && !_developerMode) return;
-    setState(() => _selectedTab = tab);
+    if (tab == _selectedTab) return;
+    setState(() {
+      if (remember &&
+          (_navigationHistory.isEmpty ||
+              _navigationHistory.last != _selectedTab)) {
+        _navigationHistory.add(_selectedTab);
+      }
+      _selectedTab = tab;
+    });
   }
+
+  void _navigateBack({WzAppTab fallback = WzAppTab.home}) {
+    setState(() {
+      while (_navigationHistory.isNotEmpty) {
+        final previous = _navigationHistory.removeLast();
+        if (previous == WzAppTab.engine && !_developerMode) continue;
+        if (previous == _selectedTab) continue;
+        _selectedTab = previous;
+        return;
+      }
+      _selectedTab = fallback;
+    });
+  }
+
+  bool get _hasInternalBack =>
+      _navigationHistory.isNotEmpty || _selectedTab != WzAppTab.home;
 
   Future<void> _refreshDeviceMusicPermissionStatus() async {
     final status = await _deviceMusicService.getPermissionStatus();
@@ -1260,13 +1575,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
     try {
       var permission = await _deviceMusicService.getPermissionStatus();
-      if (!permission.isGranted) permission = await _deviceMusicService.requestPermission();
+      if (!permission.isGranted)
+        permission = await _deviceMusicService.requestPermission();
       if (!mounted) return;
       _deviceMusicPermissionStatus = permission;
       if (!permission.isGranted) {
         setState(() {
           _deviceMusicScanStatus = 'permission_denied';
-          _deviceMusicLastError = permission.message ?? 'Audio permission is ${permission.status}.';
+          _deviceMusicLastError =
+              permission.message ?? 'Audio permission is ${permission.status}.';
         });
         return;
       }
@@ -1279,10 +1596,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _deviceMusicTracks = scan.tracks;
         _deviceMusicLastScanCount = scan.count;
         _deviceMusicLastError = scan.error;
-        _deviceMusicImportedAtMs = scan.scannedAtMs ?? DateTime.now().millisecondsSinceEpoch;
+        _deviceMusicImportedAtMs =
+            scan.scannedAtMs ?? DateTime.now().millisecondsSinceEpoch;
         _visibleTrackCount = _initialVisibleTrackCount;
         _invalidateCatalogMemos();
-        if (scan.tracks.isNotEmpty) _librarySourceFilter = WzLibrarySourceFilter.device;
+        if (scan.tracks.isNotEmpty)
+          _librarySourceFilter = WzLibrarySourceFilter.device;
         _catalogStatus = scan.status == 'success'
             ? 'Imported ${scan.tracks.length} device music tracks from Android MediaStore.'
             : 'Device music scan ${scan.status}${scan.error == null ? '' : ': ${scan.error}'}';
@@ -1311,7 +1630,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       if (!mounted) return;
       setState(() {
         _selectedAudioEffectProfile = storedProfile;
-        _nativeAudioEffectStatus = storedProfile == AudioEffectProfile.off ? NativeAudioEffectStatus.off : NativeAudioEffectStatus.pending;
+        _nativeAudioEffectStatus = storedProfile == AudioEffectProfile.off
+            ? NativeAudioEffectStatus.off
+            : NativeAudioEffectStatus.pending;
         _lastAudioEffectApplyResult = storedProfile == AudioEffectProfile.off
             ? 'Audio effects are off; original playback is preserved.'
             : 'Restored ${storedProfile.label}; applying to native playback bridge.';
@@ -1321,21 +1642,29 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       if (!mounted) return;
       setState(() {
         _nativeAudioEffectStatus = NativeAudioEffectStatus.failed;
-        _lastAudioEffectApplyResult = 'Could not load audio effect preference: $error';
+        _lastAudioEffectApplyResult =
+            'Could not load audio effect preference: $error';
       });
     }
   }
 
   Future<void> _setAudioEffectProfile(AudioEffectProfile profile) async {
-    if (_selectedAudioEffectProfile == profile && _nativeAudioEffectStatus != NativeAudioEffectStatus.failed) return;
+    if (_selectedAudioEffectProfile == profile &&
+        _nativeAudioEffectStatus != NativeAudioEffectStatus.failed)
+      return;
     await _applyAudioEffectProfile(profile, persist: true);
   }
 
-  Future<void> _applyAudioEffectProfile(AudioEffectProfile profile, {required bool persist}) async {
+  Future<void> _applyAudioEffectProfile(
+    AudioEffectProfile profile, {
+    required bool persist,
+  }) async {
     if (!mounted) return;
     setState(() {
       _selectedAudioEffectProfile = profile;
-      _nativeAudioEffectStatus = profile == AudioEffectProfile.off ? NativeAudioEffectStatus.off : NativeAudioEffectStatus.pending;
+      _nativeAudioEffectStatus = profile == AudioEffectProfile.off
+          ? NativeAudioEffectStatus.off
+          : NativeAudioEffectStatus.pending;
       _lastAudioEffectApplyResult = profile == AudioEffectProfile.off
           ? 'Turning audio effects off to preserve original playback.'
           : 'Applying ${profile.label} to native playback bridge...';
@@ -1345,11 +1674,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       try {
         await _audioEffectPreferences.save(profile);
       } catch (error) {
-        if (mounted) setState(() => _lastAudioEffectApplyResult = 'Effect selected but preference was not persisted: $error');
+        if (mounted)
+          setState(
+            () => _lastAudioEffectApplyResult =
+                'Effect selected but preference was not persisted: $error',
+          );
       }
     }
 
-    final applyResult = await widget.playbackBridge.setAudioEffectProfile(profile);
+    final applyResult = await widget.playbackBridge.setAudioEffectProfile(
+      profile,
+    );
     if (!mounted) return;
     setState(() {
       _nativeAudioEffectStatus = applyResult.status;
@@ -1375,7 +1710,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     super.dispose();
   }
 
-  Future<void> _runOperation(PlayerOperation operation, Future<void> Function() body, {bool refreshAfter = true}) async {
+  Future<void> _runOperation(
+    PlayerOperation operation,
+    Future<void> Function() body, {
+    bool refreshAfter = true,
+  }) async {
     if (!_operationController.tryBegin(operation)) return;
     setState(() => _lastError = null);
     try {
@@ -1406,32 +1745,52 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   void _alignQueueWithNativeNotificationAction(PlaybackMetrics metrics) {
-    final trackId = metrics.currentTrackId ?? metrics.lastNotificationActionTrackId;
+    final trackId =
+        metrics.currentTrackId ?? metrics.lastNotificationActionTrackId;
     if (trackId == null || trackId.isEmpty) return;
     final existsInQueue = _queue.any((track) => track.trackId == trackId);
-    final existsInLibrary = _catalog.any((track) => track.trackId == trackId) ||
+    final existsInLibrary =
+        _catalog.any((track) => track.trackId == trackId) ||
         _cachedLibrary.any((track) => track.trackId == trackId) ||
         _deviceMusicTracks.any((track) => track.trackId == trackId);
     if (!existsInQueue && !existsInLibrary) return;
     _selectedTrackId = trackId;
     if (existsInQueue) _queueCurrentTrackId = trackId;
-    if (metrics.lastNotificationAction == 'next' || metrics.lastNotificationAction == 'previous') {
-      _queueStatus = 'Notification ${metrics.lastNotificationAction} selected native track $trackId.';
+    if (metrics.lastNotificationAction == 'next' ||
+        metrics.lastNotificationAction == 'previous') {
+      _queueStatus =
+          'Notification ${metrics.lastNotificationAction} selected native track $trackId.';
     }
   }
 
-  Future<void> _pushNotificationMetadata(CatalogTrackManifest manifest, {required String url, required String source}) async {
-    await widget.playbackBridge.updateMediaNotificationMetadata(NotificationTrackSnapshot.fromManifest(manifest, url: url, source: source));
+  Future<void> _pushNotificationMetadata(
+    CatalogTrackManifest manifest, {
+    required String url,
+    required String source,
+  }) async {
+    await widget.playbackBridge.updateMediaNotificationMetadata(
+      NotificationTrackSnapshot.fromManifest(
+        manifest,
+        url: url,
+        source: source,
+      ),
+    );
     await _pushNotificationQueueSnapshot();
   }
 
   Future<void> _pushNotificationQueueSnapshot() {
     return widget.playbackBridge.updateNotificationQueueSnapshot(
-      _queue.take(_initialVisibleTrackCount).map(_notificationSnapshotForQueueTrack).where((track) => track.url.isNotEmpty).toList(growable: false),
+      _queue
+          .take(_initialVisibleTrackCount)
+          .map(_notificationSnapshotForQueueTrack)
+          .where((track) => track.url.isNotEmpty)
+          .toList(growable: false),
     );
   }
 
-  NotificationTrackSnapshot _notificationSnapshotForQueueTrack(CatalogTrackSummary track) {
+  NotificationTrackSnapshot _notificationSnapshotForQueueTrack(
+    CatalogTrackSummary track,
+  ) {
     CachedTrackMetadata? cached;
     for (final entry in _cachedLibrary) {
       if (entry.trackId == track.trackId) {
@@ -1465,8 +1824,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _cacheBytes = bytes;
         _cachedLibrary = cachedLibrary;
         _cachedTrackBytes = _cachedTrackSizeMap(cachedLibrary);
-        _manualDownloadedCount = cachedLibrary.where((entry) => entry.downloadSource == 'manual').length;
-        _smartDownloadedCount = cachedLibrary.where((entry) => entry.downloadSource.startsWith('smart_')).length;
+        _manualDownloadedCount = cachedLibrary
+            .where((entry) => entry.downloadSource == 'manual')
+            .length;
+        _smartDownloadedCount = cachedLibrary
+            .where((entry) => entry.downloadSource.startsWith('smart_'))
+            .length;
         _offlineCachedTrackCount = cachedLibrary.length;
         _offlineLibraryAvailable = cachedLibrary.isNotEmpty;
         _invalidateCatalogMemos();
@@ -1482,15 +1845,24 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   void _capturePlaybackBaselineMetrics(PlaybackMetrics metrics) {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final hasAudioSignal = metrics.isPlaying &&
-        (metrics.tapToFirstAudioMs != null || metrics.tapToPositionAdvanceMs != null || metrics.currentPositionMs > 0);
-    if (_nextTapStartedAtMs != null && _nextTapToAudioMs == null && hasAudioSignal) _nextTapToAudioMs = now - _nextTapStartedAtMs!;
-    if (_stopRecoveryPlayStartedAtMs != null && _stopToPlayRecoveryMs == null && hasAudioSignal) {
+    final hasAudioSignal =
+        metrics.isPlaying &&
+        (metrics.tapToFirstAudioMs != null ||
+            metrics.tapToPositionAdvanceMs != null ||
+            metrics.currentPositionMs > 0);
+    if (_nextTapStartedAtMs != null &&
+        _nextTapToAudioMs == null &&
+        hasAudioSignal)
+      _nextTapToAudioMs = now - _nextTapStartedAtMs!;
+    if (_stopRecoveryPlayStartedAtMs != null &&
+        _stopToPlayRecoveryMs == null &&
+        hasAudioSignal) {
       _stopToPlayRecoveryMs = now - _stopRecoveryPlayStartedAtMs!;
       _stopRecoveryPlayStartedAtMs = null;
       _lastStopAtMs = null;
     }
-    _audioPreparedBeforeNext = _prefetchEnabled &&
+    _audioPreparedBeforeNext =
+        _prefetchEnabled &&
         _prefetchedTrackId != null &&
         metrics.nativePrebufferTrackId == _prefetchedTrackId &&
         metrics.nativePrebufferReady;
@@ -1505,7 +1877,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       metricsDurationMs: metrics.durationMs,
       manifestDurationMs: _manifest?.durationMs,
       lastEvent: metrics.lastEvent,
-      currentTrackId: _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId,
+      currentTrackId:
+          _currentQueueTrack?.trackId ??
+          _queueCurrentTrackId ??
+          _selectedTrackId,
       lastAutoAdvanceTrackId: _lastAutoAdvanceTrackId,
       thresholdMs: _autoAdvanceThresholdMs,
     );
@@ -1519,12 +1894,26 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       await widget.playbackBridge.play();
       return;
     }
-    if (_shuffleEnabled && await _playRandomQueueTrack(autoStart: true, source: QueueAdvanceSource.auto)) return;
+    if (_shuffleEnabled &&
+        await _playRandomQueueTrack(
+          autoStart: true,
+          source: QueueAdvanceSource.auto,
+        ))
+      return;
     if (_canNext) {
-      await _playNext(autoStart: true, source: QueueAdvanceSource.auto, allowShuffle: false);
+      await _playNext(
+        autoStart: true,
+        source: QueueAdvanceSource.auto,
+        allowShuffle: false,
+      );
       return;
     }
-    if (_repeatMode == WzRepeatMode.all && _queue.isNotEmpty) await _playQueueTrack(_queue.first, autoStart: true, source: QueueAdvanceSource.auto);
+    if (_repeatMode == WzRepeatMode.all && _queue.isNotEmpty)
+      await _playQueueTrack(
+        _queue.first,
+        autoStart: true,
+        source: QueueAdvanceSource.auto,
+      );
   }
 
   void _recordSmartDownloadSkip(String reason) {
@@ -1568,7 +1957,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
 
     final cachedLibrary = await _cacheService.cachedLibrary();
-    final capacity = evaluateWzSmartDownloadCapacity(cachedTrackCount: cachedLibrary.length, maxCachedTracks: _maxSmartDownloadCachedTracks);
+    final capacity = evaluateWzSmartDownloadCapacity(
+      cachedTrackCount: cachedLibrary.length,
+      maxCachedTracks: _maxSmartDownloadCachedTracks,
+    );
     if (!capacity.allowed) {
       _recordSmartDownloadSkip(capacity.reason!);
       return;
@@ -1614,26 +2006,31 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
   }
 
-  Future<void> _maybeAutoCacheCurrentTrack(CatalogTrackManifest manifest) async {
+  Future<void> _maybeAutoCacheCurrentTrack(
+    CatalogTrackManifest manifest,
+  ) async {
     if (manifest.trackId.isEmpty) return;
-    if (isWzDeviceTrackId(manifest.trackId) || isWzDeviceUrl(manifest.streamUrl)) {
+    if (isWzDeviceTrackId(manifest.trackId) ||
+        isWzDeviceUrl(manifest.streamUrl)) {
       _lastSmartDownloadReason = 'device local track already local';
       if (mounted) setState(() => _smartDownloadSkippedCount += 1);
       return;
     }
-    unawaited(_autoCacheTrack(
-      trackId: manifest.trackId,
-      url: manifest.streamUrl,
-      title: manifest.title,
-      artistName: manifest.artistName,
-      durationMs: manifest.durationMs,
-      artworkUrl: manifest.artworkUrl,
-      qualityLabel: manifest.qualityLabel ?? 'unknown',
-      codec: manifest.codec,
-      bitrateKbps: manifest.bitrateKbps,
-      reason: 'current_played',
-      downloadSource: 'smart_current',
-    ));
+    unawaited(
+      _autoCacheTrack(
+        trackId: manifest.trackId,
+        url: manifest.streamUrl,
+        title: manifest.title,
+        artistName: manifest.artistName,
+        durationMs: manifest.durationMs,
+        artworkUrl: manifest.artworkUrl,
+        qualityLabel: manifest.qualityLabel ?? 'unknown',
+        codec: manifest.codec,
+        bitrateKbps: manifest.bitrateKbps,
+        reason: 'current_played',
+        downloadSource: 'smart_current',
+      ),
+    );
   }
 
   Future<void> _maybeAutoCacheNextQueuedTrack() async {
@@ -1648,19 +2045,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final selectedAsset = selection?.asset;
     final assetUrl = selectedAsset?.manifestUrl;
     if (assetUrl != null && assetUrl.isNotEmpty) {
-      unawaited(_autoCacheTrack(
-        trackId: next.trackId,
-        url: assetUrl,
-        title: next.title,
-        artistName: next.artistName,
-        durationMs: next.durationMs,
-        artworkUrl: next.artworkUrl,
-        reason: 'up_next: ${selection?.fallbackReason ?? 'quality unknown'}',
-        downloadSource: 'smart_up_next',
-        qualityLabel: selectedAsset?.qualityLabel ?? 'unknown',
-        codec: selectedAsset?.codec,
-        bitrateKbps: selectedAsset?.bitrateKbps,
-      ));
+      unawaited(
+        _autoCacheTrack(
+          trackId: next.trackId,
+          url: assetUrl,
+          title: next.title,
+          artistName: next.artistName,
+          durationMs: next.durationMs,
+          artworkUrl: next.artworkUrl,
+          reason: 'up_next: ${selection?.fallbackReason ?? 'quality unknown'}',
+          downloadSource: 'smart_up_next',
+          qualityLabel: selectedAsset?.qualityLabel ?? 'unknown',
+          codec: selectedAsset?.codec,
+          bitrateKbps: selectedAsset?.bitrateKbps,
+        ),
+      );
       return;
     }
     final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
@@ -1668,19 +2067,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       final manifest = await client.fetchTrackManifest(trackId: next.trackId);
       final url2 = manifest.streamUrl;
       if (url2 != null && url2.isNotEmpty) {
-        unawaited(_autoCacheTrack(
-          trackId: manifest.trackId,
-          url: url2,
-          title: manifest.title,
-          artistName: manifest.artistName,
-          durationMs: manifest.durationMs,
-          artworkUrl: manifest.artworkUrl,
-          reason: 'up_next_fetched',
-          downloadSource: 'smart_up_next',
-          qualityLabel: manifest.qualityLabel ?? 'unknown',
-          codec: manifest.codec,
-          bitrateKbps: manifest.bitrateKbps,
-        ));
+        unawaited(
+          _autoCacheTrack(
+            trackId: manifest.trackId,
+            url: url2,
+            title: manifest.title,
+            artistName: manifest.artistName,
+            durationMs: manifest.durationMs,
+            artworkUrl: manifest.artworkUrl,
+            reason: 'up_next_fetched',
+            downloadSource: 'smart_up_next',
+            qualityLabel: manifest.qualityLabel ?? 'unknown',
+            codec: manifest.codec,
+            bitrateKbps: manifest.bitrateKbps,
+          ),
+        );
       }
     } catch (_) {
       _lastSmartDownloadReason = 'up-next manifest unavailable';
@@ -1690,12 +2091,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     }
   }
 
-  CatalogTrackManifest? _qualityAwareManifestForTrack(String trackId, String fallbackReasonPrefix) {
+  CatalogTrackManifest? _qualityAwareManifestForTrack(
+    String trackId,
+    String fallbackReasonPrefix,
+  ) {
     final track = _findTrack(_catalog, trackId);
     if (track == null) return null;
     final selection = choosePreferredAsset(track, _preferredAudioQuality);
     if (selection == null) return null;
-    _lastQualityFallbackReason = '$fallbackReasonPrefix: ${selection.fallbackReason}';
+    _lastQualityFallbackReason =
+        '$fallbackReasonPrefix: ${selection.fallbackReason}';
     return CatalogTrackManifest(
       trackId: track.trackId,
       title: track.title,
@@ -1727,37 +2132,62 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         }
         final catalog = await client.fetchCatalog();
         final restored = await _restoreSession(catalog.tracks);
-        final preferred = _findTrack(catalog.tracks, restored?.currentTrackId) ??
+        final preferred =
+            _findTrack(catalog.tracks, restored?.currentTrackId) ??
             _findTrack(catalog.tracks, restored?.selectedTrackId) ??
             _findTrack(catalog.tracks, _selectedTrackId) ??
             (catalog.tracks.isEmpty ? null : catalog.tracks.first);
-        final restoredQueue = restored == null ? const <CatalogTrackSummary>[] : resolveWzQueueFromSnapshot(catalogTracks: catalog.tracks, snapshot: restored);
+        final restoredQueue = restored == null
+            ? const <CatalogTrackSummary>[]
+            : resolveWzQueueFromSnapshot(
+                catalogTracks: catalog.tracks,
+                snapshot: restored,
+              );
         final startupQueue = restoredQueue.isNotEmpty
-            ? restoredQueue.take(_initialVisibleTrackCount).toList(growable: false)
-            : (preferred == null ? const <CatalogTrackSummary>[] : <CatalogTrackSummary>[preferred]);
+            ? restoredQueue
+                  .take(_initialVisibleTrackCount)
+                  .toList(growable: false)
+            : (preferred == null
+                  ? const <CatalogTrackSummary>[]
+                  : <CatalogTrackSummary>[preferred]);
         if (!mounted) return;
         setState(() {
           _catalog = catalog.tracks;
-          _catalogTrackIds = catalog.tracks.map((track) => track.trackId).toSet();
+          _catalogTrackIds = catalog.tracks
+              .map((track) => track.trackId)
+              .toSet();
           _visibleTrackCount = _initialVisibleTrackCount;
           _filteredTrackCount = catalog.tracks.length;
           _invalidateCatalogMemos();
           _queue = _queue.isEmpty ? startupQueue : _queue;
-          if (_queue.isEmpty && preferred != null) _queue = <CatalogTrackSummary>[preferred];
+          if (_queue.isEmpty && preferred != null)
+            _queue = <CatalogTrackSummary>[preferred];
           _selectedTrackId = preferred?.trackId;
           _queueCurrentTrackId = restored?.currentTrackId ?? preferred?.trackId;
-          _autoAdvanceEnabled = restored?.autoAdvanceEnabled ?? _autoAdvanceEnabled;
+          _autoAdvanceEnabled =
+              restored?.autoAdvanceEnabled ?? _autoAdvanceEnabled;
           _contentStatus = contentStatus;
           _catalogStatus = catalog.tracks.isEmpty
               ? 'Catalog is empty.'
               : (catalog.tracks.length > _defaultCatalogLimit
-                  ? 'Large demo library loaded. Showing first $_initialVisibleTrackCount tracks.'
-                  : contentStatus?.friendlyLabel ?? wzCatalogModeLabel(catalog.contentMode, catalog.tracks.length));
-          _queueStatus = restored == null ? 'Queue ready for selected track.' : 'Queue restored from previous session.';
-          _sessionStatus = restored == null ? 'No saved queue yet.' : 'Recovered ${_queue.length} queued tracks.';
+                    ? 'Large demo library loaded. Showing first $_initialVisibleTrackCount tracks.'
+                    : contentStatus?.friendlyLabel ??
+                          wzCatalogModeLabel(
+                            catalog.contentMode,
+                            catalog.tracks.length,
+                          ));
+          _queueStatus = restored == null
+              ? 'Queue ready for selected track.'
+              : 'Queue restored from previous session.';
+          _sessionStatus = restored == null
+              ? 'No saved queue yet.'
+              : 'Recovered ${_queue.length} queued tracks.';
           _offlineLibraryMode = false;
         });
-        if (preferred == null) throw const FormatException('Catalog API returned no playable tracks');
+        if (preferred == null)
+          throw const FormatException(
+            'Catalog API returned no playable tracks',
+          );
         await _loadManifestAndNativeTrack(preferred.trackId, client: client);
         unawaited(_saveSession());
       } catch (error) {
@@ -1765,36 +2195,45 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         final offlineLibrary = await _cacheService.cachedLibrary();
         if (offlineLibrary.isNotEmpty) {
           final offlineTracks = offlineLibrary
-              .map((entry) => CatalogTrackSummary(
-                    trackId: entry.trackId,
-                    title: entry.title,
-                    artistId: null,
-                    artistName: entry.artistName,
-                    durationMs: entry.durationMs,
-                    artworkUrl: entry.artworkUrl,
-                    primaryAsset: CatalogTrackAssetSummary(
-                      assetId: 'cached-${entry.trackId}',
-                      manifestUrl: entry.originalRemoteUrl,
-                      qualityLabel: entry.qualityLabel,
-                      codec: entry.codec,
-                      bitrateKbps: entry.bitrateKbps,
-                    ),
-                  ))
+              .map(
+                (entry) => CatalogTrackSummary(
+                  trackId: entry.trackId,
+                  title: entry.title,
+                  artistId: null,
+                  artistName: entry.artistName,
+                  durationMs: entry.durationMs,
+                  artworkUrl: entry.artworkUrl,
+                  primaryAsset: CatalogTrackAssetSummary(
+                    assetId: 'cached-${entry.trackId}',
+                    manifestUrl: entry.originalRemoteUrl,
+                    qualityLabel: entry.qualityLabel,
+                    codec: entry.codec,
+                    bitrateKbps: entry.bitrateKbps,
+                  ),
+                ),
+              )
               .toList(growable: false);
           setState(() {
             _lastError = null;
             _contentStatus = null;
             _catalog = offlineTracks;
-            _catalogTrackIds = offlineTracks.map((track) => track.trackId).toSet();
+            _catalogTrackIds = offlineTracks
+                .map((track) => track.trackId)
+                .toSet();
             _visibleTrackCount = _initialVisibleTrackCount;
             _filteredTrackCount = offlineTracks.length;
             _invalidateCatalogMemos();
-            _queue = offlineTracks.take(_initialVisibleTrackCount).toList(growable: false);
+            _queue = offlineTracks
+                .take(_initialVisibleTrackCount)
+                .toList(growable: false);
             _selectedTrackId = offlineTracks.first.trackId;
             _queueCurrentTrackId = offlineTracks.first.trackId;
-            _catalogStatus = 'Catalog unavailable. Showing offline cached library.';
-            _queueStatus = 'Offline cache available. Choose a cached track to play.';
-            _sessionStatus = '${offlineTracks.length} cached tracks available offline.';
+            _catalogStatus =
+                'Catalog unavailable. Showing offline cached library.';
+            _queueStatus =
+                'Offline cache available. Choose a cached track to play.';
+            _sessionStatus =
+                '${offlineTracks.length} cached tracks available offline.';
             _offlineCachedTrackCount = offlineLibrary.length;
             _offlineLibraryAvailable = true;
             _offlineLibraryMode = true;
@@ -1803,7 +2242,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         } else {
           setState(() {
             _lastError = null;
-            _catalogStatus = fallbackToDemo ? 'Catalog unavailable. Using local demo track.' : WaveZeroReleaseCopy.catalogUnavailable;
+            _catalogStatus = fallbackToDemo
+                ? 'Catalog unavailable. Using local demo track.'
+                : WaveZeroReleaseCopy.catalogUnavailable;
             _contentStatus = null;
             _offlineCachedTrackCount = 0;
             _offlineLibraryAvailable = false;
@@ -1811,9 +2252,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             _lastOfflineLibraryStatus = 'Offline library empty.';
           });
           if (fallbackToDemo) {
-            await widget.playbackBridge.loadTrack(title: waveZeroTestTrack.title, url: waveZeroTestTrack.url);
+            await widget.playbackBridge.loadTrack(
+              title: waveZeroTestTrack.title,
+              url: waveZeroTestTrack.url,
+            );
             await widget.playbackBridge.updateMediaNotificationMetadata(
-              NotificationTrackSnapshot(title: waveZeroTestTrack.title, artistName: 'WaveZero', url: waveZeroTestTrack.url, source: 'manual'),
+              NotificationTrackSnapshot(
+                title: waveZeroTestTrack.title,
+                artistName: 'WaveZero',
+                url: waveZeroTestTrack.url,
+                source: 'manual',
+              ),
             );
           }
         }
@@ -1823,13 +2272,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
   }
 
-  Future<QueueSessionSnapshot?> _restoreSession(List<CatalogTrackSummary> catalogTracks) async {
+  Future<QueueSessionSnapshot?> _restoreSession(
+    List<CatalogTrackSummary> catalogTracks,
+  ) async {
     if (_sessionRestored) return null;
     _sessionRestored = true;
     final snapshot = await widget.sessionStore.load();
     _sessionRecoveryMs ??= _elapsedSince(_sessionRecoveryStartedAtMs);
     if (snapshot == null) return null;
-    return sanitizeWzQueueSessionSnapshot(catalogTracks: catalogTracks, snapshot: snapshot);
+    return sanitizeWzQueueSessionSnapshot(
+      catalogTracks: catalogTracks,
+      snapshot: snapshot,
+    );
   }
 
   int? _elapsedSince(int? startedAtMs) {
@@ -1854,7 +2308,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _saveSession() {
     return widget.sessionStore.save(
       QueueSessionSnapshot(
-        queueTrackIds: _queue.map((track) => track.trackId).toList(growable: false),
+        queueTrackIds: _queue
+            .map((track) => track.trackId)
+            .toList(growable: false),
         currentTrackId: _queueCurrentTrackId,
         selectedTrackId: _selectedTrackId,
         autoAdvanceEnabled: _autoAdvanceEnabled,
@@ -1876,7 +2332,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return null;
   }
 
-  Future<void> _loadDeviceMusicTrack(DeviceMusicTrack track, {bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status}) {
+  Future<void> _loadDeviceMusicTrack(
+    DeviceMusicTrack track, {
+    bool autoPlay = false,
+    PlayerOperation operation = PlayerOperation.loadingTrack,
+    String? status,
+  }) {
     return _runOperation(operation, () async {
       await _clearNativeNextPrebuffer();
       if (!mounted) return;
@@ -1890,17 +2351,30 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _lastAutoAdvanceTrackId = manifest.trackId;
         _currentAssetUrl = manifest.streamUrl;
         _currentCachedQuality = null;
-        _catalogStatus = status ?? 'Loaded device music track: ${manifest.title}';
-        _lastQualityFallbackReason = 'device music: using MediaStore ${manifest.qualityLabel ?? 'unknown'} metadata';
+        _catalogStatus =
+            status ?? 'Loaded device music track: ${manifest.title}';
+        _lastQualityFallbackReason =
+            'device music: using MediaStore ${manifest.qualityLabel ?? 'unknown'} metadata';
         _lastSmartDownloadReason = 'device local track already local';
       });
-      await widget.playbackBridge.loadTrack(title: manifest.title, url: manifest.streamUrl);
-      await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: 'device');
-      unawaited(_recordListeningHistory(_historySnapshotForManifest(
+      await widget.playbackBridge.loadTrack(
+        title: manifest.title,
+        url: manifest.streamUrl,
+      );
+      await _pushNotificationMetadata(
         manifest,
-        source: WzListeningHistorySource.device,
-        playableUrl: manifest.streamUrl,
-      )));
+        url: manifest.streamUrl,
+        source: 'device',
+      );
+      unawaited(
+        _recordListeningHistory(
+          _historySnapshotForManifest(
+            manifest,
+            source: WzListeningHistorySource.device,
+            playableUrl: manifest.streamUrl,
+          ),
+        ),
+      );
       if (autoPlay) {
         await widget.playbackBridge.play();
         unawaited(_maybeAutoCacheNextQueuedTrack());
@@ -1910,12 +2384,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
   }
 
-  Future<void> _loadCatalogTrack({String? trackId, bool autoPlay = false, PlayerOperation operation = PlayerOperation.loadingTrack, String? status, CatalogTrackManifest? prefetchedManifest}) {
+  Future<void> _loadCatalogTrack({
+    String? trackId,
+    bool autoPlay = false,
+    PlayerOperation operation = PlayerOperation.loadingTrack,
+    String? status,
+    CatalogTrackManifest? prefetchedManifest,
+  }) {
     unawaited(_saveCurrentHistoryPosition());
-    final id = trackId ?? _selectedTrackId ?? (_catalog.isNotEmpty ? _catalog.first.trackId : null);
+    final id =
+        trackId ??
+        _selectedTrackId ??
+        (_catalog.isNotEmpty ? _catalog.first.trackId : null);
     if (id == null) return Future<void>.value();
     final deviceTrack = _findDeviceTrack(id);
-    if (deviceTrack != null) return _loadDeviceMusicTrack(deviceTrack, autoPlay: autoPlay, operation: operation, status: status);
+    if (deviceTrack != null)
+      return _loadDeviceMusicTrack(
+        deviceTrack,
+        autoPlay: autoPlay,
+        operation: operation,
+        status: status,
+      );
     CloudVaultTrack? cloudTrack;
     for (final candidate in _cloudVaultTracks) {
       if (candidate.cloudTrackId == id) {
@@ -1923,11 +2412,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         break;
       }
     }
-    if (cloudTrack != null) return _playCloudVaultTrack(cloudTrack, autoPlay: autoPlay);
+    if (cloudTrack != null)
+      return _playCloudVaultTrack(cloudTrack, autoPlay: autoPlay);
     return _runOperation(operation, () async {
       final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
       try {
-        await _loadManifestAndNativeTrack(id, client: client, autoPlay: autoPlay, status: status, prefetchedManifest: prefetchedManifest);
+        await _loadManifestAndNativeTrack(
+          id,
+          client: client,
+          autoPlay: autoPlay,
+          status: status,
+          prefetchedManifest: prefetchedManifest,
+        );
         unawaited(_saveSession());
       } finally {
         client.close();
@@ -1935,7 +2431,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
   }
 
-  Future<void> _loadManifestAndNativeTrack(String trackId, {required CatalogClient client, bool autoPlay = false, String? status, CatalogTrackManifest? prefetchedManifest}) async {
+  Future<void> _loadManifestAndNativeTrack(
+    String trackId, {
+    required CatalogClient client,
+    bool autoPlay = false,
+    String? status,
+    CatalogTrackManifest? prefetchedManifest,
+  }) async {
     if (!mounted) return;
     await _clearNativeNextPrebuffer();
     if (!mounted) return;
@@ -1946,10 +2448,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _lastAutoAdvanceTrackId = trackId;
     });
     CatalogTrackManifest manifest;
-    final qualityAwareManifest = _qualityAwareManifestForTrack(trackId, 'playback');
+    final qualityAwareManifest = _qualityAwareManifestForTrack(
+      trackId,
+      'playback',
+    );
     if (prefetchedManifest?.trackId == trackId) {
       manifest = prefetchedManifest!;
-      _lastQualityFallbackReason = 'playback: using prefetched ${manifest.qualityLabel ?? 'unknown'} asset';
+      _lastQualityFallbackReason =
+          'playback: using prefetched ${manifest.qualityLabel ?? 'unknown'} asset';
     } else if (qualityAwareManifest != null) {
       manifest = qualityAwareManifest;
     } else {
@@ -1967,12 +2473,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           codec: cachedMetadata.codec,
           bitrateKbps: cachedMetadata.bitrateKbps,
         );
-        _lastQualityFallbackReason = 'offline cache: using remembered ${cachedMetadata.qualityLabel} quality';
-        if (mounted) setState(() => _catalogStatus = 'Loaded offline cached track: ${manifest.title}');
+        _lastQualityFallbackReason =
+            'offline cache: using remembered ${cachedMetadata.qualityLabel} quality';
+        if (mounted)
+          setState(
+            () => _catalogStatus =
+                'Loaded offline cached track: ${manifest.title}',
+          );
       } else {
         try {
           manifest = await client.fetchTrackManifest(trackId: trackId);
-          _lastQualityFallbackReason = 'catalog manifest: API primary asset used';
+          _lastQualityFallbackReason =
+              'catalog manifest: API primary asset used';
         } catch (error) {
           if (cachedMetadata != null) {
             manifest = CatalogTrackManifest(
@@ -1987,8 +2499,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               codec: cachedMetadata.codec,
               bitrateKbps: cachedMetadata.bitrateKbps,
             );
-            _lastQualityFallbackReason = 'offline cache fallback: using remembered ${cachedMetadata.qualityLabel} quality';
-            if (mounted) setState(() => _catalogStatus = 'Loaded offline cached track: ${manifest.title}');
+            _lastQualityFallbackReason =
+                'offline cache fallback: using remembered ${cachedMetadata.qualityLabel} quality';
+            if (mounted)
+              setState(
+                () => _catalogStatus =
+                    'Loaded offline cached track: ${manifest.title}',
+              );
           } else {
             rethrow;
           }
@@ -2004,22 +2521,49 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _queueCurrentTrackId = manifest.trackId;
       _currentAssetUrl = manifest.streamUrl;
       _currentCachedQuality = null;
-      _catalogStatus = status ?? (_catalogStatus.startsWith('Loaded offline') ? _catalogStatus : 'Loaded from catalog API: ${manifest.title}');
+      _catalogStatus =
+          status ??
+          (_catalogStatus.startsWith('Loaded offline')
+              ? _catalogStatus
+              : 'Loaded from catalog API: ${manifest.title}');
     });
-    final cachedMetadata = await _cacheService.cachedTrackById(manifest.trackId);
+    final cachedMetadata = await _cacheService.cachedTrackById(
+      manifest.trackId,
+    );
     final resolvedUrl = await _cacheService.cachedOrRemoteUrlForAsset(
       trackId: manifest.trackId,
       remoteUrl: manifest.streamUrl,
       qualityLabel: manifest.qualityLabel,
     );
-    if (mounted && resolvedUrl.startsWith('file://')) setState(() => _currentCachedQuality = cachedMetadata?.qualityLabel ?? 'unknown');
-    await widget.playbackBridge.loadTrack(title: manifest.title, url: resolvedUrl);
-    final historySource = resolvedUrl.startsWith('file://') ? WzListeningHistorySource.cached : WzListeningHistorySource.api;
-    await _pushNotificationMetadata(manifest, url: resolvedUrl, source: historySource.name);
-    unawaited(_recordListeningHistory(_historySnapshotForManifest(manifest, source: historySource, playableUrl: resolvedUrl)));
+    if (mounted && resolvedUrl.startsWith('file://'))
+      setState(
+        () => _currentCachedQuality = cachedMetadata?.qualityLabel ?? 'unknown',
+      );
+    await widget.playbackBridge.loadTrack(
+      title: manifest.title,
+      url: resolvedUrl,
+    );
+    final historySource = resolvedUrl.startsWith('file://')
+        ? WzListeningHistorySource.cached
+        : WzListeningHistorySource.api;
+    await _pushNotificationMetadata(
+      manifest,
+      url: resolvedUrl,
+      source: historySource.name,
+    );
+    unawaited(
+      _recordListeningHistory(
+        _historySnapshotForManifest(
+          manifest,
+          source: historySource,
+          playableUrl: resolvedUrl,
+        ),
+      ),
+    );
     unawaited(_refreshCacheStats());
     if (autoPlay) await widget.playbackBridge.play();
-    if (_nextTapStartedAtMs != null && _queueCurrentTrackId == manifest.trackId) {
+    if (_nextTapStartedAtMs != null &&
+        _queueCurrentTrackId == manifest.trackId) {
       setState(() {
         _nextTapToAudioMs = null;
         _nextPreparedBeforePlay = false;
@@ -2051,7 +2595,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     _nextPreparedBeforePlay = false;
   }
 
-  Future<void> _clearNativeNextPrebuffer({bool clearFlutterState = true}) async {
+  Future<void> _clearNativeNextPrebuffer({
+    bool clearFlutterState = true,
+  }) async {
     await widget.playbackBridge.clearNextTrackPrebuffer();
     if (!mounted || !clearFlutterState) return;
     setState(() => _clearFlutterPrebufferState());
@@ -2064,14 +2610,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _clearFlutterPrebufferState();
         _smartQueueReason = SmartQueueReason.smartPreloadOff;
       }
-      _queueStatus = value ? 'Smart preload enabled.' : 'Smart preload disabled.';
+      _queueStatus = value
+          ? 'Smart preload enabled.'
+          : 'Smart preload disabled.';
     });
     if (value) {
       unawaited(_updatePredictivePreloadCandidate());
     } else {
-      unawaited(_clearNativeNextPrebuffer().then((_) {
-        if (mounted) setState(() => _smartQueueReason = SmartQueueReason.smartPreloadOff);
-      }));
+      unawaited(
+        _clearNativeNextPrebuffer().then((_) {
+          if (mounted)
+            setState(
+              () => _smartQueueReason = SmartQueueReason.smartPreloadOff,
+            );
+        }),
+      );
     }
   }
 
@@ -2098,13 +2651,20 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final sameFlutterCandidate = _prefetchedTrackId == candidate.trackId;
     final sameNativeCandidate = nativeCandidateId == candidate.trackId;
     if (decision.reason == SmartQueueReason.alreadyPrepared ||
-        (sameFlutterCandidate && (_prefetchInFlight || (_prefetchedManifest != null && sameNativeCandidate)))) return;
+        (sameFlutterCandidate &&
+            (_prefetchInFlight ||
+                (_prefetchedManifest != null && sameNativeCandidate))))
+      return;
 
     final previousNativeCandidateId = nativeCandidateId ?? _prefetchedTrackId;
-    if (previousNativeCandidateId != null && previousNativeCandidateId != candidate.trackId) {
+    if (previousNativeCandidateId != null &&
+        previousNativeCandidateId != candidate.trackId) {
       await _clearNativeNextPrebuffer();
       final nextDecision = _smartQueueDecision();
-      if (!mounted || !nextDecision.hasCandidate || nextDecision.candidateTrackId != candidate.trackId) return;
+      if (!mounted ||
+          !nextDecision.hasCandidate ||
+          nextDecision.candidateTrackId != candidate.trackId)
+        return;
       setState(() {
         _smartQueueCandidateTrackId = candidate.trackId;
         _smartQueueReason = SmartQueueReason.candidateChanged;
@@ -2124,9 +2684,15 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
     final client = CatalogClient(baseUrl: _apiBaseUrlController.text);
     try {
-      final manifest = _qualityAwareManifestForTrack(candidate.trackId, 'preload') ?? await client.fetchTrackManifest(trackId: candidate.trackId);
+      final manifest =
+          _qualityAwareManifestForTrack(candidate.trackId, 'preload') ??
+          await client.fetchTrackManifest(trackId: candidate.trackId);
       final latestDecision = _smartQueueDecision();
-      if (!mounted || generation != _prefetchGeneration || !latestDecision.hasCandidate || latestDecision.candidateTrackId != candidate.trackId) return;
+      if (!mounted ||
+          generation != _prefetchGeneration ||
+          !latestDecision.hasCandidate ||
+          latestDecision.candidateTrackId != candidate.trackId)
+        return;
       setState(() {
         _prefetchedTrackId = manifest.trackId;
         _prefetchedTrackTitle = manifest.title;
@@ -2138,7 +2704,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _audioPreparedBeforeNext = false;
       });
       try {
-        await widget.playbackBridge.prepareNextTrack(trackId: manifest.trackId, title: manifest.title, url: manifest.streamUrl);
+        await widget.playbackBridge.prepareNextTrack(
+          trackId: manifest.trackId,
+          title: manifest.title,
+          url: manifest.streamUrl,
+        );
       } catch (error) {
         if (!mounted || generation != _prefetchGeneration) return;
         await _clearNativeNextPrebuffer();
@@ -2159,10 +2729,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   Future<void> _loadManualTrack() {
     return _runOperation(PlayerOperation.loadingManualTrack, () async {
       await _clearNativeNextPrebuffer();
-      final title = _titleController.text.trim().isEmpty ? waveZeroTestTrack.title : _titleController.text.trim();
+      final title = _titleController.text.trim().isEmpty
+          ? waveZeroTestTrack.title
+          : _titleController.text.trim();
       final url = _urlController.text.trim();
       await widget.playbackBridge.loadTrack(title: title, url: url);
-      await widget.playbackBridge.updateMediaNotificationMetadata(NotificationTrackSnapshot(title: title, artistName: 'WaveZero', url: url, source: 'manual'));
+      await widget.playbackBridge.updateMediaNotificationMetadata(
+        NotificationTrackSnapshot(
+          title: title,
+          artistName: 'WaveZero',
+          url: url,
+          source: 'manual',
+        ),
+      );
       if (mounted) setState(() => _catalogStatus = 'Manual track loaded.');
     });
   }
@@ -2175,7 +2754,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       } else {
         if (_lastStopAtMs != null) {
           setState(() {
-            _stopRecoveryPlayStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+            _stopRecoveryPlayStartedAtMs =
+                DateTime.now().millisecondsSinceEpoch;
             _stopToPlayRecoveryMs = null;
           });
         }
@@ -2184,7 +2764,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     });
   }
 
-  Future<void> _stop() => _runOperation(PlayerOperation.playbackCommand, () async {
+  Future<void> _stop() =>
+      _runOperation(PlayerOperation.playbackCommand, () async {
         await _saveCurrentHistoryPosition();
         await widget.playbackBridge.stop();
         if (!mounted) return;
@@ -2197,18 +2778,25 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         });
       });
 
-  Future<void> _retry() => _runOperation(PlayerOperation.playbackCommand, () async {
+  Future<void> _retry() =>
+      _runOperation(PlayerOperation.playbackCommand, () async {
         await widget.playbackBridge.retry();
         if (!mounted) return;
         setState(() => _clearFlutterPrebufferState());
       });
 
-  Future<void> _seekTo(double positionMs) => _runOperation(PlayerOperation.seeking, () async {
+  Future<void> _seekTo(double positionMs) =>
+      _runOperation(PlayerOperation.seeking, () async {
         final target = positionMs.round();
         await widget.playbackBridge.seekTo(target);
-        final trackId = _manifest?.trackId ?? _metrics.currentTrackId ?? _selectedTrackId;
+        final trackId =
+            _manifest?.trackId ?? _metrics.currentTrackId ?? _selectedTrackId;
         if (trackId != null && trackId.isNotEmpty) {
-          final next = await _listeningHistoryService.updatePosition(trackId, positionMs: target, durationMs: _metrics.durationMs ?? _manifest?.durationMs);
+          final next = await _listeningHistoryService.updatePosition(
+            trackId,
+            positionMs: target,
+            durationMs: _metrics.durationMs ?? _manifest?.durationMs,
+          );
           if (mounted) setState(() => _listeningHistory = next);
         }
       });
@@ -2220,7 +2808,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       setState(() => _metrics = latest);
       await Clipboard.setData(ClipboardData(text: latest.toDisplayText()));
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Metrics copied')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Metrics copied')));
     }, refreshAfter: false);
   }
 
@@ -2231,7 +2820,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     final assetUrl = selectedAsset?.manifestUrl;
     if (assetUrl == null || assetUrl.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track is not available right now')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track is not available right now')),
+      );
       return;
     }
     if (!_operationController.tryBegin(PlayerOperation.loadingTrack)) return;
@@ -2258,8 +2849,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       );
       await _refreshCacheStats();
       if (!mounted) return;
-      _lastQualityFallbackReason = 'manual cache: ${selection?.fallbackReason ?? 'quality unknown'}';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'Downloaded ${track.title} (${wzProductQualityLabel(selectedAsset?.qualityLabel ?? 'unknown')})' : 'Download failed for ${track.title}')));
+      _lastQualityFallbackReason =
+          'manual cache: ${selection?.fallbackReason ?? 'quality unknown'}';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Downloaded ${track.title} (${wzProductQualityLabel(selectedAsset?.qualityLabel ?? 'unknown')})'
+                : 'Download failed for ${track.title}',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(_operationController.end);
     }
@@ -2272,11 +2872,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     setState(() {});
     try {
       final ok = await _cacheService.deleteCachedTrack(track.trackId);
-      _lastCacheDeleteResult = ok ? 'removed:${track.trackId}' : 'remove failed:${track.trackId}';
+      _lastCacheDeleteResult = ok
+          ? 'removed:${track.trackId}'
+          : 'remove failed:${track.trackId}';
       await _refreshCacheStats();
       _refreshOfflineLibraryIfNeeded();
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(ok ? 'Removed from downloads' : 'Could not remove ${track.title}')));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            ok ? 'Removed from downloads' : 'Could not remove ${track.title}',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(_operationController.end);
     }
@@ -2285,22 +2893,24 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   void _refreshOfflineLibraryIfNeeded() {
     if (!_offlineLibraryMode) return;
     final offlineTracks = _cachedLibrary
-        .map((entry) => CatalogTrackSummary(
-              trackId: entry.trackId,
-              title: entry.title,
-              artistId: null,
-              artistName: entry.artistName,
-              durationMs: entry.durationMs,
-              artworkUrl: entry.artworkUrl,
-              primaryAsset: CatalogTrackAssetSummary(
-                assetId: 'cached-${entry.trackId}',
-                manifestUrl: entry.originalRemoteUrl,
-                qualityLabel: entry.qualityLabel,
-                codec: entry.codec,
-                bitrateKbps: entry.bitrateKbps,
-              ),
-              license: entry.license,
-            ))
+        .map(
+          (entry) => CatalogTrackSummary(
+            trackId: entry.trackId,
+            title: entry.title,
+            artistId: null,
+            artistName: entry.artistName,
+            durationMs: entry.durationMs,
+            artworkUrl: entry.artworkUrl,
+            primaryAsset: CatalogTrackAssetSummary(
+              assetId: 'cached-${entry.trackId}',
+              manifestUrl: entry.originalRemoteUrl,
+              qualityLabel: entry.qualityLabel,
+              codec: entry.codec,
+              bitrateKbps: entry.bitrateKbps,
+            ),
+            license: entry.license,
+          ),
+        )
         .toList(growable: false);
     if (!mounted) return;
     setState(() {
@@ -2309,11 +2919,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _visibleTrackCount = _initialVisibleTrackCount;
       _filteredTrackCount = offlineTracks.length;
       _invalidateCatalogMemos();
-      _queue = offlineTracks.take(_initialVisibleTrackCount).toList(growable: false);
-      if (!offlineTracks.any((track) => track.trackId == _selectedTrackId)) _selectedTrackId = offlineTracks.isEmpty ? null : offlineTracks.first.trackId;
-      if (!offlineTracks.any((track) => track.trackId == _queueCurrentTrackId)) _queueCurrentTrackId = _selectedTrackId;
-      _catalogStatus = offlineTracks.isEmpty ? 'Offline library is empty.' : 'Offline cached library refreshed.';
-      _queueStatus = offlineTracks.isEmpty ? 'Queue cleared.' : 'Offline cache available. Choose a cached track to play.';
+      _queue = offlineTracks
+          .take(_initialVisibleTrackCount)
+          .toList(growable: false);
+      if (!offlineTracks.any((track) => track.trackId == _selectedTrackId))
+        _selectedTrackId = offlineTracks.isEmpty
+            ? null
+            : offlineTracks.first.trackId;
+      if (!offlineTracks.any((track) => track.trackId == _queueCurrentTrackId))
+        _queueCurrentTrackId = _selectedTrackId;
+      _catalogStatus = offlineTracks.isEmpty
+          ? 'Offline library is empty.'
+          : 'Offline cached library refreshed.';
+      _queueStatus = offlineTracks.isEmpty
+          ? 'Queue cleared.'
+          : 'Offline cache available. Choose a cached track to play.';
     });
   }
 
@@ -2327,32 +2947,52 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       await _refreshCacheStats();
       _refreshOfflineLibraryIfNeeded();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Downloads cleared')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Downloads cleared')));
     } finally {
       if (mounted) setState(_operationController.end);
     }
   }
 
-  Future<void> _resetMetrics() => _runOperation(PlayerOperation.resettingMetrics, widget.playbackBridge.resetMetrics);
+  Future<void> _resetMetrics() => _runOperation(
+    PlayerOperation.resettingMetrics,
+    widget.playbackBridge.resetMetrics,
+  );
 
   void _addToQueue(CatalogTrackSummary track) {
-    final mutation = addWzQueueTrack(queue: _queue, track: track, currentTrackId: _queueCurrentTrackId);
+    final mutation = addWzQueueTrack(
+      queue: _queue,
+      track: track,
+      currentTrackId: _queueCurrentTrackId,
+    );
     setState(() {
       _queue = mutation.queue;
       _queueCurrentTrackId = mutation.currentTrackId;
-      _queueStatus = mutation.alreadyPresent ? '${track.title} is already in queue.' : '${track.title} added to queue.';
+      _queueStatus = mutation.alreadyPresent
+          ? '${track.title} is already in queue.'
+          : '${track.title} added to queue.';
       _sessionStatus = 'Session saved.';
     });
     unawaited(_saveSession());
     unawaited(_pushNotificationQueueSnapshot());
     unawaited(_updatePredictivePreloadCandidate());
     unawaited(_maybeAutoCacheNextQueuedTrack());
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mutation.alreadyPresent ? 'Already in Queue' : 'Added to Queue')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          mutation.alreadyPresent ? 'Already in Queue' : 'Added to Queue',
+        ),
+      ),
+    );
   }
 
   void _moveQueueTrack(CatalogTrackSummary track, int delta) {
     if (_queueDisabled) return;
-    final mutation = moveWzQueueTrack(queue: _queue, trackId: track.trackId, delta: delta);
+    final mutation = moveWzQueueTrack(
+      queue: _queue,
+      trackId: track.trackId,
+      delta: delta,
+    );
     if (!mutation.changed) return;
     setState(() {
       _queue = mutation.queue;
@@ -2367,7 +3007,12 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   void _playTrackNext(CatalogTrackSummary track) {
     if (_queueDisabled) return;
-    final mutation = moveWzQueueTrackNext(queue: _queue, trackId: track.trackId, resolvedCurrentIndex: _queueIndex, currentTrackId: _queueCurrentTrackId);
+    final mutation = moveWzQueueTrackNext(
+      queue: _queue,
+      trackId: track.trackId,
+      resolvedCurrentIndex: _queueIndex,
+      currentTrackId: _queueCurrentTrackId,
+    );
     if (!mutation.changed) return;
     setState(() {
       _queue = mutation.queue;
@@ -2382,14 +3027,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   void _removeFromQueue(CatalogTrackSummary track) {
     if (_queueDisabled) return;
-    final mutation = removeWzQueueTrack(queue: _queue, trackId: track.trackId, currentTrackId: _queueCurrentTrackId);
+    final mutation = removeWzQueueTrack(
+      queue: _queue,
+      trackId: track.trackId,
+      currentTrackId: _queueCurrentTrackId,
+    );
     setState(() {
       _queue = mutation.queue;
       _queueCurrentTrackId = mutation.currentTrackId;
       if (_queue.isEmpty) {
         _queueStatus = 'Queue cleared.';
       } else if (mutation.wasCurrent) {
-        _queueStatus = 'Removed current track. Queue moved to ${mutation.currentTrack!.title}.';
+        _queueStatus =
+            'Removed current track. Queue moved to ${mutation.currentTrack!.title}.';
       } else {
         _queueStatus = '${track.title} removed from queue.';
       }
@@ -2416,19 +3066,33 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
-  Future<void> _playQueueTrack(CatalogTrackSummary track, {bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.manual}) async {
-    final operation = source == QueueAdvanceSource.auto ? PlayerOperation.autoAdvance : PlayerOperation.queueAdvance;
-    final prefetchHit = _prefetchEnabled && _prefetchedTrackId == track.trackId && _prefetchedManifest != null;
+  Future<void> _playQueueTrack(
+    CatalogTrackSummary track, {
+    bool autoStart = false,
+    QueueAdvanceSource source = QueueAdvanceSource.manual,
+  }) async {
+    final operation = source == QueueAdvanceSource.auto
+        ? PlayerOperation.autoAdvance
+        : PlayerOperation.queueAdvance;
+    final prefetchHit =
+        _prefetchEnabled &&
+        _prefetchedTrackId == track.trackId &&
+        _prefetchedManifest != null;
     final prefetchedManifest = prefetchHit ? _prefetchedManifest : null;
     final status = switch (source) {
       QueueAdvanceSource.auto => 'Auto-advanced to ${track.title}.',
-      QueueAdvanceSource.next => prefetchHit ? 'Instant Next manifest hit: ${track.title}.' : 'Skipped to next: ${track.title}.',
+      QueueAdvanceSource.next =>
+        prefetchHit
+            ? 'Instant Next manifest hit: ${track.title}.'
+            : 'Skipped to next: ${track.title}.',
       QueueAdvanceSource.previous => 'Returned to previous: ${track.title}.',
       QueueAdvanceSource.shuffle => 'Shuffle picked: ${track.title}.',
       QueueAdvanceSource.manual => 'Queue selected: ${track.title}.',
     };
-    if (source == QueueAdvanceSource.auto) setState(() => _autoAdvanceCount += 1);
-    if (source == QueueAdvanceSource.next || source == QueueAdvanceSource.auto) {
+    if (source == QueueAdvanceSource.auto)
+      setState(() => _autoAdvanceCount += 1);
+    if (source == QueueAdvanceSource.next ||
+        source == QueueAdvanceSource.auto) {
       setState(() {
         _lastPrefetchHit = prefetchHit;
         if (prefetchHit) {
@@ -2436,9 +3100,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         } else {
           _prefetchMissCount += 1;
         }
-        _nextTapStartedAtMs = autoStart ? DateTime.now().millisecondsSinceEpoch : null;
+        _nextTapStartedAtMs = autoStart
+            ? DateTime.now().millisecondsSinceEpoch
+            : null;
         _nextTapToAudioMs = null;
-        _audioPreparedBeforeNext = _metrics.nativePrebufferTrackId == track.trackId && _metrics.nativePrebufferReady;
+        _audioPreparedBeforeNext =
+            _metrics.nativePrebufferTrackId == track.trackId &&
+            _metrics.nativePrebufferReady;
         _nextPreparedBeforePlay = false;
       });
     }
@@ -2447,17 +3115,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _queueStatus = status;
       _sessionStatus = 'Session saved.';
     });
-    if (source == QueueAdvanceSource.next || source == QueueAdvanceSource.auto) {
+    if (source == QueueAdvanceSource.next ||
+        source == QueueAdvanceSource.auto) {
       final preparedManifest = prefetchedManifest;
-      final canAttemptPreparedHandoff = autoStart &&
+      final canAttemptPreparedHandoff =
+          autoStart &&
           _prefetchEnabled &&
           preparedManifest != null &&
           _metrics.nativePrebufferReady &&
           _metrics.nativePrebufferTrackId == track.trackId;
       if (canAttemptPreparedHandoff) {
         final usedPreparedPath = source == QueueAdvanceSource.auto
-            ? await widget.playbackBridge.playPreparedAutoAdvanceTrackIfReady(trackId: preparedManifest.trackId, title: preparedManifest.title, url: preparedManifest.streamUrl)
-            : await widget.playbackBridge.playPreparedNextTrackIfReady(trackId: preparedManifest.trackId, title: preparedManifest.title, url: preparedManifest.streamUrl);
+            ? await widget.playbackBridge.playPreparedAutoAdvanceTrackIfReady(
+                trackId: preparedManifest.trackId,
+                title: preparedManifest.title,
+                url: preparedManifest.streamUrl,
+              )
+            : await widget.playbackBridge.playPreparedNextTrackIfReady(
+                trackId: preparedManifest.trackId,
+                title: preparedManifest.title,
+                url: preparedManifest.streamUrl,
+              );
         if (usedPreparedPath) {
           await _finishPreparedQueueHandoff(
             manifest: preparedManifest,
@@ -2468,15 +3146,29 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           return;
         }
       } else if (source == QueueAdvanceSource.auto) {
-        await widget.playbackBridge.recordAutoAdvancePreparedFallback(trackId: track.trackId);
+        await widget.playbackBridge.recordAutoAdvancePreparedFallback(
+          trackId: track.trackId,
+        );
       } else {
-        await widget.playbackBridge.recordNextTrackPrebufferOutcome(trackId: track.trackId, usedPreparedPath: false);
+        await widget.playbackBridge.recordNextTrackPrebufferOutcome(
+          trackId: track.trackId,
+          usedPreparedPath: false,
+        );
       }
     }
-    await _loadCatalogTrack(trackId: track.trackId, autoPlay: autoStart, operation: operation, status: status, prefetchedManifest: prefetchedManifest);
+    await _loadCatalogTrack(
+      trackId: track.trackId,
+      autoPlay: autoStart,
+      operation: operation,
+      status: status,
+      prefetchedManifest: prefetchedManifest,
+    );
   }
 
-  Future<void> _finishPreparedQueueHandoff({required CatalogTrackManifest manifest, required String status}) async {
+  Future<void> _finishPreparedQueueHandoff({
+    required CatalogTrackManifest manifest,
+    required String status,
+  }) async {
     if (!mounted) return;
     _titleController.text = manifest.title;
     _urlController.text = manifest.streamUrl;
@@ -2492,9 +3184,23 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       _audioPreparedBeforeNext = false;
       _nextPreparedBeforePlay = true;
     });
-    final historySource = manifest.streamUrl.startsWith('file://') ? WzListeningHistorySource.cached : WzListeningHistorySource.api;
-    await _pushNotificationMetadata(manifest, url: manifest.streamUrl, source: historySource.name);
-    unawaited(_recordListeningHistory(_historySnapshotForManifest(manifest, source: historySource, playableUrl: manifest.streamUrl)));
+    final historySource = manifest.streamUrl.startsWith('file://')
+        ? WzListeningHistorySource.cached
+        : WzListeningHistorySource.api;
+    await _pushNotificationMetadata(
+      manifest,
+      url: manifest.streamUrl,
+      source: historySource.name,
+    );
+    unawaited(
+      _recordListeningHistory(
+        _historySnapshotForManifest(
+          manifest,
+          source: historySource,
+          playableUrl: manifest.streamUrl,
+        ),
+      ),
+    );
     await _refreshMetrics(allowAutoAdvance: false);
     unawaited(_saveSession());
     unawaited(_updatePredictivePreloadCandidate());
@@ -2502,28 +3208,53 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     unawaited(_maybeAutoCacheNextQueuedTrack());
   }
 
-  Future<bool> _playRandomQueueTrack({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.shuffle}) async {
+  Future<bool> _playRandomQueueTrack({
+    bool autoStart = false,
+    QueueAdvanceSource source = QueueAdvanceSource.shuffle,
+  }) async {
     if (_queue.length <= 1) return false;
-    final currentId = _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
-    final candidates = _queue.where((track) => track.trackId != currentId).toList(growable: false);
+    final currentId =
+        _currentQueueTrack?.trackId ?? _queueCurrentTrackId ?? _selectedTrackId;
+    final candidates = _queue
+        .where((track) => track.trackId != currentId)
+        .toList(growable: false);
     if (candidates.isEmpty) return false;
     final track = candidates[math.Random().nextInt(candidates.length)];
     await _playQueueTrack(track, autoStart: autoStart, source: source);
-    if (mounted && source == QueueAdvanceSource.shuffle) setState(() => _queueStatus = 'Shuffle picked: ${track.title}.');
+    if (mounted && source == QueueAdvanceSource.shuffle)
+      setState(() => _queueStatus = 'Shuffle picked: ${track.title}.');
     return true;
   }
 
-  Future<void> _playNext({bool autoStart = false, QueueAdvanceSource source = QueueAdvanceSource.next, bool allowShuffle = true}) async {
-    if (allowShuffle && _shuffleEnabled && await _playRandomQueueTrack(autoStart: autoStart, source: QueueAdvanceSource.shuffle)) return;
+  Future<void> _playNext({
+    bool autoStart = false,
+    QueueAdvanceSource source = QueueAdvanceSource.next,
+    bool allowShuffle = true,
+  }) async {
+    if (allowShuffle &&
+        _shuffleEnabled &&
+        await _playRandomQueueTrack(
+          autoStart: autoStart,
+          source: QueueAdvanceSource.shuffle,
+        ))
+      return;
     final index = _queueIndex;
     if (index < 0 || index >= _queue.length - 1) return;
-    await _playQueueTrack(_queue[index + 1], autoStart: autoStart, source: source);
+    await _playQueueTrack(
+      _queue[index + 1],
+      autoStart: autoStart,
+      source: source,
+    );
   }
 
   Future<void> _playPrevious({bool autoStart = false}) async {
     final index = _queueIndex;
     if (index <= 0) return;
-    await _playQueueTrack(_queue[index - 1], autoStart: autoStart, source: QueueAdvanceSource.previous);
+    await _playQueueTrack(
+      _queue[index - 1],
+      autoStart: autoStart,
+      source: QueueAdvanceSource.previous,
+    );
   }
 
   Future<void> _showQueueSheet() async {
@@ -2551,13 +3282,19 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     child: Container(
                       width: 42,
                       height: 4,
-                      decoration: BoxDecoration(color: WzColors.border, borderRadius: BorderRadius.circular(999)),
+                      decoration: BoxDecoration(
+                        color: WzColors.border,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 18),
                   Row(
                     children: [
-                      Text('Up next', style: WzText.pageTitle.copyWith(fontSize: 24)),
+                      Text(
+                        'Up next',
+                        style: WzText.pageTitle.copyWith(fontSize: 24),
+                      ),
                       const Spacer(),
                       Text('${_queue.length} tracks', style: WzText.caption),
                     ],
@@ -2577,7 +3314,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     onToggleAutoAdvance: (value) {
                       setState(() {
                         _autoAdvanceEnabled = value;
-                        _queueStatus = value ? 'Auto-advance enabled.' : 'Auto-advance disabled.';
+                        _queueStatus = value
+                            ? 'Auto-advance enabled.'
+                            : 'Auto-advance disabled.';
                         _sessionStatus = 'Session saved.';
                       });
                       unawaited(_saveSession());
@@ -2585,7 +3324,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                       refreshSheet(() {});
                     },
                     onPlayTrack: (track) async {
-                      await _playQueueTrack(track, autoStart: _metrics.isPlaying);
+                      await _playQueueTrack(
+                        track,
+                        autoStart: _metrics.isPlaying,
+                      );
                       if (sheetContext.mounted) refreshSheet(() {});
                     },
                     onMoveUp: (track) {
@@ -2620,17 +3362,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
 
   Future<void> _showPremiumPlayerSheet() async {
     if (_manifest == null && _metrics.trackTitle == null) return;
-    final currentTrack = _currentKnownTrack;
 
-    await Navigator.of(context).push<void>(
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 320),
-        reverseTransitionDuration: const Duration(milliseconds: 250),
-        pageBuilder: (routeContext, animation, secondaryAnimation) => WzConsumerNowPlayingPage(
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: false,
+      enableDrag: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: const Color(0x33788792),
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 1,
+        child: WzConsumerNowPlayingPage(
+          onClose: () => Navigator.of(sheetContext).maybePop(),
           surfaceBuilder: (_) {
             final durationMs = _metrics.durationMs ?? _manifest?.durationMs;
-            final displayedPositionMs = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
-            final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
+            final displayedPositionMs =
+                (_dragPositionMs ?? _metrics.currentPositionMs.toDouble())
+                    .round();
+            final progress = durationMs == null || durationMs <= 0
+                ? 0.0
+                : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
+            final currentTrack = _currentKnownTrack;
             return WzConsumerPlayerSurface(
               metrics: _metrics,
               manifest: _manifest,
@@ -2644,8 +3396,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               onPlayPause: _playPause,
               onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
               onNext: () => _playNext(autoStart: _metrics.isPlaying),
-              onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
-              onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
+              onSeekChanged:
+                  durationMs == null ||
+                      durationMs <= 0 ||
+                      _operation == PlayerOperation.seeking
+                  ? null
+                  : (value) =>
+                        setState(() => _dragPositionMs = value * durationMs),
+              onSeekEnd:
+                  durationMs == null ||
+                      durationMs <= 0 ||
+                      _operation == PlayerOperation.seeking
                   ? null
                   : (value) async {
                       final target = value * durationMs;
@@ -2653,10 +3414,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                       await _seekTo(target);
                     },
               canSaveTrack: currentTrack != null,
-              liked: currentTrack == null ? false : _isLiked(currentTrack.trackId),
-              onToggleLike: currentTrack == null ? null : () => _toggleLikedTrack(currentTrack),
-              onAddToCollection: currentTrack == null ? null : () => _showAddToCollectionSheet(currentTrack),
-              onAddToQueue: currentTrack == null ? null : () => _addToQueue(currentTrack),
+              liked: currentTrack == null
+                  ? false
+                  : _isLiked(currentTrack.trackId),
+              onToggleLike: currentTrack == null
+                  ? null
+                  : () => _toggleLikedTrack(currentTrack),
+              onAddToCollection: currentTrack == null
+                  ? null
+                  : () => _showAddToCollectionSheet(currentTrack),
+              onAddToQueue: currentTrack == null
+                  ? null
+                  : () => _addToQueue(currentTrack),
               onOpenQueue: _showQueueSheet,
               shuffleEnabled: _shuffleEnabled,
               repeatMode: _repeatMode,
@@ -2667,16 +3436,6 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             );
           },
         ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic, reverseCurve: Curves.easeInCubic);
-          return FadeTransition(
-            opacity: curved,
-            child: SlideTransition(
-              position: Tween<Offset>(begin: const Offset(0, 0.035), end: Offset.zero).animate(curved),
-              child: child,
-            ),
-          );
-        },
       ),
     );
   }
@@ -2684,16 +3443,30 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final durationMs = _metrics.durationMs ?? _manifest?.durationMs;
-    final displayedPositionMs = (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
-    final progress = durationMs == null || durationMs <= 0 ? 0.0 : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
+    final displayedPositionMs =
+        (_dragPositionMs ?? _metrics.currentPositionMs.toDouble()).round();
+    final progress = durationMs == null || durationMs <= 0
+        ? 0.0
+        : (displayedPositionMs / durationMs).clamp(0.0, 1.0).toDouble();
 
     final hasPlayerTrack = _manifest != null || _metrics.trackTitle != null;
-    final qualityLabel = _manifest?.qualityLabel ?? _currentCachedQuality ?? _preferredAudioQuality.label;
+    final qualityLabel =
+        _manifest?.qualityLabel ??
+        _currentCachedQuality ??
+        _preferredAudioQuality.label;
     final nowQualityLabel = hasPlayerTrack ? qualityLabel : 'unknown';
-    final isDevicePlayback = isWzDeviceTrackId(_manifest?.trackId) || isWzDeviceUrl(_currentAssetUrl);
-    final isPlayingFromCache = !isDevicePlayback && (_currentCachedQuality != null || (_currentAssetUrl?.startsWith('file://') ?? false));
-    final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off ? 'Off' : wzEffectStatusLabel(_nativeAudioEffectStatus);
-    final engineSummary = '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
+    final isDevicePlayback =
+        isWzDeviceTrackId(_manifest?.trackId) ||
+        isWzDeviceUrl(_currentAssetUrl);
+    final isPlayingFromCache =
+        !isDevicePlayback &&
+        (_currentCachedQuality != null ||
+            (_currentAssetUrl?.startsWith('file://') ?? false));
+    final effectsSummary = _selectedAudioEffectProfile == AudioEffectProfile.off
+        ? 'Off'
+        : wzEffectStatusLabel(_nativeAudioEffectStatus);
+    final engineSummary =
+        '${_smartDownloadsEnabled ? 'Smart Downloads on' : 'Smart Downloads off'} • '
         '${_prefetchEnabled ? 'Instant Next on' : 'Instant Next off'} • '
         '${_offlineLibraryAvailable ? 'Offline Ready' : 'Offline empty'} • '
         'Library $_libraryCombinedTrackCount • Device ${_deviceMusicTracks.length} • Cached ${_cachedLibrary.length}';
@@ -2714,7 +3487,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           const SizedBox(height: WzSpacing.xl),
           WzHomeCuratedDemoSection(
             shelves: _resolvedCuratedShelves,
-            onPlayPick: (pick) => _loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded WaveZero Pick: ${pick.track.title}'),
+            onPlayPick: (pick) => _loadCatalogTrack(
+              trackId: pick.track.trackId,
+              autoPlay: true,
+              status: 'Loaded WaveZero Pick: ${pick.track.title}',
+            ),
             onAddToQueue: (pick) => _addToQueue(pick.track),
             onOpenLibrary: () => _navigateTo(WzAppTab.library),
           ),
@@ -2726,7 +3503,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             resolver: _resolveHistoryEntry,
             onPlay: (entry) => unawaited(_playHistoryEntry(entry)),
             onAddToQueue: (entry) => unawaited(_addHistoryEntryToQueue(entry)),
-            onAddToCollection: (entry) => unawaited(_addHistoryEntryToCollection(entry)),
+            onAddToCollection: (entry) =>
+                unawaited(_addHistoryEntryToCollection(entry)),
             onRemove: (entry) => unawaited(_removeHistoryEntry(entry)),
             onViewAll: () => _navigateTo(WzAppTab.history),
           ),
@@ -2742,9 +3520,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               qualityLabel: qualityLabel,
             ),
             const SizedBox(height: WzSpacing.md),
-            WzHomeQuickActions(onNavigate: _navigateTo, showDeveloperTools: true),
+            WzHomeQuickActions(
+              onNavigate: _navigateTo,
+              showDeveloperTools: true,
+            ),
             const SizedBox(height: WzSpacing.md),
-            WzDeveloperStatusStrip(status: _statusText, detail: _statusDetail, operation: _operation.label, refreshingMetrics: _refreshingMetrics),
+            WzDeveloperStatusStrip(
+              status: _statusText,
+              detail: _statusDetail,
+              operation: _operation.label,
+              refreshingMetrics: _refreshingMetrics,
+            ),
             const SizedBox(height: WzSpacing.sm),
             WzDeveloperSessionStrip(status: _sessionStatus),
           ],
@@ -2752,7 +3538,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzPageScaffold(
         children: [
-          const WzPageHeader(icon: Icons.play_circle_fill, title: 'Now Playing', subtitle: 'Your focused player for the current track and queue.'),
+          const WzPageHeader(
+            icon: Icons.play_circle_fill,
+            title: 'Now Playing',
+            subtitle: 'Your focused player for the current track and queue.',
+          ),
           const SizedBox(height: WzSpacing.md),
           WzPremiumPlayerSurface(
             metrics: _metrics,
@@ -2760,7 +3550,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             nextTrack: _upNextQueueTrack,
             qualityLabel: nowQualityLabel,
             effectsSummary: effectsSummary,
-            sourceLabel: isDevicePlayback ? 'Device music' : wzPlayerSourceLabel(isPlayingFromCache: isPlayingFromCache, offlineReady: _offlineLibraryAvailable, hasTrack: hasPlayerTrack),
+            sourceLabel: isDevicePlayback
+                ? 'Device music'
+                : wzPlayerSourceLabel(
+                    isPlayingFromCache: isPlayingFromCache,
+                    offlineReady: _offlineLibraryAvailable,
+                    hasTrack: hasPlayerTrack,
+                  ),
             progressValue: progress,
             displayedPositionMs: displayedPositionMs,
             durationMs: durationMs,
@@ -2772,8 +3568,17 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onRetry: _retry,
             onPrevious: () => _playPrevious(autoStart: _metrics.isPlaying),
             onNext: () => _playNext(autoStart: _metrics.isPlaying),
-            onSeekChanged: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking ? null : (value) => setState(() => _dragPositionMs = value * durationMs),
-            onSeekEnd: durationMs == null || durationMs <= 0 || _operation == PlayerOperation.seeking
+            onSeekChanged:
+                durationMs == null ||
+                    durationMs <= 0 ||
+                    _operation == PlayerOperation.seeking
+                ? null
+                : (value) =>
+                      setState(() => _dragPositionMs = value * durationMs),
+            onSeekEnd:
+                durationMs == null ||
+                    durationMs <= 0 ||
+                    _operation == PlayerOperation.seeking
                 ? null
                 : (value) async {
                     final target = value * durationMs;
@@ -2781,10 +3586,18 @@ class _PlayerScreenState extends State<_PlayerScreen> {
                     await _seekTo(target);
                   },
             canSaveTrack: _currentKnownTrack != null,
-            liked: _currentKnownTrack == null ? false : _isLiked(_currentKnownTrack!.trackId),
-            onToggleLike: _currentKnownTrack == null ? null : () => _toggleLikedTrack(_currentKnownTrack!),
-            onAddToCollection: _currentKnownTrack == null ? null : () => _showAddToCollectionSheet(_currentKnownTrack!),
-            onAddToQueue: _currentKnownTrack == null ? null : () => _addToQueue(_currentKnownTrack!),
+            liked: _currentKnownTrack == null
+                ? false
+                : _isLiked(_currentKnownTrack!.trackId),
+            onToggleLike: _currentKnownTrack == null
+                ? null
+                : () => _toggleLikedTrack(_currentKnownTrack!),
+            onAddToCollection: _currentKnownTrack == null
+                ? null
+                : () => _showAddToCollectionSheet(_currentKnownTrack!),
+            onAddToQueue: _currentKnownTrack == null
+                ? null
+                : () => _addToQueue(_currentKnownTrack!),
             onOpenQueue: () => _navigateTo(WzAppTab.queue),
             offlineReady: _offlineLibraryAvailable,
             shuffleEnabled: _shuffleEnabled,
@@ -2811,14 +3624,27 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
           const SizedBox(height: WzSpacing.md),
           if (_developerMode) ...[
-            WzDeveloperMetricsToggle(showMetrics: _showMetrics, operationBusy: _operation != PlayerOperation.idle, onToggle: () => setState(() => _showMetrics = !_showMetrics), onCopyMetrics: _copyMetrics, onResetMetrics: _resetMetrics),
-            if (_showMetrics) ...[const SizedBox(height: WzSpacing.md), WzDeveloperMetricsPanel(metrics: _metrics)],
+            WzDeveloperMetricsToggle(
+              showMetrics: _showMetrics,
+              operationBusy: _operation != PlayerOperation.idle,
+              onToggle: () => setState(() => _showMetrics = !_showMetrics),
+              onCopyMetrics: _copyMetrics,
+              onResetMetrics: _resetMetrics,
+            ),
+            if (_showMetrics) ...[
+              const SizedBox(height: WzSpacing.md),
+              WzDeveloperMetricsPanel(metrics: _metrics),
+            ],
           ],
         ],
       ),
       WzPageScaffold(
         children: [
-          const WzPageHeader(icon: Icons.queue_music, title: 'Queue', subtitle: 'What plays next.'),
+          const WzPageHeader(
+            icon: Icons.queue_music,
+            title: 'Queue',
+            subtitle: 'What plays next.',
+          ),
           const SizedBox(height: WzSpacing.md),
           WzQueuePanel(
             queue: _queue,
@@ -2834,13 +3660,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onToggleAutoAdvance: (value) {
               setState(() {
                 _autoAdvanceEnabled = value;
-                _queueStatus = value ? 'Auto-advance enabled.' : 'Auto-advance disabled.';
+                _queueStatus = value
+                    ? 'Auto-advance enabled.'
+                    : 'Auto-advance disabled.';
                 _sessionStatus = 'Session saved.';
               });
               unawaited(_saveSession());
               unawaited(_updatePredictivePreloadCandidate());
             },
-            onPlayTrack: (track) => _playQueueTrack(track, autoStart: _metrics.isPlaying),
+            onPlayTrack: (track) =>
+                _playQueueTrack(track, autoStart: _metrics.isPlaying),
             onMoveUp: (track) => _moveQueueTrack(track, -1),
             onMoveDown: (track) => _moveQueueTrack(track, 1),
             onPlayNext: _playTrackNext,
@@ -2901,23 +3730,31 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             largeCatalogMode: _largeCatalogMode,
             onLoadMore: _effectiveVisibleTrackCount < _filteredTrackCount
                 ? () => setState(() {
-                      _visibleTrackCount = math.min(_visibleTrackCount + _libraryPageSize, _filteredTrackCount);
-                      _filteredCatalogMemo = null;
-                    })
+                    _visibleTrackCount = math.min(
+                      _visibleTrackCount + _libraryPageSize,
+                      _filteredTrackCount,
+                    );
+                    _filteredCatalogMemo = null;
+                  })
                 : null,
             cacheBytes: _cacheBytes,
             curatedPicks: _featuredCuratedPicks,
             selectedTrackId: _selectedTrackId,
-            status: _developerMode ? _catalogStatus : wzConsumerCatalogStatus(_catalogStatus),
+            status: _developerMode
+                ? _catalogStatus
+                : wzConsumerCatalogStatus(_catalogStatus),
             loading: _operation == PlayerOperation.loadingCatalog,
             refreshDisabled: _catalogRefreshDisabled,
-            addToQueueDisabled: _operation.isTrackLoading || _operation.isQueueAdvancing,
+            addToQueueDisabled:
+                _operation.isTrackLoading || _operation.isQueueAdvancing,
             searchController: _searchController,
             librarySourceFilter: _librarySourceFilter,
             librarySortMode: _librarySortMode,
             devicePermissionStatus: _deviceMusicPermissionStatus.status,
             deviceScanStatus: _deviceMusicScanStatus,
-            deviceLastError: _developerMode ? _deviceMusicLastError : wzConsumerDeviceError(_deviceMusicLastError),
+            deviceLastError: _developerMode
+                ? _deviceMusicLastError
+                : wzConsumerDeviceError(_deviceMusicLastError),
             onSourceFilterChanged: (filter) => setState(() {
               _librarySourceFilter = filter;
               _visibleTrackCount = _initialVisibleTrackCount;
@@ -2934,7 +3771,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onRefresh: () => _loadCatalog(),
             onImportDeviceMusic: _importDeviceMusic,
             onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
-            onPlayCuratedPick: (pick) => _loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded featured demo pick: ${pick.track.title}'),
+            onPlayCuratedPick: (pick) => _loadCatalogTrack(
+              trackId: pick.track.trackId,
+              autoPlay: true,
+              status: 'Loaded featured demo pick: ${pick.track.title}',
+            ),
             onAddToQueue: _addToQueue,
             onToggleLike: _toggleLikedTrack,
             onAddToCollection: _showAddToCollectionSheet,
@@ -2949,13 +3790,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
           ),
           if (_allowManualApiSetup) ...[
             const SizedBox(height: WzSpacing.md),
-            WzLibraryManualSetupCard(titleController: _titleController, urlController: _urlController, apiBaseUrlController: _apiBaseUrlController, catalogStatus: _catalogStatus, loading: _manualDisabled, onLoadCatalog: () => _loadCatalogTrack(), onLoadTrack: _loadManualTrack),
+            WzLibraryManualSetupCard(
+              titleController: _titleController,
+              urlController: _urlController,
+              apiBaseUrlController: _apiBaseUrlController,
+              catalogStatus: _catalogStatus,
+              loading: _manualDisabled,
+              onLoadCatalog: () => _loadCatalogTrack(),
+              onLoadTrack: _loadManualTrack,
+            ),
           ],
         ],
       ),
       WzCollectionsPage(
         collections: _collections,
-        onBack: () => _navigateTo(WzAppTab.library),
+        onBack: () => _navigateBack(fallback: WzAppTab.library),
         onOpen: _openCollection,
         onCreate: _createCollectionFromPage,
         onRename: _showRenameCollectionDialog,
@@ -2963,27 +3812,36 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzCollectionDetailPage(
         collection: _selectedCollection ?? _likedCollection,
-        onBack: () => _navigateTo(WzAppTab.collections),
+        onBack: () => _navigateBack(fallback: WzAppTab.collections),
         onPlayFirst: (collection) {
-          if (collection.tracks.isNotEmpty) unawaited(_playCollectionSnapshot(collection.tracks.first));
+          if (collection.tracks.isNotEmpty)
+            unawaited(_playCollectionSnapshot(collection.tracks.first));
         },
-        onAddAllToQueue: (collection) => unawaited(_addCollectionToQueue(collection)),
+        onAddAllToQueue: (collection) =>
+            unawaited(_addCollectionToQueue(collection)),
         onRename: _showRenameCollectionDialog,
         onDelete: _showDeleteCollectionDialog,
         onPlayTrack: (snapshot) => unawaited(_playCollectionSnapshot(snapshot)),
-        onAddTrackToQueue: (snapshot) => unawaited(_addCollectionSnapshotToQueue(snapshot)),
-        onRemoveTrack: (collection, snapshot) => unawaited(_removeTrackFromCollection(collection, snapshot)),
+        onAddTrackToQueue: (snapshot) =>
+            unawaited(_addCollectionSnapshotToQueue(snapshot)),
+        onRemoveTrack: (collection, snapshot) =>
+            unawaited(_removeTrackFromCollection(collection, snapshot)),
         resolver: _resolveCollectionTrack,
       ),
       WzPageScaffold(
         children: [
-          const WzPageHeader(icon: Icons.download_done, title: 'Downloads', subtitle: 'Music saved for when you are offline.'),
+          const WzPageHeader(
+            icon: Icons.download_done,
+            title: 'Downloads',
+            subtitle: 'Music saved for when you are offline.',
+          ),
           const SizedBox(height: WzSpacing.md),
           WzDownloadsPanel(
             downloads: _cachedLibrary,
             cacheBytes: _cacheBytes,
             controlsDisabled: _queueDisabled,
-            onPlay: (track) => _loadCatalogTrack(trackId: track.trackId, autoPlay: true),
+            onPlay: (track) =>
+                _loadCatalogTrack(trackId: track.trackId, autoPlay: true),
             onDelete: _deleteCachedTrack,
             onClearAll: _clearCache,
             onManageStorage: () => _navigateTo(WzAppTab.storage),
@@ -2992,7 +3850,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzStorageManagerPage(
         downloads: _cachedLibrary,
-        onBack: () => _navigateTo(WzAppTab.settings),
+        onBack: () => _navigateBack(fallback: WzAppTab.settings),
         cacheBytes: _cacheBytes,
         trackBytes: _cachedTrackBytes,
         manualDownloadedCount: _manualDownloadedCount,
@@ -3000,14 +3858,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         offlineReadyCount: _offlineCachedTrackCount,
         smartDownloadsEnabled: _smartDownloadsEnabled,
         controlsDisabled: _queueDisabled,
-        onSmartDownloadsChanged: (value) => setState(() => _smartDownloadsEnabled = value),
-        onPlay: (track) => _loadCatalogTrack(trackId: track.trackId, autoPlay: true),
+        onSmartDownloadsChanged: (value) =>
+            setState(() => _smartDownloadsEnabled = value),
+        onPlay: (track) =>
+            _loadCatalogTrack(trackId: track.trackId, autoPlay: true),
         onDelete: _deleteCachedTrack,
         onClearAll: _clearCache,
       ),
       WzSearchPage(
         controller: _fullSearchController,
-        onBack: () => _navigateTo(WzAppTab.home),
+        onBack: () => _navigateBack(fallback: WzAppTab.home),
         filter: _searchFilter,
         results: _filteredSearchResults,
         allResultCount: _allSearchResults.length,
@@ -3023,7 +3883,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         }),
         onClearQuery: () => _fullSearchController.clear(),
         onRecentSearch: (query) => _fullSearchController.text = query,
-        onClearRecentSearches: _recentSearches.isEmpty ? null : () => unawaited(_clearRecentSearches()),
+        onClearRecentSearches: _recentSearches.isEmpty
+            ? null
+            : () => unawaited(_clearRecentSearches()),
         onSubmitted: (query) => unawaited(_rememberSearchQuery(query)),
         onPlay: (result) => unawaited(_playSearchResult(result)),
         onAddToQueue: (result) => unawaited(_queueSearchResult(result)),
@@ -3031,22 +3893,32 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onOpenCollection: (result) => unawaited(_openSearchCollection(result)),
         onImportDeviceMusic: _importDeviceMusic,
         onLoadCatalog: () => _loadCatalog(),
-        onPlayCuratedPick: (pick) => unawaited(_loadCatalogTrack(trackId: pick.track.trackId, autoPlay: true, status: 'Loaded search pick: ${pick.track.title}')),
+        onPlayCuratedPick: (pick) => unawaited(
+          _loadCatalogTrack(
+            trackId: pick.track.trackId,
+            autoPlay: true,
+            status: 'Loaded search pick: ${pick.track.title}',
+          ),
+        ),
       ),
       WzListeningHistoryPage(
         entries: _listeningHistory,
-        onBack: () => _navigateTo(WzAppTab.library),
+        onBack: () => _navigateBack(fallback: WzAppTab.library),
         mostPlayedEntry: _mostPlayedHistoryEntry,
         resolver: _resolveHistoryEntry,
         onPlay: (entry) => unawaited(_playHistoryEntry(entry)),
         onAddToQueue: (entry) => unawaited(_addHistoryEntryToQueue(entry)),
-        onAddToCollection: (entry) => unawaited(_addHistoryEntryToCollection(entry)),
+        onAddToCollection: (entry) =>
+            unawaited(_addHistoryEntryToCollection(entry)),
         onRemove: (entry) => unawaited(_removeHistoryEntry(entry)),
-        onClearAll: _listeningHistory.isEmpty ? null : () => unawaited(_clearListeningHistory()),
+        onClearAll: _listeningHistory.isEmpty
+            ? null
+            : () => unawaited(_clearListeningHistory()),
       ),
       WzEngineDiagnosticsPage(
         developerMode: _developerMode,
-        onDeveloperModeChanged: (enabled) => _setAppMode(enabled ? WzAppMode.developer : WzAppMode.consumer),
+        onDeveloperModeChanged: (enabled) =>
+            _setAppMode(enabled ? WzAppMode.developer : WzAppMode.consumer),
         apiBaseUrl: _apiBaseUrlController.text,
         contentStatus: _contentStatus,
         catalogStatus: _catalogStatus,
@@ -3085,7 +3957,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         smartDownloadFailedCount: _smartDownloadFailedCount,
         smartDownloadSkippedCount: _smartDownloadSkippedCount,
         smartDownloadInFlight: _autoCacheInFlight.length,
-        onSmartDownloadsToggle: (value) => setState(() => _smartDownloadsEnabled = value),
+        onSmartDownloadsToggle: (value) =>
+            setState(() => _smartDownloadsEnabled = value),
         preferredAudioQuality: _preferredAudioQuality,
         manifest: _manifest,
         currentAssetUrl: _currentAssetUrl,
@@ -3093,7 +3966,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         lastQualityFallbackReason: _lastQualityFallbackReason,
         onAudioQualityChanged: (quality) => setState(() {
           _preferredAudioQuality = quality;
-          _lastQualityFallbackReason = 'preferred quality set to ${quality.label}';
+          _lastQualityFallbackReason =
+              'preferred quality set to ${quality.label}';
         }),
         selectedAudioEffectProfile: _selectedAudioEffectProfile,
         nativeAudioEffectStatus: _nativeAudioEffectStatus,
@@ -3131,28 +4005,41 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     ];
 
     final settingsPage = WzConsumerSettingsPage(
-      onBack: () => _navigateTo(WzAppTab.home),
+      onBack: () => _navigateBack(fallback: WzAppTab.home),
       preferredAudioQuality: _preferredAudioQuality,
       onQualityChanged: (quality) => setState(() {
         _preferredAudioQuality = quality;
-        _lastQualityFallbackReason = 'preferred quality set to ${quality.label}';
+        _lastQualityFallbackReason =
+            'preferred quality set to ${quality.label}';
       }),
       smartDownloadsEnabled: _smartDownloadsEnabled,
-      onSmartDownloadsChanged: (value) => setState(() => _smartDownloadsEnabled = value),
+      onSmartDownloadsChanged: (value) =>
+          setState(() => _smartDownloadsEnabled = value),
       cachedTrackCount: _cachedTrackCount,
       cacheBytes: _cacheBytes,
       controlsDisabled: _queueDisabled,
       onClearCache: _clearCache,
       onManageStorage: () => _navigateTo(WzAppTab.storage),
-      onClearRecentSearches: _recentSearches.isEmpty ? null : () => unawaited(_clearRecentSearches()),
-      onClearListeningHistory: _listeningHistory.isEmpty ? null : () => unawaited(_clearListeningHistory()),
+      onClearRecentSearches: _recentSearches.isEmpty
+          ? null
+          : () => unawaited(_clearRecentSearches()),
+      onClearListeningHistory: _listeningHistory.isEmpty
+          ? null
+          : () => unawaited(_clearListeningHistory()),
       legalTracks: _libraryTracks,
     );
 
-    final destinations = _developerMode ? wzDeveloperShellDestinations : wzConsumerShellDestinations;
-    final currentTab = _selectedTab == WzAppTab.engine && !_developerMode ? WzAppTab.home : _selectedTab;
-    final currentIndex = destinations.indexWhere((destination) => destination.tab == currentTab);
-    final selectedDestination = destinations[currentIndex < 0 ? 0 : currentIndex];
+    final destinations = _developerMode
+        ? wzDeveloperShellDestinations
+        : wzConsumerShellDestinations;
+    final currentTab = _selectedTab == WzAppTab.engine && !_developerMode
+        ? WzAppTab.home
+        : _selectedTab;
+    final currentIndex = destinations.indexWhere(
+      (destination) => destination.tab == currentTab,
+    );
+    final selectedDestination =
+        destinations[currentIndex < 0 ? 0 : currentIndex];
     final selectedTabLabel = switch (_selectedTab) {
       WzAppTab.settings => 'Settings',
       WzAppTab.storage => 'Storage Manager',
@@ -3177,50 +4064,56 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       WzAppTab.engine => pages[10],
     };
 
-    return Scaffold(
-      backgroundColor: widget.themeConfig.canvas,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Column(
-              children: [
-                WaveZeroProductHeader(
-                  selectedTabLabel: selectedTabLabel,
-                  status: _statusText,
-                  engineSummary: engineSummary,
-                  libraryStatus: _consumerLibraryHeaderStatus,
-                  libraryStatusActive: _consumerLibraryHeaderActive,
-                  libraryStatusWarning: _consumerLibraryHeaderWarning,
-                  appMode: _appMode,
-                  themeConfig: widget.themeConfig,
-                  onLogoLongPress: _toggleAppMode,
-                  onOpenSettings: () => _navigateTo(WzAppTab.settings),
-                ),
-                Expanded(child: currentPage),
-              ],
+    return PopScope(
+      canPop: !_hasInternalBack,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _hasInternalBack) _navigateBack();
+      },
+      child: Scaffold(
+        backgroundColor: widget.themeConfig.canvas,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Column(
+                children: [
+                  WaveZeroProductHeader(
+                    selectedTabLabel: selectedTabLabel,
+                    status: _statusText,
+                    engineSummary: engineSummary,
+                    libraryStatus: _consumerLibraryHeaderStatus,
+                    libraryStatusActive: _consumerLibraryHeaderActive,
+                    libraryStatusWarning: _consumerLibraryHeaderWarning,
+                    appMode: _appMode,
+                    themeConfig: widget.themeConfig,
+                    onLogoLongPress: _toggleAppMode,
+                    onOpenSettings: () => _navigateTo(WzAppTab.settings),
+                  ),
+                  Expanded(child: currentPage),
+                ],
+              ),
             ),
           ),
         ),
+        bottomNavigationBar: currentIndex >= 0
+            ? WaveZeroBottomShell(
+                destinations: destinations,
+                currentIndex: currentIndex,
+                onDestinationSelected: (i) => _navigateTo(destinations[i].tab),
+                accent: widget.themeConfig.accent,
+                miniPlayer: hasPlayerTrack
+                    ? WzConsumerMiniPlayer(
+                        metrics: _metrics,
+                        manifest: _manifest,
+                        progressValue: progress,
+                        controlsDisabled: _playerDisabled,
+                        onTap: _showPremiumPlayerSheet,
+                        onPlayPause: _playPause,
+                      )
+                    : null,
+              )
+            : null,
       ),
-      bottomNavigationBar: currentIndex >= 0
-          ? WaveZeroBottomShell(
-              destinations: destinations,
-              currentIndex: currentIndex,
-              onDestinationSelected: (i) => _navigateTo(destinations[i].tab),
-              accent: widget.themeConfig.accent,
-              miniPlayer: hasPlayerTrack
-                  ? WzConsumerMiniPlayer(
-                      metrics: _metrics,
-                      manifest: _manifest,
-                      progressValue: progress,
-                      controlsDisabled: _playerDisabled,
-                      onTap: _showPremiumPlayerSheet,
-                      onPlayPause: _playPause,
-                    )
-                  : null,
-            )
-          : null,
     );
   }
 }
@@ -3240,77 +4133,13 @@ Map<String, int> _cachedTrackSizeMap(List<CachedTrackMetadata> tracks) {
   return sizes;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-CatalogTrackSummary? _findTrack(List<CatalogTrackSummary> tracks, String? trackId) { if (trackId == null) return null; for (final track in tracks) { if (track.trackId == trackId) return track; } return null; }
+CatalogTrackSummary? _findTrack(
+  List<CatalogTrackSummary> tracks,
+  String? trackId,
+) {
+  if (trackId == null) return null;
+  for (final track in tracks) {
+    if (track.trackId == trackId) return track;
+  }
+  return null;
+}
