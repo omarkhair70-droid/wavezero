@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.annotation.OptIn
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -27,7 +28,7 @@ class WaveZeroMediaSessionService : MediaSessionService() {
         val manager = WaveZeroPlaybackSession.getOrCreate(applicationContext)
         when (intent?.action) {
             ACTION_PREVIOUS -> manager.playPreviousFromNotification()
-            ACTION_TOGGLE_PLAYBACK -> manager.togglePlayPause()
+            ACTION_TOGGLE_PLAYBACK -> togglePlayback(manager)
             ACTION_NEXT -> manager.playNextFromNotification()
             ACTION_STOP_AND_DISMISS -> {
                 manager.stop()
@@ -40,6 +41,19 @@ class WaveZeroMediaSessionService : MediaSessionService() {
 
         showForegroundMediaNotification(manager)
         return START_STICKY
+    }
+
+    private fun togglePlayback(manager: AudioPlayerManager) {
+        val sessionPlayer = manager.mediaSession?.player
+        val shouldPause = sessionPlayer != null &&
+            sessionPlayer.playbackState != Player.STATE_ENDED &&
+            (sessionPlayer.isPlaying || sessionPlayer.playWhenReady)
+
+        if (shouldPause) {
+            manager.pause()
+        } else {
+            manager.play()
+        }
     }
 
     private fun showForegroundMediaNotification(manager: AudioPlayerManager) {
