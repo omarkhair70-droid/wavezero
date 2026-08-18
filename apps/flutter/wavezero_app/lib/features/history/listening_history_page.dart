@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
-import '../../shared/media/media_presentation.dart';
+import '../../shared/widgets/wavezero_artwork.dart';
 import 'history_presentation.dart';
 import 'listening_history_service.dart';
 
@@ -32,53 +33,108 @@ class WzListeningHistoryPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => WzPageScaffold(
         children: [
-          WzPageHeader(
-            icon: Icons.history_rounded,
-            title: 'Listening History',
-            subtitle: 'The voices you came back to, kept only on this device.',
-            trailing: Wrap(
-              spacing: WzSpacing.xs,
-              runSpacing: WzSpacing.xs,
-              children: [
-                WzSculptedIconButton(tooltip: 'Back to Home', onPressed: onBack, icon: Icons.arrow_back_rounded, size: 42, iconSize: 18),
-                OutlinedButton.icon(onPressed: onClearAll, icon: const Icon(Icons.delete_sweep_rounded), label: const Text('Clear')),
-              ],
-            ),
+          Row(
+            children: [
+              WzSculptedIconButton(tooltip: 'Back to Library', onPressed: onBack, icon: Icons.arrow_back_rounded, size: 44, iconSize: 19),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Listening History', style: WzText.pageTitle.copyWith(fontSize: 28)),
+                    const SizedBox(height: 3),
+                    const Text('Local only', style: WzText.caption),
+                  ],
+                ),
+              ),
+              if (onClearAll != null)
+                PopupMenuButton<String>(
+                  tooltip: 'History options',
+                  icon: const Icon(Icons.more_horiz_rounded),
+                  onSelected: (value) {
+                    if (value == 'clear') onClearAll?.call();
+                  },
+                  itemBuilder: (_) => const [PopupMenuItem(value: 'clear', child: Text('Clear listening history'))],
+                ),
+            ],
           ),
-          const SizedBox(height: WzSpacing.md),
-          WzGlassCard(
-            child: Wrap(
-              spacing: WzSpacing.sm,
-              runSpacing: WzSpacing.sm,
-              children: [
-                WzMiniMetric(label: 'Recently played', value: '${entries.length}', active: entries.isNotEmpty, icon: Icons.history_rounded),
-                WzMiniMetric(label: 'Most played', value: mostPlayedEntry?.title ?? 'None yet', active: mostPlayedEntry != null, icon: Icons.repeat_rounded),
-                const WzMiniMetric(label: 'Privacy', value: 'Local only', active: true, icon: Icons.lock_outline_rounded),
-              ],
+          const SizedBox(height: 22),
+          if (mostPlayedEntry != null) ...[
+            Text('You came back to', style: WzText.eyebrow),
+            const SizedBox(height: 9),
+            _HistoryHighlight(
+              entry: mostPlayedEntry!,
+              available: resolver(mostPlayedEntry!) != null,
+              onPlay: () => onPlay(mostPlayedEntry!),
             ),
-          ),
-          const SizedBox(height: WzSpacing.md),
-          WzGlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (entries.isEmpty)
-                  const Text('No listening history yet. Play a track to start.', style: WzText.body)
-                else
-                  ...entries.map((entry) => WzHistoryEntryTile(
-                        entry: entry,
-                        available: resolver(entry) != null,
-                        onPlay: () => onPlay(entry),
-                        onAddToQueue: () => onAddToQueue(entry),
-                        onAddToCollection: () => onAddToCollection(entry),
-                        onRemove: () => onRemove(entry),
-                      )),
-                const SizedBox(height: WzSpacing.sm),
-                const Text('Removing history does not unlike tracks, delete collections, or remove downloads/cache.', style: WzText.caption),
-              ],
+            const SizedBox(height: 24),
+          ],
+          const Text('Recently played', style: WzText.title),
+          const SizedBox(height: 10),
+          if (entries.isEmpty)
+            const WzGlassCard(child: Text('No listening history yet. Play a track to start.', style: WzText.body))
+          else
+            ...entries.map(
+              (entry) => WzHistoryEntryTile(
+                entry: entry,
+                available: resolver(entry) != null,
+                onPlay: () => onPlay(entry),
+                onAddToQueue: () => onAddToQueue(entry),
+                onAddToCollection: () => onAddToCollection(entry),
+                onRemove: () => onRemove(entry),
+              ),
             ),
-          ),
         ],
+      );
+}
+
+class _HistoryHighlight extends StatelessWidget {
+  const _HistoryHighlight({required this.entry, required this.available, required this.onPlay});
+
+  final WzListeningHistoryEntry entry;
+  final bool available;
+  final VoidCallback onPlay;
+
+  @override
+  Widget build(BuildContext context) => WzPressableSurface(
+        onTap: available ? onPlay : null,
+        radius: 34,
+        decoration: WzSurface.sculpted(selected: true),
+        padding: const EdgeInsets.all(11),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(28),
+                bottomLeft: Radius.circular(26),
+                bottomRight: Radius.circular(17),
+              ),
+              child: WzArtwork(
+                artworkUrl: entry.artworkUrl,
+                size: 68,
+                trackId: entry.trackId,
+                title: entry.title,
+                artist: entry.subtitle,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                  const SizedBox(height: 3),
+                  Text(entry.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                  const SizedBox(height: 4),
+                  Text('${entry.playCount} plays', style: WzText.caption.copyWith(color: WzColors.accent)),
+                ],
+              ),
+            ),
+            WzSculptedIconButton(tooltip: 'Play', icon: Icons.play_arrow_rounded, size: 48, iconSize: 23, onPressed: available ? onPlay : null),
+          ],
+        ),
       );
 }
 
@@ -103,45 +159,69 @@ class WzHistoryEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-        child: Container(
-          padding: const EdgeInsets.all(WzSpacing.sm),
-          decoration: WzSurface.sculpted(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: available
+                ? () {
+                    HapticFeedback.selectionClick();
+                    onPlay();
+                  }
+                : null,
+            borderRadius: BorderRadius.circular(28),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+              child: Row(
                 children: [
-                  Expanded(child: Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle)),
-                  const SizedBox(width: WzSpacing.xs),
-                  Text(friendlyWzHistoryTime(entry.lastPlayedAtMs), style: WzText.caption),
+                  ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(17),
+                      topRight: Radius.circular(23),
+                      bottomLeft: Radius.circular(22),
+                      bottomRight: Radius.circular(14),
+                    ),
+                    child: WzArtwork(
+                      artworkUrl: entry.artworkUrl,
+                      size: compact ? 48 : 54,
+                      trackId: entry.trackId,
+                      title: entry.title,
+                      artist: entry.subtitle,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 14)),
+                        const SizedBox(height: 3),
+                        Text(entry.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                        const SizedBox(height: 3),
+                        Text(friendlyWzHistoryTime(entry.lastPlayedAtMs), style: WzText.caption.copyWith(fontSize: 10.5)),
+                        if (!available) Text('Unavailable right now', style: WzText.caption.copyWith(fontSize: 10.5, color: WzColors.warning)),
+                      ],
+                    ),
+                  ),
+                  WzSculptedIconButton(tooltip: 'Play', icon: Icons.play_arrow_rounded, size: 38, iconSize: 19, onPressed: available ? onPlay : null),
+                  PopupMenuButton<String>(
+                    tooltip: 'More',
+                    icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
+                    onSelected: (value) {
+                      if (value == 'queue') onAddToQueue();
+                      if (value == 'collection') onAddToCollection();
+                      if (value == 'remove') onRemove();
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(enabled: available, value: 'queue', child: const Text('Add to queue')),
+                      PopupMenuItem(enabled: available, value: 'collection', child: const Text('Add to collection')),
+                      const PopupMenuItem(value: 'remove', child: Text('Remove from history')),
+                    ],
+                  ),
                 ],
               ),
-              const SizedBox(height: WzSpacing.xxs),
-              Text(entry.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.body),
-              const SizedBox(height: WzSpacing.xs),
-              Wrap(spacing: WzSpacing.xs, runSpacing: WzSpacing.xs, children: [
-                WzStatusPill(label: wzHistorySourceLabel(entry.source), active: available, warning: !available, icon: Icons.album_rounded),
-                WzStatusPill(label: '${entry.playCount} play${entry.playCount == 1 ? '' : 's'}', icon: Icons.repeat_rounded),
-                if (entry.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(entry.qualityLabel!), icon: Icons.high_quality_rounded),
-                WzStatusPill(label: entry.license.badgeLabel, warning: entry.license.needsRightsWarning, icon: Icons.policy_outlined),
-              ]),
-              if (!available) ...[
-                const SizedBox(height: WzSpacing.xs),
-                const Text('Track is not available right now.', style: WzText.caption),
-              ],
-              const SizedBox(height: WzSpacing.sm),
-              Wrap(
-                spacing: WzSpacing.xs,
-                runSpacing: WzSpacing.xs,
-                children: [
-                  FilledButton.icon(onPressed: available ? onPlay : null, icon: const Icon(Icons.play_arrow_rounded), label: Text(compact ? 'Play' : 'Play / Continue')),
-                  OutlinedButton.icon(onPressed: available ? onAddToQueue : null, icon: const Icon(Icons.queue_music_rounded), label: const Text('Queue')),
-                  OutlinedButton.icon(onPressed: available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add_rounded), label: const Text('Collection')),
-                  TextButton.icon(onPressed: onRemove, icon: const Icon(Icons.close_rounded), label: const Text('Remove')),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       );

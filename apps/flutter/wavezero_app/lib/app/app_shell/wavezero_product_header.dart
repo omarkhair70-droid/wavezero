@@ -35,43 +35,37 @@ class WaveZeroProductHeader extends StatelessWidget {
     if (appMode == WzAppMode.developer) return _buildDeveloperHeader();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(22, 14, 22, 4),
       child: Row(
         children: [
           GestureDetector(
             onLongPress: onLogoLongPress,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: themeConfig.accentGradient,
-                border: Border.all(color: Colors.white),
-                boxShadow: WzSurface.softShadows,
-              ),
-              alignment: Alignment.center,
-              child: const Icon(Icons.graphic_eq_rounded, color: WzColors.textPrimary, size: 20),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'WaveZero',
+                  style: TextStyle(
+                    color: WzColors.textPrimary,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Transform.translate(
+                  offset: const Offset(0, -7),
+                  child: Icon(Icons.auto_awesome_rounded, size: 13, color: themeConfig.accent),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: WzSpacing.sm),
-          const Expanded(
-            child: Text(
-              'WaveZero',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: WzColors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.55,
-              ),
-            ),
-          ),
+          const Spacer(),
           WzSculptedIconButton(
             tooltip: 'Settings',
-            icon: Icons.tune_rounded,
-            size: 42,
-            iconSize: 18,
+            icon: Icons.settings_outlined,
+            size: 44,
+            iconSize: 19,
             onPressed: onOpenSettings,
           ),
         ],

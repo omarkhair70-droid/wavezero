@@ -1,16 +1,16 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/curated_demo_picks.dart';
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
-import '../../shared/media/media_presentation.dart';
+import '../../shared/widgets/wavezero_artwork.dart';
 import '../collections/collections_service.dart';
 import '../history/listening_history_service.dart';
 import 'search_controls.dart';
 import 'search_results.dart';
-import 'search_page_support.dart';
 
 class WzSearchPage extends StatelessWidget {
   const WzSearchPage({
@@ -63,85 +63,75 @@ class WzSearchPage extends StatelessWidget {
   final VoidCallback onLoadCatalog;
   final ValueChanged<ResolvedCuratedDemoPick> onPlayCuratedPick;
 
+  static const _consumerFilters = <WzSearchFilter>[
+    WzSearchFilter.all,
+    WzSearchFilter.songs,
+    WzSearchFilter.device,
+    WzSearchFilter.downloads,
+    WzSearchFilter.collections,
+    WzSearchFilter.history,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final query = controller.text.trim();
     final hasQuery = query.isNotEmpty;
+
     return WzPageScaffold(
       children: [
-        WzPageHeader(
-          icon: Icons.search_rounded,
-          title: 'Search',
-          subtitle: 'Find the sound you want without leaving the room you are already in.',
-          trailing: WzSculptedIconButton(
-            tooltip: 'Back to Home',
-            icon: Icons.arrow_back_rounded,
-            size: 44,
-            iconSize: 19,
-            onPressed: onBack,
+        Text('Search', style: WzText.pageTitle.copyWith(fontSize: 31)),
+        const SizedBox(height: 18),
+        _SearchField(
+          controller: controller,
+          hasQuery: hasQuery,
+          onClearQuery: onClearQuery,
+          onSubmitted: onSubmitted,
+        ),
+        const SizedBox(height: 13),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: _consumerFilters
+                .map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(item.label),
+                      selected: filter == item,
+                      onSelected: (_) => onFilterChanged(item),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
           ),
         ),
-        const SizedBox(height: WzSpacing.md),
-        WzGlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: false,
-                textInputAction: TextInputAction.search,
-                onSubmitted: onSubmitted,
-                decoration: InputDecoration(
-                  labelText: 'Search music',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: hasQuery ? IconButton(tooltip: 'Clear search', onPressed: onClearQuery, icon: const Icon(Icons.close_rounded)) : null,
-                ),
-              ),
-              const SizedBox(height: WzSpacing.sm),
-              Wrap(
-                spacing: WzSpacing.xs,
-                runSpacing: WzSpacing.xs,
-                children: WzSearchFilter.values
-                    .map(
-                      (item) => ChoiceChip(
-                        label: Text(item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        selected: filter == item,
-                        onSelected: (_) => onFilterChanged(item),
-                      ),
-                    )
-                    .toList(growable: false),
-              ),
-              const SizedBox(height: WzSpacing.sm),
-              Text(
-                hasQuery
-                    ? '${filter.label} • ${results.length} result${results.length == 1 ? '' : 's'}'
-                    : '$allResultCount things are ready to search on this device.',
-                style: WzText.caption,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: WzSpacing.md),
+        const SizedBox(height: 24),
         if (!hasQuery) ...[
-          if (curatedPicks.isNotEmpty) ...[
-            WzCuratedTryPicksPanel(picks: curatedPicks, onPlay: onPlayCuratedPick),
-            const SizedBox(height: WzSpacing.md),
-          ],
           if (recentSearches.isNotEmpty) ...[
-            const WzSectionHeader(title: 'Recent searches', subtitle: 'Only on this device.', icon: Icons.manage_search_rounded),
-            Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: onClearRecentSearches, child: const Text('Clear'))),
-            WzGlassCard(
-              child: Wrap(
-                spacing: WzSpacing.xs,
-                runSpacing: WzSpacing.xs,
-                children: recentSearches
-                    .map((query) => ActionChip(label: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis), onPressed: () => onRecentSearch(query)))
-                    .toList(growable: false),
-              ),
+            Row(
+              children: [
+                const Expanded(child: Text('Recent searches', style: WzText.title)),
+                TextButton(onPressed: onClearRecentSearches, child: const Text('Clear')),
+              ],
             ),
-            const SizedBox(height: WzSpacing.md),
+            const SizedBox(height: 7),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: recentSearches
+                  .map(
+                    (item) => ActionChip(
+                      avatar: const Icon(Icons.history_rounded, size: 16),
+                      label: Text(item, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      onPressed: () => onRecentSearch(item),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+            const SizedBox(height: 26),
           ],
-          _SearchDiscoverySections(
+          _DiscoveryGrid(
             history: history,
             cachedTracks: cachedTracks,
             collections: collections,
@@ -150,36 +140,38 @@ class WzSearchPage extends StatelessWidget {
             onTrack: (track) => onRecentSearch(track.title),
             onCollection: (collection) => onRecentSearch(collection.name),
           ),
-        ] else if (results.isEmpty) ...[
-          WzGlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Nothing matched that sound.', style: WzText.title),
-                const SizedBox(height: WzSpacing.xs),
-                const Text('Try another title, import device music, or refresh the catalog when you are online.', style: WzText.body),
-                const SizedBox(height: WzSpacing.md),
-                Wrap(
-                  spacing: WzSpacing.sm,
-                  runSpacing: WzSpacing.sm,
-                  children: [
-                    WzPrimaryAction(label: 'Import Device music', icon: Icons.perm_media_rounded, onPressed: onImportDeviceMusic),
-                    OutlinedButton.icon(onPressed: onLoadCatalog, icon: const Icon(Icons.refresh_rounded), label: const Text('Load catalog')),
-                  ],
-                ),
-              ],
+          if (allResultCount == 0) ...[
+            const SizedBox(height: 24),
+            _QuietSearchEmpty(
+              onImportDeviceMusic: onImportDeviceMusic,
+              onLoadCatalog: onLoadCatalog,
             ),
+          ],
+        ] else if (results.isEmpty) ...[
+          _QuietSearchEmpty(
+            title: 'Nothing found',
+            subtitle: 'Try another title, artist, or something already on this device.',
+            onImportDeviceMusic: onImportDeviceMusic,
+            onLoadCatalog: onLoadCatalog,
           ),
         ] else ...[
+          Row(
+            children: [
+              Expanded(child: Text('Results', style: WzText.title)),
+              Text('${results.length}', style: WzText.caption),
+            ],
+          ),
+          const SizedBox(height: 8),
           SizedBox(
-            height: math.min(620.0, math.max(260.0, results.length * 152.0)),
+            height: math.min(620.0, math.max(260.0, results.length * 78.0)),
             child: ListView.builder(
+              physics: const BouncingScrollPhysics(),
               itemCount: results.length,
               itemBuilder: (context, index) {
                 final result = results[index];
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: WzSpacing.sm),
-                  child: _SearchResultCard(
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: _SearchResultRow(
                     result: result,
                     onPlay: () => onPlay(result),
                     onAddToQueue: () => onAddToQueue(result),
@@ -196,8 +188,54 @@ class WzSearchPage extends StatelessWidget {
   }
 }
 
-class _SearchResultCard extends StatelessWidget {
-  const _SearchResultCard({
+class _SearchField extends StatelessWidget {
+  const _SearchField({required this.controller, required this.hasQuery, required this.onClearQuery, required this.onSubmitted});
+
+  final TextEditingController controller;
+  final bool hasQuery;
+  final VoidCallback onClearQuery;
+  final ValueChanged<String> onSubmitted;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.fromLTRB(15, 5, 8, 5),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFCFFFFFF), Color(0xF1F7FAFC)]),
+          borderRadius: BorderRadius.circular(34),
+          border: Border.all(color: const Color(0xF2FFFFFF)),
+          boxShadow: WzSurface.softShadows,
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.search_rounded, color: WzColors.textMuted, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                textInputAction: TextInputAction.search,
+                onSubmitted: onSubmitted,
+                decoration: const InputDecoration(
+                  hintText: 'Songs, artists, collections…',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                ),
+              ),
+            ),
+            if (hasQuery)
+              IconButton(
+                tooltip: 'Clear search',
+                onPressed: onClearQuery,
+                icon: const Icon(Icons.close_rounded, size: 19),
+              ),
+          ],
+        ),
+      );
+}
+
+class _SearchResultRow extends StatelessWidget {
+  const _SearchResultRow({
     required this.result,
     required this.onPlay,
     required this.onAddToQueue,
@@ -212,63 +250,88 @@ class _SearchResultCard extends StatelessWidget {
   final VoidCallback? onOpenCollection;
 
   @override
-  Widget build(BuildContext context) => WzGlassCard(
-        borderRadius: WzRadius.lg,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                WzSculptedIcon(icon: wzSearchResultIcon(result), size: 48, iconSize: 20, color: WzColors.accent),
-                const SizedBox(width: WzSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(result.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.title),
-                      const SizedBox(height: WzSpacing.xxs),
-                      Text(result.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+  Widget build(BuildContext context) {
+    final isCollection = onOpenCollection != null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: isCollection
+            ? onOpenCollection
+            : result.available
+                ? () {
+                    HapticFeedback.selectionClick();
+                    onPlay();
+                  }
+                : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(18),
+                  topRight: Radius.circular(24),
+                  bottomLeft: Radius.circular(23),
+                  bottomRight: Radius.circular(15),
+                ),
+                child: WzArtwork(
+                  artworkUrl: result.artworkUrl,
+                  size: 58,
+                  trackId: result.trackId ?? result.historyTrackId ?? result.id,
+                  title: result.title,
+                  artist: result.subtitle,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(result.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 14.5)),
+                    const SizedBox(height: 3),
+                    Text(result.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                    if (!result.available) ...[
+                      const SizedBox(height: 2),
+                      Text('Unavailable right now', style: WzText.caption.copyWith(fontSize: 10.5, color: WzColors.warning)),
                     ],
-                  ),
+                  ],
+                ),
+              ),
+              if (isCollection)
+                const Icon(Icons.arrow_forward_ios_rounded, size: 15, color: WzColors.textSubtle)
+              else ...[
+                WzSculptedIconButton(
+                  tooltip: 'Play',
+                  icon: Icons.play_arrow_rounded,
+                  size: 38,
+                  iconSize: 19,
+                  onPressed: result.available ? onPlay : null,
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'More',
+                  icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
+                  onSelected: (value) {
+                    if (value == 'queue') onAddToQueue();
+                    if (value == 'collection') onAddToCollection();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(enabled: result.available, value: 'queue', child: const Text('Add to queue')),
+                    PopupMenuItem(enabled: result.available, value: 'collection', child: const Text('Add to collection')),
+                  ],
                 ),
               ],
-            ),
-            const SizedBox(height: WzSpacing.sm),
-            Wrap(
-              spacing: WzSpacing.xs,
-              runSpacing: WzSpacing.xs,
-              children: [
-                WzStatusPill(label: wzSearchSourceLabel(result.source), active: true, icon: Icons.label_outline_rounded),
-                WzStatusPill(label: wzSearchTypeLabel(result.type), icon: wzSearchResultIcon(result)),
-                if (result.qualityLabel != null) WzStatusPill(label: wzProductQualityLabel(result.qualityLabel!), icon: Icons.high_quality_rounded),
-                if (result.codec != null) WzStatusPill(label: result.codec!, icon: Icons.settings_input_component_rounded),
-                if (result.license != null) WzStatusPill(label: result.license!.badgeLabel, warning: result.license!.needsRightsWarning, icon: Icons.policy_outlined),
-                if (!result.available) const WzStatusPill(label: 'Unavailable', warning: true, icon: Icons.block_rounded),
-              ],
-            ),
-            const SizedBox(height: WzSpacing.xs),
-            Text(result.secondaryLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
-            const SizedBox(height: WzSpacing.sm),
-            Wrap(
-              spacing: WzSpacing.xs,
-              runSpacing: WzSpacing.xs,
-              children: [
-                if (onOpenCollection != null)
-                  WzPrimaryAction(label: 'Open Collection', icon: Icons.open_in_full_rounded, onPressed: onOpenCollection)
-                else ...[
-                  WzPrimaryAction(label: 'Play', icon: Icons.play_arrow_rounded, onPressed: result.available ? onPlay : null),
-                  OutlinedButton.icon(onPressed: result.available ? onAddToQueue : null, icon: const Icon(Icons.queue_music_rounded), label: const Text('Add to Queue')),
-                  OutlinedButton.icon(onPressed: result.available ? onAddToCollection : null, icon: const Icon(Icons.playlist_add_rounded), label: const Text('Add to Collection')),
-                ],
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
-      );
+      ),
+    );
+  }
 }
 
-class _SearchDiscoverySections extends StatelessWidget {
-  const _SearchDiscoverySections({
+class _DiscoveryGrid extends StatelessWidget {
+  const _DiscoveryGrid({
     required this.history,
     required this.cachedTracks,
     required this.collections,
@@ -288,16 +351,101 @@ class _SearchDiscoverySections extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleCollections = collections.where((collection) => collection.trackCount > 0 || collection.type == WzCollectionType.liked).take(5).toList(growable: false);
-    final sections = <Widget>[];
+    final cards = <Widget>[];
     if (history.isNotEmpty) {
-      sections.add(WzSearchDiscoveryPanel(title: 'Continue Listening', subtitle: 'The last voice you left.', icon: Icons.play_circle_outline_rounded, children: [WzSearchDiscoveryButton(label: history.first.title, detail: history.first.subtitle, icon: Icons.history_rounded, onTap: () => onRecent(history.first))]));
-      sections.add(WzSearchDiscoveryPanel(title: 'Recently Played', subtitle: 'Local listening history.', icon: Icons.schedule_rounded, children: history.take(5).map((entry) => WzSearchDiscoveryButton(label: entry.title, detail: entry.subtitle, icon: Icons.history_rounded, onTap: () => onRecent(entry))).toList(growable: false)));
+      cards.add(_DiscoveryTile(icon: Icons.history_rounded, title: 'Recently played', subtitle: history.first.title, onTap: () => onRecent(history.first)));
     }
-    if (cachedTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Offline', subtitle: 'Already here on the device.', icon: Icons.download_done_rounded, children: cachedTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: track.subtitle, icon: Icons.download_done_rounded, onTap: () => onTrack(track))).toList(growable: false)));
-    if (visibleCollections.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Collections', subtitle: 'Liked Tracks and your local playlists.', icon: Icons.playlist_play_rounded, children: visibleCollections.map((collection) => WzSearchDiscoveryButton(label: collection.name, detail: '${collection.trackCount} tracks', icon: collection.type == WzCollectionType.liked ? Icons.favorite_rounded : Icons.playlist_play_rounded, onTap: () => onCollection(collection))).toList(growable: false)));
-    if (catalogTracks.isNotEmpty) sections.add(WzSearchDiscoveryPanel(title: 'Catalog', subtitle: 'Loaded demo tracks with clear license labels.', icon: Icons.cloud_queue_rounded, children: catalogTracks.take(5).map((track) => WzSearchDiscoveryButton(label: track.title, detail: '${track.subtitle} • ${track.license.badgeLabel}', icon: Icons.music_note_rounded, onTap: () => onTrack(track))).toList(growable: false)));
-    if (sections.isEmpty) return const WzGlassCard(child: Text('Import Device music or load the Catalog to search more.', style: WzText.body));
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: sections.expand((section) => [section, const SizedBox(height: WzSpacing.md)]).toList(growable: false));
+    if (cachedTracks.isNotEmpty) {
+      cards.add(_DiscoveryTile(icon: Icons.download_done_rounded, title: 'Offline', subtitle: '${cachedTracks.length} saved', onTap: () => onTrack(cachedTracks.first)));
+    }
+    final visibleCollections = collections.where((item) => item.trackCount > 0 || item.type == WzCollectionType.liked).toList(growable: false);
+    if (visibleCollections.isNotEmpty) {
+      cards.add(_DiscoveryTile(icon: Icons.favorite_outline_rounded, title: 'Collections', subtitle: visibleCollections.first.name, onTap: () => onCollection(visibleCollections.first)));
+    }
+    if (catalogTracks.isNotEmpty) {
+      cards.add(_DiscoveryTile(icon: Icons.auto_awesome_rounded, title: 'Explore', subtitle: 'Find another voice', onTap: () => onTrack(catalogTracks.first)));
+    }
+
+    if (cards.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text('Browse', style: WzText.title),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = (constraints.maxWidth - 10) / 2;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: cards.map((card) => SizedBox(width: width, child: card)).toList(growable: false),
+            );
+          },
+        ),
+      ],
+    );
   }
+}
+
+class _DiscoveryTile extends StatelessWidget {
+  const _DiscoveryTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => WzPressableSurface(
+        onTap: onTap,
+        radius: 30,
+        decoration: WzSurface.sculpted(),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            WzSculptedIcon(icon: icon, size: 42, iconSize: 18, color: WzColors.accent),
+            const SizedBox(height: 13),
+            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 14)),
+            const SizedBox(height: 4),
+            Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+          ],
+        ),
+      );
+}
+
+class _QuietSearchEmpty extends StatelessWidget {
+  const _QuietSearchEmpty({
+    this.title = 'Your music will appear here',
+    this.subtitle = 'Add music from this device or try again when your online music is ready.',
+    required this.onImportDeviceMusic,
+    required this.onLoadCatalog,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onImportDeviceMusic;
+  final VoidCallback onLoadCatalog;
+
+  @override
+  Widget build(BuildContext context) => WzGlassCard(
+        borderRadius: 34,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: WzText.title),
+            const SizedBox(height: 6),
+            Text(subtitle, style: WzText.body),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 9,
+              runSpacing: 9,
+              children: [
+                WzPrimaryAction(label: 'Device Music', icon: Icons.phone_android_rounded, onPressed: onImportDeviceMusic),
+                OutlinedButton.icon(onPressed: onLoadCatalog, icon: const Icon(Icons.refresh_rounded), label: const Text('Try online music')),
+              ],
+            ),
+          ],
+        ),
+      );
 }

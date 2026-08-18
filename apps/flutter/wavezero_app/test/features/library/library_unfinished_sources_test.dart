@@ -37,15 +37,15 @@ void main() {
     await tester.pumpWidget(buildOverview(showCloudSource: false));
 
     expect(find.text('Cloud'), findsNothing);
-    expect(find.text('Cloud Vault'), findsNothing);
-    expect(find.textContaining('playback coming soon'), findsNothing);
+    expect(find.text('Cloud preview'), findsNothing);
+    expect(find.textContaining('developer entries'), findsNothing);
   });
 
   testWidgets('developer Library can expose Cloud preview source', (tester) async {
     await tester.pumpWidget(buildOverview(showCloudSource: true));
 
     expect(find.text('Cloud'), findsWidgets);
-    expect(find.text('Cloud Vault'), findsOneWidget);
-    expect(find.text('Developer preview source'), findsOneWidget);
+    expect(find.text('Cloud preview'), findsOneWidget);
+    expect(find.text('4 developer entries'), findsOneWidget);
   });
 }

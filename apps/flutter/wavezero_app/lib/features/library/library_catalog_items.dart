@@ -1,14 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/curated_demo_picks.dart';
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
-import '../downloads/cache_service.dart';
-import '../../shared/media/media_presentation.dart';
 import '../../shared/media/track_source.dart';
 import '../../shared/widgets/wavezero_artwork.dart';
+import '../downloads/cache_service.dart';
 
 class WzFeaturedDemoLibraryShelf extends StatelessWidget {
   const WzFeaturedDemoLibraryShelf({
@@ -26,26 +26,26 @@ class WzFeaturedDemoLibraryShelf extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const WzSectionHeader(
-          title: 'A few voices to start with',
-          subtitle: 'Small picks from the loaded demo, kept intentionally quiet.',
-          icon: Icons.auto_awesome_rounded,
-        ),
-        const SizedBox(height: WzSpacing.xs),
+        const Text('A few voices', style: WzText.title),
+        const SizedBox(height: 4),
+        const Text('Something to start with.', style: WzText.caption),
+        const SizedBox(height: 10),
         SizedBox(
-          height: 116,
+          height: 108,
           child: ListView.separated(
+            physics: const BouncingScrollPhysics(),
             scrollDirection: Axis.horizontal,
             itemCount: math.min(8, picks.length),
-            separatorBuilder: (_, __) => const SizedBox(width: WzSpacing.sm),
-            itemBuilder: (context, index) => _LibraryCuratedPickCard(
-              pick: picks[index],
-              onPlay: () => onPlayPick(picks[index]),
-            ),
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final pick = picks[index];
+              return _LibraryCuratedPickCard(
+                pick: pick,
+                onPlay: () => onPlayPick(pick),
+              );
+            },
           ),
         ),
-        const SizedBox(height: WzSpacing.xs),
-        const Text(CuratedDemoPicks.consumerCopy, style: WzText.caption),
       ],
     );
   }
@@ -61,20 +61,20 @@ class _LibraryCuratedPickCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final track = pick.track;
     return SizedBox(
-      width: 242,
+      width: 225,
       child: WzPressableSurface(
         onTap: onPlay,
-        radius: WzRadius.lg,
+        radius: 30,
         decoration: WzSurface.sculpted(),
-        padding: const EdgeInsets.all(WzSpacing.sm),
+        padding: const EdgeInsets.all(9),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(3),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(WzRadius.md),
-                boxShadow: WzSurface.softShadows,
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(27),
+                bottomLeft: Radius.circular(25),
+                bottomRight: Radius.circular(17),
               ),
               child: WzArtwork(
                 artworkUrl: track.artworkUrl,
@@ -83,47 +83,35 @@ class _LibraryCuratedPickCard extends StatelessWidget {
                 title: track.title,
                 artist: track.artistName,
                 mood: pick.pick.mood,
+                fit: BoxFit.cover,
               ),
             ),
-            const SizedBox(width: WzSpacing.sm),
-            Expanded(child: _LibraryCuratedPickText(pick: pick, onPlay: onPlay)),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 13)),
+                  const SizedBox(height: 3),
+                  Text(track.artistName ?? track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                  const SizedBox(height: 7),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: WzSculptedIconButton(
+                      tooltip: 'Play',
+                      icon: Icons.play_arrow_rounded,
+                      size: 34,
+                      iconSize: 18,
+                      onPressed: onPlay,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _LibraryCuratedPickText extends StatelessWidget {
-  const _LibraryCuratedPickText({required this.pick, required this.onPlay});
-
-  final ResolvedCuratedDemoPick pick;
-  final VoidCallback onPlay;
-
-  @override
-  Widget build(BuildContext context) {
-    final track = pick.track;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 13)),
-        const SizedBox(height: 3),
-        Text(track.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
-        const SizedBox(height: 3),
-        Text('${pick.pick.shelfLabel} • ${pick.pick.mood}', maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption.copyWith(fontSize: 10.5)),
-        const Spacer(),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: WzSculptedIconButton(
-            tooltip: 'Play',
-            icon: Icons.play_arrow_rounded,
-            size: 36,
-            iconSize: 18,
-            onPressed: onPlay,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -156,145 +144,107 @@ class WzLibraryCatalogRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = CacheService().statusForTrack(track.trackId);
+    final cacheStatus = CacheService().statusForTrack(track.trackId);
     final isDevice = isWzDeviceCatalogTrack(track);
     final isCached = isWzCachedCatalogTrack(track);
-    final sourceLabel = isDevice
-        ? 'Device'
-        : isCached
-            ? wzCachedSourceBadgeLabel(track.displayName)
-            : (track.license.sourceName ?? 'Catalog');
-    final licenseLabel = _licenseBadgeLabel(track);
-    final asset = track.primaryAsset;
-
-    final cacheIcon = switch (status) {
-      TrackCacheStatus.caching => Icons.downloading_rounded,
-      TrackCacheStatus.cached => Icons.check_circle_outline_rounded,
-      TrackCacheStatus.failed => Icons.error_outline_rounded,
-      TrackCacheStatus.notCached => Icons.download_rounded,
-    };
+    final subtitle = track.artistName ?? track.albumName ?? track.subtitle;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 7),
       child: WzPressableSurface(
-        onTap: onTap,
-        radius: WzRadius.lg,
-        decoration: WzSurface.sculpted(selected: selected),
-        padding: const EdgeInsets.all(11),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        radius: 28,
+        decoration: selected
+            ? WzSurface.sculpted(selected: true)
+            : BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(28),
+              ),
+        padding: const EdgeInsets.fromLTRB(7, 7, 5, 7),
+        child: Row(
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(WzRadius.md),
-                    boxShadow: selected ? WzSurface.softShadows : null,
-                  ),
-                  child: WzArtwork(
-                    artworkUrl: track.artworkUrl,
-                    size: 58,
-                    trackId: track.trackId,
-                    title: track.title,
-                    artist: track.artistName,
-                  ),
-                ),
-                const SizedBox(width: WzSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(track.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
-                      const SizedBox(height: 5),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 5,
-                        children: [
-                          _LibrarySourceBadge(label: sourceLabel, active: selected || isDevice || isCached),
-                          _LibraryLicenseBadge(label: licenseLabel, warning: track.license.needsRightsWarning),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      Text(_trackSubtitle(track), maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${asset?.qualityLabel ?? 'quality unknown'}${asset?.codec == null ? '' : ' • ${asset!.codec}'}${isDevice ? ' • Already local' : isCached ? ' • Cached locally' : ' • ${status.name}'}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: WzText.caption.copyWith(fontSize: 10.5),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(18),
+                topRight: Radius.circular(24),
+                bottomLeft: Radius.circular(23),
+                bottomRight: Radius.circular(15),
+              ),
+              child: WzArtwork(
+                artworkUrl: track.artworkUrl,
+                size: 58,
+                trackId: track.trackId,
+                title: track.title,
+                artist: track.artistName,
+                fit: BoxFit.cover,
+              ),
             ),
-            const SizedBox(height: WzSpacing.sm),
-            Row(
-              children: [
-                Text(_formatTime(track.durationMs), style: WzText.caption.copyWith(color: WzColors.textMuted)),
-                if (status == TrackCacheStatus.cached && !isCached) ...[
-                  const SizedBox(width: WzSpacing.xs),
-                  const WzStatusPill(label: 'Cached', active: true, icon: Icons.download_done_rounded),
-                ],
-                const Spacer(),
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 5,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    WzSculptedIconButton(
-                      tooltip: liked ? 'Unlike' : 'Like',
-                      icon: liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                      selected: liked,
-                      size: 38,
-                      iconSize: 17,
-                      onPressed: onToggleLike,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: WzText.sectionTitle.copyWith(fontSize: 14.5),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                  if (isDevice || isCached) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      isDevice ? 'On this device' : 'Available offline',
+                      style: WzText.caption.copyWith(fontSize: 10.5, color: WzColors.accent),
                     ),
-                    WzSculptedIconButton(
-                      tooltip: 'Add to queue',
-                      icon: Icons.playlist_add_rounded,
-                      size: 38,
-                      iconSize: 18,
-                      onPressed: addDisabled ? null : onAdd,
-                    ),
-                    WzSculptedIconButton(
-                      tooltip: 'Add to collection',
-                      icon: Icons.library_add_rounded,
-                      size: 38,
-                      iconSize: 17,
-                      onPressed: onAddToCollection,
-                    ),
-                    if (onCache != null)
-                      WzSculptedIconButton(
-                        tooltip: 'Cache/download',
-                        icon: cacheIcon,
-                        selected: status == TrackCacheStatus.cached,
-                        size: 38,
-                        iconSize: 17,
-                        onPressed: onCache,
-                      ),
-                    if (onDeleteCached != null)
-                      WzSculptedIconButton(
-                        tooltip: 'Delete cached file',
-                        icon: Icons.delete_outline_rounded,
-                        size: 38,
-                        iconSize: 17,
-                        onPressed: onDeleteCached,
-                      ),
-                    if (onCache == null && onDeleteCached == null)
-                      WzSculptedIcon(
-                        icon: track.source == 'cloud_vault' ? Icons.cloud_done_outlined : Icons.phone_android_rounded,
-                        size: 38,
-                        iconSize: 17,
-                        color: WzColors.success,
-                      ),
                   ],
-                ),
-              ],
+                ],
+              ),
             ),
+            const SizedBox(width: 6),
+            _HeartButton(liked: liked, onTap: onToggleLike),
+            WzSculptedIconButton(
+              tooltip: 'Add to queue',
+              icon: Icons.queue_music_rounded,
+              size: 38,
+              iconSize: 17,
+              onPressed: addDisabled ? null : onAdd,
+            ),
+            WzSculptedIconButton(
+              tooltip: 'Add to collection',
+              icon: Icons.playlist_add_rounded,
+              size: 38,
+              iconSize: 17,
+              onPressed: onAddToCollection,
+            ),
+            if (onCache != null)
+              WzSculptedIconButton(
+                tooltip: cacheStatus == TrackCacheStatus.cached ? 'Downloaded' : 'Download',
+                icon: cacheStatus == TrackCacheStatus.caching
+                    ? Icons.downloading_rounded
+                    : cacheStatus == TrackCacheStatus.cached
+                        ? Icons.check_rounded
+                        : Icons.download_rounded,
+                selected: cacheStatus == TrackCacheStatus.cached,
+                size: 38,
+                iconSize: 17,
+                onPressed: onCache,
+              )
+            else if (onDeleteCached != null)
+              PopupMenuButton<String>(
+                tooltip: 'More',
+                icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
+                onSelected: (value) {
+                  if (value == 'remove') onDeleteCached?.call();
+                },
+                itemBuilder: (_) => const [PopupMenuItem(value: 'remove', child: Text('Remove download'))],
+              )
+            else
+              const SizedBox(width: 4),
           ],
         ),
       ),
@@ -302,72 +252,36 @@ class WzLibraryCatalogRow extends StatelessWidget {
   }
 }
 
-class _LibrarySourceBadge extends StatelessWidget {
-  const _LibrarySourceBadge({required this.label, required this.active});
+class _HeartButton extends StatelessWidget {
+  const _HeartButton({required this.liked, required this.onTap});
 
-  final String label;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: active ? WzColors.accent.withValues(alpha: 0.10) : const Color(0xBFFFFFFF),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: active ? WzColors.accent.withValues(alpha: 0.22) : WzColors.borderSoft),
-        ),
-        child: Text(label, style: WzText.caption.copyWith(fontSize: 10, color: WzColors.textMuted, fontWeight: FontWeight.w700)),
-      );
-}
-
-class _LibraryLicenseBadge extends StatelessWidget {
-  const _LibraryLicenseBadge({required this.label, this.warning = false});
-
-  final String label;
-  final bool warning;
+  final bool liked;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+  Widget build(BuildContext context) => WzPressableSurface(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
+        radius: 19,
         decoration: BoxDecoration(
-          color: warning ? WzColors.warningSoft : WzColors.successSoft,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: (warning ? WzColors.warning : WzColors.success).withValues(alpha: 0.20)),
+          shape: BoxShape.circle,
+          color: liked ? const Color(0xFFFFF0F2) : Colors.transparent,
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: WzText.caption.copyWith(
-            fontSize: 10,
-            color: warning ? WzColors.warning : WzColors.textMuted,
-            fontWeight: FontWeight.w700,
+        padding: const EdgeInsets.all(9),
+        child: Tooltip(
+          message: liked ? 'Unlike' : 'Like',
+          child: AnimatedSwitcher(
+            duration: WzMotion.normal,
+            transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+            child: Icon(
+              liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              key: ValueKey(liked),
+              size: 20,
+              color: liked ? const Color(0xFFD85C6A) : WzColors.textMuted,
+            ),
           ),
         ),
       );
-}
-
-String _licenseBadgeLabel(CatalogTrackSummary track) {
-  if (isWzDeviceCatalogTrack(track)) return 'Device music';
-  if (track.license.status == LicenseStatus.unknown && track.trackId.startsWith('track-local-')) return 'Dev only';
-  return track.license.badgeLabel;
-}
-
-String _trackSubtitle(CatalogTrackSummary track) {
-  final asset = track.primaryAsset;
-  final parts = <String>[track.subtitle];
-  if (asset?.qualityLabel != null) parts.add(asset!.qualityLabel!);
-  if (asset?.codec != null) parts.add(asset!.codec!);
-  if (asset?.bitrateKbps != null) parts.add('${asset!.bitrateKbps}kbps');
-  parts.add(isWzDeviceCatalogTrack(track) ? 'Device music' : (track.license.sourceName ?? 'Catalog'));
-  parts.add(track.license.badgeLabel);
-  return parts.join(' • ');
-}
-
-String _formatTime(int? valueMs) {
-  if (valueMs == null || valueMs < 0) return '—:—';
-  final totalSeconds = (valueMs / 1000).floor();
-  final minutes = totalSeconds ~/ 60;
-  final seconds = totalSeconds % 60;
-  return '$minutes:${seconds.toString().padLeft(2, '0')}';
 }

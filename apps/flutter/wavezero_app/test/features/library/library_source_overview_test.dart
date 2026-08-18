@@ -32,16 +32,16 @@ void main() {
         ),
       );
 
-  testWidgets('preserves consumer Library sources without unfinished Cloud controls', (tester) async {
+  testWidgets('consumer Library exposes simple music destinations without unfinished Cloud controls', (tester) async {
     await tester.pumpWidget(buildSubject());
 
     expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Unified library'), findsOneWidget);
-    expect(find.text('Catalog ready'), findsOneWidget);
-    expect(find.text('Import Device music'), findsOneWidget);
-    expect(find.text('Collections / Playlists'), findsOneWidget);
-    expect(find.text('Open full search'), findsOneWidget);
-    expect(find.text('Cloud Vault'), findsNothing);
+    expect(find.text('All music'), findsOneWidget);
+    expect(find.text('Device Music'), findsOneWidget);
+    expect(find.text('Downloads'), findsWidgets);
+    expect(find.text('Collections'), findsOneWidget);
+    expect(find.byTooltip('Search Library'), findsOneWidget);
+    expect(find.text('Cloud preview'), findsNothing);
     expect(find.text('Cloud'), findsNothing);
   });
 
