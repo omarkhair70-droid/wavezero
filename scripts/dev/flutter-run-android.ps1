@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $FlutterDir = Join-Path $RepoRoot "apps\flutter\wavezero_app"
-$AndroidPackageName = "com.wavezero.flutter"
+$AndroidPackageName = "com.omarkhair.wavezero"
 $ApkCandidates = @(
     (Join-Path -Path $FlutterDir -ChildPath "build\app\outputs\flutter-apk\app-debug.apk"),
     (Join-Path -Path $FlutterDir -ChildPath "android\app\build\outputs\apk\debug\app-debug.apk")
