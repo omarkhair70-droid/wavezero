@@ -39,6 +39,9 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get
 
+      - name: RC lockfile capture
+        run: cat pubspec.lock
+
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
