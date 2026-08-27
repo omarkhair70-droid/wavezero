@@ -27,27 +27,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Flutter stable
+      - name: Install Flutter 3.47.1
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.47.1'
           cache: true
 
       - name: Flutter version
         run: flutter --version
 
-      - name: Resolve dependencies
-        run: flutter pub get
-
-      - name: RC lockfile capture
-        run: cat pubspec.lock
-
-      - name: Upload RC lockfile
-        uses: actions/upload-artifact@v4
-        with:
-          name: wavezero-rc-lockfile
-          path: apps/flutter/wavezero_app/pubspec.lock
-          if-no-files-found: error
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
@@ -55,8 +45,16 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build Android release app bundle
+      - name: Build Android V1 release app bundle
         run: >-
           flutter build appbundle --release
           --dart-define=WAVEZERO_APP_ENV=production
-          --dart-define=WAVEZERO_API_BASE_URL=https://release-validation.invalid
+          --dart-define=WAVEZERO_CONTENT_MODE_LABEL="Device music"
+
+      - name: Upload Android V1 RC app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: wavezero-v1-rc-aab
+          path: apps/flutter/wavezero_app/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
