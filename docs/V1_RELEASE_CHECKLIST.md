@@ -33,7 +33,7 @@ Explicitly deferred after V1:
 
 These must be closed before production submission:
 
-- [ ] Final package ID is approved before the first Play upload. The repository currently uses com.wavezero.flutter. Keep it only if it is the intended permanent identifier; do not casually rename it after Play creation.
+- [x] Final package ID approved before the first Play upload: `com.omarkhair.wavezero`.
 - [x] Target Android 16 / API 36. Google Play requires new apps and updates to target API 36 starting 2026-08-31. The V1 release branch targets 36.
 - [x] Version comes from Flutter's single source of truth. V1 is 1.0.0+1.
 - [x] CI exercises the AAB release path. The Flutter workflow builds a release app bundle, not only an APK.
@@ -50,7 +50,7 @@ These must be closed before production submission:
 
 These are not future feature work, but V1 should not go public until they are verified:
 
-- [ ] Add/approve the real WaveZero launcher icon. The shipping Android manifest currently has no explicit branded launcher icon resource.
+- [ ] Add/approve the real WaveZero launcher icon. No usable brand/icon asset exists in the repository; see `docs/V1_PLAY_HANDOFF.md` (`ICON ASSET REQUIRED`).
 - [ ] Run the Samsung physical-device RC smoke matrix below on the same code/config intended for release.
 - [ ] Confirm first launch and the local/offline experience are coherent when no production catalog URL is configured.
 - [ ] Confirm no consumer surface exposes developer URLs, raw IDs, stack traces, local paths, or unfinished Cloud/DSP promises.
@@ -190,9 +190,10 @@ Cosmetic differences that do not break the approved Porcelain consumer product s
 ## Final AAB/version/release checklist
 
 - [ ] V1 commit is on the intended release branch and CI is green.
+- [ ] `apps/flutter/wavezero_app/pubspec.lock` is committed and CI uses `flutter pub get` against the locked dependency graph.
 - [ ] pubspec.yaml version is 1.0.0+1 for the first upload; every future Play upload increments the build number/versionCode.
 - [ ] targetSdk is 36 and compileSdk is 36.
-- [ ] Final package ID is intentionally approved.
+- [x] Final package ID is intentionally approved: `com.omarkhair.wavezero`.
 - [ ] Release manifest keeps cleartext disabled.
 - [ ] Debug/profile cleartext overrides are not present in the release manifest.
 - [ ] allowBackup=false remains intentional for device-local state.
