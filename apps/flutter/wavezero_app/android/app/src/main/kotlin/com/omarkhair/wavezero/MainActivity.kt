@@ -1,4 +1,4 @@
-package com.wavezero.flutter
+package com.omarkhair.wavezero
 
 import android.Manifest
 import android.content.ContentUris
