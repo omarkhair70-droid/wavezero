@@ -16,12 +16,12 @@ if (hasReleaseSigning) {
 }
 
 android {
-    namespace = "com.wavezero.flutter"
+    namespace = "com.omarkhair.wavezero"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
     defaultConfig {
-        applicationId = "com.wavezero.flutter"
+        applicationId = "com.omarkhair.wavezero"
         minSdk = 26
         targetSdk = 36
         versionCode = flutter.versionCode
