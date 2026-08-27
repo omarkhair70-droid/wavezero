@@ -19,19 +19,16 @@ The shared native playback implementation remains under `com.wavezero.player.pla
 
 ## Launcher identity
 
-**ICON ASSET REQUIRED**
+**ICON INTEGRATED**
 
-No usable WaveZero logo, icon, PNG, SVG, JPEG, WebP, mipmap, or drawable brand asset exists in the repository at this snapshot. Do not ship a generic Android icon and do not invent a placeholder.
+The final WaveZero V1 brand icon is integrated into the Android launcher resources and referenced by the shipping manifest.
 
-Provide:
+- adaptive-icon background: `#B8D2EF`;
+- adaptive foreground: the final white sculptural WaveZero mark;
+- legacy launcher and round-launcher fallbacks are included;
+- Google Play 512 x 512 icon source: `docs/play-assets/wavezero-play-icon-512.png`.
 
-- one master vector (SVG preferred) or at least 1024 x 1024 px transparent PNG containing the final WaveZero mark;
-- a defined adaptive-icon background color or background artwork;
-- critical foreground content that fits inside Android's centered 66 x 66 dp safe zone on a 108 x 108 dp adaptive-icon canvas;
-- optional monochrome mark for themed icons;
-- a separate 512 x 512 px, 32-bit PNG Play Store icon, sRGB, max 1024 KB.
-
-Visual brief: calm Porcelain / soft-sculpture identity, milk-white and restrained pale-blue language, one simple recognizable WaveZero mark, no text inside the icon, no fake depth or tiny detail.
+The icon integration is branding-only. It does not change the package identity, Media3 playback implementation, product behavior, or V1 scope.
 
 ## Play Store listing
 
