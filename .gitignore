@@ -42,3 +42,8 @@ fma_small.zip
 **/wavezero_fma_green_small_catalog.json
 **/wavezero_fma_green_small_import_report.csv
 **/*.mp3
+# Android release signing material must stay local and out of Git.
+apps/flutter/wavezero_app/android/key.properties
+**/*.jks
+**/*.keystore
+
