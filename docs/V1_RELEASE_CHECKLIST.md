@@ -68,12 +68,6 @@ Keep the upload key outside the repository.
 PowerShell example:
 
 ~~~powershell
-keytool -genkey -v ^
-~~~
-
-For PowerShell, the simplest reliable form is one line:
-
-~~~powershell
 keytool -genkey -v -keystore "$env:USERPROFILE\wavezero-upload-key.jks" -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 ~~~
 
