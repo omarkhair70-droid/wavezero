@@ -190,7 +190,7 @@ Cosmetic differences that do not break the approved Porcelain consumer product s
 ## Final AAB/version/release checklist
 
 - [ ] V1 commit is on the intended release branch and CI is green.
-- [ ] `apps/flutter/wavezero_app/pubspec.lock` is committed and CI uses `flutter pub get` against the locked dependency graph.
+- [x] `apps/flutter/wavezero_app/pubspec.lock` is committed and CI uses `flutter pub get --enforce-lockfile` against the locked dependency graph.
 - [ ] pubspec.yaml version is 1.0.0+1 for the first upload; every future Play upload increments the build number/versionCode.
 - [ ] targetSdk is 36 and compileSdk is 36.
 - [x] Final package ID is intentionally approved: `com.omarkhair.wavezero`.
