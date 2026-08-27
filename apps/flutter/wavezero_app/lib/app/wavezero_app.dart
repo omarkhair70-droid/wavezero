@@ -1389,6 +1389,9 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   }
 
   Future<void> _setAppMode(WzAppMode mode) async {
+    if (mode == WzAppMode.developer && !widget.appConfig.showDeveloperEntry) {
+      return;
+    }
     final messenger = ScaffoldMessenger.of(context);
     await _appModePreferences.save(mode);
     if (!mounted) return;

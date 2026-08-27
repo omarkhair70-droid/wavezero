@@ -56,3 +56,7 @@ These areas should remain clearly labeled as foundations/placeholders until they
 The current cleanup/hardening roadmap lives in [`docs/CONSOLIDATION_PLAN.md`](docs/CONSOLIDATION_PLAN.md).
 
 The consolidation strategy is intentionally incremental: preserve working playback/product behavior, establish clear ownership, decompose the large Flutter V3 state/UI surface, harden native lifecycle boundaries, align documentation with reality, and improve CI/release engineering before adding another large feature wave.
+
+## V1 Android release
+
+The first Google Play release is intentionally Android-first and local/offline-first. Release closure, signing, AAB, Samsung smoke testing, and Play listing gates live in [docs/V1_RELEASE_CHECKLIST.md](docs/V1_RELEASE_CHECKLIST.md).
