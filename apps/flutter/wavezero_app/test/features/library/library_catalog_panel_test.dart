@@ -9,7 +9,7 @@ void main() {
     WzLibrarySourceFilter filter = WzLibrarySourceFilter.all,
     String permission = 'unknown',
     int deviceTrackCount = 0,
-    VoidCallback? onImportDeviceMusic,
+    Future<void> Function()? onImportDeviceMusic,
   }) =>
       MaterialApp(
         home: Scaffold(
@@ -46,7 +46,7 @@ void main() {
               onOpenFullSearch: () {},
               onOpenCloudVault: () {},
               onRefresh: () {},
-              onImportDeviceMusic: onImportDeviceMusic ?? () {},
+              onImportDeviceMusic: onImportDeviceMusic ?? () async {},
               onSelectTrack: (_) {},
               onPlayCuratedPick: (_) {},
               onAddToQueue: (_) {},
@@ -83,7 +83,9 @@ void main() {
         filter: WzLibrarySourceFilter.device,
         permission: 'granted',
         deviceTrackCount: 3,
-        onImportDeviceMusic: () => scans += 1,
+        onImportDeviceMusic: () async {
+          scans += 1;
+        },
       ),
     );
     await tester.pump();
