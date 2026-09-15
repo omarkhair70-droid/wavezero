@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -29,6 +28,10 @@ class WzConsumerNowPlayingPage extends StatefulWidget {
 class _WzConsumerNowPlayingPageState extends State<WzConsumerNowPlayingPage> {
   late final Ticker _ticker;
   Duration _lastRefresh = Duration.zero;
+  int? _dragPointer;
+  Offset? _dragOrigin;
+  double _dismissOffset = 0;
+  bool _closing = false;
 
   @override
   void initState() {
@@ -47,51 +50,117 @@ class _WzConsumerNowPlayingPageState extends State<WzConsumerNowPlayingPage> {
     super.dispose();
   }
 
+  void _closePlayer() {
+    if (_closing) return;
+    _closing = true;
+    HapticFeedback.selectionClick();
+    final close = widget.onClose;
+    if (close != null) {
+      close();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (_closing || _dragPointer != null) return;
+    _dragPointer = event.pointer;
+    _dragOrigin = event.position;
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (_dragPointer != event.pointer || _dragOrigin == null || _closing) return;
+    final delta = event.position - _dragOrigin!;
+    if (delta.dy <= 0) {
+      if (_dismissOffset != 0) setState(() => _dismissOffset = 0);
+      return;
+    }
+    if (delta.dy < delta.dx.abs() * 0.8) return;
+    final next = delta.dy.clamp(0.0, 240.0).toDouble();
+    if ((next - _dismissOffset).abs() < 0.5) return;
+    setState(() => _dismissOffset = next);
+  }
+
+  void _onPointerEnd(PointerEvent event) {
+    if (_dragPointer != event.pointer) return;
+    final shouldClose = _dismissOffset >= 92;
+    _dragPointer = null;
+    _dragOrigin = null;
+    if (shouldClose) {
+      _closePlayer();
+      return;
+    }
+    if (_dismissOffset != 0 && mounted) setState(() => _dismissOffset = 0);
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: WzColors.canvas,
     body: Stack(
       children: [
         const Positioned.fill(child: _PlayerBackdrop()),
-        SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 6),
-                child: Row(
-                  children: [
-                    WzSculptedIconButton(
-                      icon: Icons.keyboard_arrow_down_rounded,
-                      tooltip: 'Close player',
-                      size: 44,
-                      iconSize: 24,
-                      onPressed:
-                          widget.onClose ??
-                          () => Navigator.of(context).maybePop(),
-                    ),
-                    const Spacer(),
-                    const Text(
-                      'Now Playing',
-                      style: TextStyle(
-                        color: WzColors.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.1,
+        Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _onPointerDown,
+          onPointerMove: _onPointerMove,
+          onPointerUp: _onPointerEnd,
+          onPointerCancel: _onPointerEnd,
+          child: AnimatedContainer(
+            duration: _dragPointer == null
+                ? const Duration(milliseconds: 180)
+                : Duration.zero,
+            curve: Curves.easeOutCubic,
+            transform: Matrix4.translationValues(0, _dismissOffset, 0),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  const SizedBox(height: 7),
+                  Center(
+                    child: Container(
+                      width: 34,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: WzColors.textSubtle.withValues(alpha: 0.34),
+                        borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                    const Spacer(),
-                    const SizedBox(width: 44),
-                  ],
-                ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 5, 18, 4),
+                    child: Row(
+                      children: [
+                        WzSculptedIconButton(
+                          icon: Icons.keyboard_arrow_down_rounded,
+                          tooltip: 'Close player',
+                          size: 42,
+                          iconSize: 23,
+                          onPressed: _closePlayer,
+                        ),
+                        const Spacer(),
+                        const Text(
+                          'Now Playing',
+                          style: TextStyle(
+                            color: WzColors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                        const Spacer(),
+                        const SizedBox(width: 42),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(18, 4, 18, 30),
+                      child: widget.surfaceBuilder(context),
+                    ),
+                  ),
+                ],
               ),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(18, 6, 18, 28),
-                  child: widget.surfaceBuilder(context),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ],
@@ -171,7 +240,7 @@ class WzConsumerPlayerSurface extends StatelessWidget {
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            final artSize = math.min(390.0, constraints.maxWidth);
+            final artSize = math.min(356.0, constraints.maxWidth);
             return Center(
               child: _SculptedArtwork(
                 size: artSize,
@@ -183,7 +252,7 @@ class WzConsumerPlayerSurface extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -399,140 +468,39 @@ class _SculptedArtwork extends StatelessWidget {
   final String? artist;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
+  Widget build(BuildContext context) => Container(
     width: size,
-    height: size * 0.94,
-    child: Stack(
-      alignment: Alignment.center,
-      children: [
-        Positioned.fill(
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(86),
-                topRight: Radius.circular(126),
-                bottomLeft: Radius.circular(122),
-                bottomRight: Radius.circular(74),
-              ),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xF8FFFFFF), Color(0xEAF3F8FC)],
-              ),
-              border: Border.all(color: const Color(0xEFFFFFFF), width: 1.4),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x160D2A40),
-                  blurRadius: 46,
-                  offset: Offset(0, 20),
-                ),
-                BoxShadow(
-                  color: Color(0xE6FFFFFF),
-                  blurRadius: 14,
-                  offset: Offset(-4, -7),
-                ),
-              ],
-            ),
-          ),
+    height: size,
+    padding: const EdgeInsets.all(7),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(42),
+      color: Colors.white.withValues(alpha: 0.58),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.88), width: 1.2),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x160D2A40),
+          blurRadius: 38,
+          offset: Offset(0, 18),
         ),
-        Positioned(
-          left: size * 0.07,
-          top: size * 0.045,
-          right: size * 0.04,
-          bottom: size * 0.045,
-          child: ClipPath(
-            clipper: _OrganicArtworkClipper(),
-            child: WzArtwork(
-              artworkUrl: artworkUrl,
-              size: size,
-              trackId: trackId,
-              title: title,
-              artist: artist,
-              fit: BoxFit.cover,
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: IgnorePointer(child: CustomPaint(painter: _RibbonPainter())),
+        BoxShadow(
+          color: Color(0xCFFFFFFF),
+          blurRadius: 12,
+          offset: Offset(-3, -5),
         ),
       ],
     ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(35),
+      child: WzArtwork(
+        artworkUrl: artworkUrl,
+        size: size,
+        trackId: trackId,
+        title: title,
+        artist: artist,
+        fit: BoxFit.cover,
+      ),
+    ),
   );
-}
-
-class _OrganicArtworkClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(size.width * .20, size.height * .02);
-    path.cubicTo(
-      size.width * .62,
-      size.height * -.03,
-      size.width * .96,
-      size.height * .14,
-      size.width * .98,
-      size.height * .43,
-    );
-    path.cubicTo(
-      size.width * 1.00,
-      size.height * .72,
-      size.width * .77,
-      size.height * .99,
-      size.width * .45,
-      size.height * .98,
-    );
-    path.cubicTo(
-      size.width * .13,
-      size.height * .98,
-      size.width * -.02,
-      size.height * .76,
-      size.width * .03,
-      size.height * .47,
-    );
-    path.cubicTo(
-      size.width * .07,
-      size.height * .22,
-      size.width * .04,
-      size.height * .08,
-      size.width * .20,
-      size.height * .02,
-    );
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
-}
-
-class _RibbonPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round
-      ..shader = ui.Gradient.linear(
-        Offset(size.width * .04, size.height * .15),
-        Offset(size.width * .96, size.height * .82),
-        const [Color(0xE6FFFFFF), Color(0x59FFFFFF), Color(0xCFFFFFFF)],
-        const [0.0, 0.52, 1.0],
-      );
-    final path = Path()
-      ..moveTo(size.width * .02, size.height * .54)
-      ..cubicTo(
-        size.width * .30,
-        size.height * .34,
-        size.width * .48,
-        size.height * .78,
-        size.width * .96,
-        size.height * .46,
-      );
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _SculptedProgress extends StatefulWidget {
@@ -856,57 +824,69 @@ class _UpNextHandle extends StatelessWidget {
   final VoidCallback? onAddToQueue;
 
   @override
-  Widget build(BuildContext context) => WzPressableSurface(
-    onTap: () {
-      HapticFeedback.selectionClick();
-      onTap();
-    },
-    radius: 30,
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        colors: [Color(0xF8FFFFFF), Color(0xEEF5F8FA)],
+  Widget build(BuildContext context) {
+    final track = nextTrack;
+    return WzPressableSurface(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      radius: 30,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.88)),
+        boxShadow: WzSurface.softShadows,
       ),
-      borderRadius: BorderRadius.circular(30),
-      border: Border.all(color: const Color(0xE6FFFFFF)),
-      boxShadow: WzSurface.softShadows,
-    ),
-    padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-    child: Row(
-      children: [
-        WzSculptedIcon(
-          icon: Icons.queue_music_rounded,
-          size: 44,
-          iconSize: 19,
-          color: WzColors.accent,
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Up next', style: WzText.eyebrow),
-              const SizedBox(height: 2),
-              Text(
-                nextTrack?.title ?? 'Nothing queued yet',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: WzText.sectionTitle,
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
+      child: Row(
+        children: [
+          if (track != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: WzArtwork(
+                artworkUrl: track.artworkUrl,
+                size: 48,
+                trackId: track.trackId,
+                title: track.title,
+                artist: track.artistName,
               ),
-              if (nextTrack?.artistName != null)
+            )
+          else
+            const WzSculptedIcon(
+              icon: Icons.queue_music_rounded,
+              size: 48,
+              iconSize: 20,
+              color: WzColors.accent,
+            ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(track == null ? 'Queue is empty' : 'Up next', style: WzText.eyebrow),
+                const SizedBox(height: 3),
                 Text(
-                  nextTrack!.artistName!,
+                  track?.title ?? 'Pick something from Library or Search',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: WzText.sectionTitle,
+                ),
+                Text(
+                  track?.artistName ?? 'Tap to open your queue',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: WzText.caption,
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        const Icon(Icons.keyboard_arrow_up_rounded, color: WzColors.textMuted),
-      ],
-    ),
-  );
+          const SizedBox(width: 8),
+          const Icon(Icons.arrow_forward_rounded, size: 19, color: WzColors.textMuted),
+        ],
+      ),
+    );
+  }
 }
 
 class _PlayerBackdrop extends StatelessWidget {

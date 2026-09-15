@@ -26,14 +26,17 @@ class WzWaveZeroCoverArt extends StatelessWidget {
   Widget build(BuildContext context) {
     final seedText = [trackId, title, artist, mood].whereType<String>().join('|');
     final seed = _stableArtworkSeed(seedText.isEmpty ? 'wavezero' : seedText);
-    final colors = _coverColors(seed, mood ?? title ?? 'wavezero');
-    final initials = _coverInitials(title, artist);
+    final palette = _coverColors(seed, mood ?? title ?? 'wavezero');
+    final ink = palette.last;
+    final cleanTitle = title?.trim();
+    final cleanArtist = artist?.trim();
+
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: colors,
+          colors: palette.take(3).toList(growable: false),
         ),
       ),
       child: Stack(
@@ -41,72 +44,64 @@ class WzWaveZeroCoverArt extends StatelessWidget {
         children: [
           Positioned.fill(
             child: CustomPaint(
-              painter: _WaveZeroCoverPainter(
-                seed: seed,
-                color: Colors.white.withOpacity(compact ? 0.13 : 0.16),
-              ),
-            ),
-          ),
-          Positioned(
-            top: -size * 0.14,
-            right: -size * 0.12,
-            child: Icon(
-              Icons.graphic_eq,
-              size: size * 0.48,
-              color: Colors.white.withOpacity(0.07),
+              painter: _WaveZeroCoverPainter(seed: seed, color: ink),
             ),
           ),
           Positioned(
             left: size * 0.10,
             top: size * 0.10,
-            child: Text(
-              'WZ',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.42),
-                fontSize: math.max(8, size * 0.09),
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ),
-          Center(
             child: Container(
-              width: size * (compact ? 0.50 : 0.46),
-              height: size * (compact ? 0.50 : 0.46),
+              width: size * (compact ? 0.28 : 0.22),
+              height: size * (compact ? 0.28 : 0.22),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black.withOpacity(0.22),
-                border: Border.all(color: Colors.white.withOpacity(0.18)),
+                color: Colors.white.withValues(alpha: 0.56),
+                borderRadius: BorderRadius.circular(size * 0.07),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
               ),
-              child: Text(
-                initials,
-                maxLines: 1,
-                overflow: TextOverflow.clip,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.92),
-                  fontSize: math.max(13, size * (compact ? 0.20 : 0.16)),
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
-                ),
+              child: Icon(
+                Icons.graphic_eq_rounded,
+                size: size * (compact ? 0.16 : 0.12),
+                color: ink.withValues(alpha: 0.78),
               ),
             ),
           ),
-          if (!compact && mood != null && mood!.trim().isNotEmpty)
+          if (!compact)
             Positioned(
-              left: size * 0.09,
-              right: size * 0.09,
-              bottom: size * 0.08,
-              child: Text(
-                mood!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.72),
-                  fontSize: math.max(9, size * 0.08),
-                  fontWeight: FontWeight.w700,
-                ),
+              left: size * 0.10,
+              right: size * 0.10,
+              bottom: size * 0.10,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (cleanTitle != null && cleanTitle.isNotEmpty)
+                    Text(
+                      cleanTitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: ink.withValues(alpha: 0.90),
+                        fontSize: math.max(13, size * 0.072),
+                        height: 1.04,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.35,
+                      ),
+                    ),
+                  if (cleanArtist != null && cleanArtist.isNotEmpty) ...[
+                    SizedBox(height: size * 0.025),
+                    Text(
+                      cleanArtist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: ink.withValues(alpha: 0.56),
+                        fontSize: math.max(9, size * 0.041),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
         ],
@@ -180,27 +175,41 @@ class _WaveZeroCoverPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeCap = StrokeCap.round;
-    final bars = 9 + (seed % 7);
-    final width = size.width / (bars * 1.8);
-    for (var i = 0; i < bars; i++) {
-      final value = ((seed >> (i % 16)) & 0x0F) / 15.0;
-      final height = size.height * (0.16 + value * 0.42);
-      final x = size.width * 0.12 + i * width * 1.65;
-      final y = size.height * 0.72;
-      paint.strokeWidth = math.max(2, width * 0.52);
-      canvas.drawLine(Offset(x, y), Offset(x, y - height), paint);
-    }
-    final ringPaint = Paint()
-      ..color = color.withOpacity(0.45)
+    final wash = Paint()..color = color.withValues(alpha: 0.055);
+    final accent = Paint()
+      ..color = color.withValues(alpha: 0.14)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = math.max(1, size.width * 0.012);
+      ..strokeWidth = math.max(1.5, size.width * 0.012)
+      ..strokeCap = StrokeCap.round;
+
     canvas.drawCircle(
-      Offset(size.width * 0.78, size.height * 0.22),
-      size.width * (0.12 + (seed % 5) * 0.015),
-      ringPaint,
+      Offset(size.width * (0.75 + (seed % 5) * 0.012), size.height * 0.24),
+      size.width * 0.30,
+      wash,
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.16, size.height * 0.76),
+      size.width * 0.20,
+      Paint()..color = Colors.white.withValues(alpha: 0.32),
+    );
+
+    final path = Path()
+      ..moveTo(size.width * 0.09, size.height * 0.58)
+      ..cubicTo(
+        size.width * 0.30,
+        size.height * (0.48 + (seed % 4) * 0.018),
+        size.width * 0.52,
+        size.height * 0.68,
+        size.width * 0.91,
+        size.height * 0.45,
+      );
+    canvas.drawPath(path, accent);
+
+    final dot = Paint()..color = color.withValues(alpha: 0.23);
+    canvas.drawCircle(
+      Offset(size.width * 0.82, size.height * 0.62),
+      math.max(2.5, size.width * 0.022),
+      dot,
     );
   }
 
@@ -220,35 +229,20 @@ int _stableArtworkSeed(String value) {
 
 List<Color> _coverColors(int seed, String hint) {
   final normalized = hint.toLowerCase();
-  if (normalized.contains('folk') ||
-      normalized.contains('acoustic') ||
-      normalized.contains('calm')) {
-    return const [Color(0xFF243B30), Color(0xFF0B1019), Color(0xFFB98E54)];
+  if (normalized.contains('folk') || normalized.contains('acoustic') || normalized.contains('calm')) {
+    return const [Color(0xFFF8F3E9), Color(0xFFECE4D2), Color(0xFFD6E2D7), Color(0xFF26362E)];
   }
   if (normalized.contains('hip') || normalized.contains('beat')) {
-    return const [Color(0xFF311B52), Color(0xFF070A13), Color(0xFFFF7A59)];
+    return const [Color(0xFFF6F0FF), Color(0xFFE6DDF8), Color(0xFFF5DDE5), Color(0xFF332B46)];
   }
-  if (normalized.contains('ambient') ||
-      normalized.contains('focus') ||
-      normalized.contains('instrumental')) {
-    return const [Color(0xFF102A43), Color(0xFF070A13), Color(0xFF36D7FF)];
+  if (normalized.contains('ambient') || normalized.contains('focus') || normalized.contains('instrumental')) {
+    return const [Color(0xFFF0F8FC), Color(0xFFDDECF4), Color(0xFFE8F0FA), Color(0xFF203744)];
   }
   final palettes = const <List<Color>>[
-    [Color(0xFF2D1B5F), Color(0xFF070A13), Color(0xFF36D7FF)],
-    [Color(0xFF12243D), Color(0xFF070A13), Color(0xFF9A8CFF)],
-    [Color(0xFF3A1935), Color(0xFF080A12), Color(0xFFFF6B8A)],
-    [Color(0xFF18362F), Color(0xFF070A13), Color(0xFF38D996)],
+    [Color(0xFFF7F4FF), Color(0xFFECE7FA), Color(0xFFF4EEF8), Color(0xFF342E45)],
+    [Color(0xFFF0F8FC), Color(0xFFDCECF4), Color(0xFFEEF5F8), Color(0xFF243B48)],
+    [Color(0xFFFFF5EF), Color(0xFFF8E4D9), Color(0xFFF7EEE8), Color(0xFF4A342D)],
+    [Color(0xFFF1F8F4), Color(0xFFDDEEE5), Color(0xFFF0F6F2), Color(0xFF294038)],
   ];
   return palettes[seed % palettes.length];
-}
-
-String _coverInitials(String? title, String? artist) {
-  String firstLetter(String? value) {
-    final trimmed = value?.trim();
-    if (trimmed == null || trimmed.isEmpty) return '';
-    return String.fromCharCode(trimmed.runes.first).toUpperCase();
-  }
-
-  final result = '${firstLetter(title)}${firstLetter(artist)}';
-  return result.trim().isEmpty ? 'WZ' : result;
 }
