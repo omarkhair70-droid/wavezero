@@ -1,0 +1,37 @@
+name: Fix Downloads Retry Syntax
+
+on:
+  push:
+    branches:
+      - feat/downloads-retry-20260916
+    paths:
+      - .github/workflows/fix-downloads-retry-syntax.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/downloads-retry-20260916
+      - name: Fix retry exception construction
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('apps/flutter/wavezero_app/lib/features/downloads/downloads_panel.dart')
+          text = path.read_text()
+          old = 'throw const PlatformException('
+          if old not in text:
+              raise SystemExit('retry exception pattern not found')
+          path.write_text(text.replace(old, 'throw PlatformException(', 1))
+      - name: Commit cleanup and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-downloads-retry-syntax.yml
+          git add apps/flutter/wavezero_app/lib/features/downloads/downloads_panel.dart
+          git commit -m "Fix Downloads retry exception syntax"
+          git push origin HEAD:feat/downloads-retry-20260916
