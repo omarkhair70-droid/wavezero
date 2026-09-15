@@ -226,7 +226,7 @@ class _DirectAudioDownloadsState extends State<_DirectAudioDownloads>
     try {
       final task = await _downloads.enqueueDirectAudio(entry.value);
       if (task.id <= 0) {
-        throw const PlatformException(
+        throw PlatformException(
           code: 'download_unavailable',
           message: 'WaveZero could not start this retry.',
         );
