@@ -5,6 +5,7 @@ import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../../shared/media/track_source.dart';
 import '../../shared/widgets/wavezero_empty_message.dart';
+import '../device_music/device_music_metadata_overrides.dart';
 import '../imports/music_inbox_page.dart';
 import 'library_browse.dart';
 import 'library_catalog_items.dart';
@@ -118,6 +119,7 @@ class WzLibraryCatalogPanel extends StatelessWidget {
         !refreshDisabled &&
         !loading &&
         deviceScanStatus != 'scanning';
+    const metadataOverrides = WzDeviceMusicMetadataOverridesService();
 
     Future<void> openMusicInbox() async {
       await Navigator.of(context).push(
@@ -133,6 +135,122 @@ class WzLibraryCatalogPanel extends StatelessWidget {
           ),
         ),
       );
+    }
+
+    Future<void> fixDeviceInfo(CatalogTrackSummary track) async {
+      final existing = (await metadataOverrides.load())[track.trackId];
+      if (!context.mounted) return;
+
+      final titleController = TextEditingController(
+        text: existing?.title ?? track.title,
+      );
+      final artistController = TextEditingController(
+        text: existing?.artistName ?? track.artistName ?? '',
+      );
+      final albumController = TextEditingController(
+        text: existing?.albumName ?? track.albumName ?? '',
+      );
+
+      final action = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Fix track info'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: artistController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Artist',
+                    hintText: 'Leave blank to keep device metadata',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: albumController,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Album',
+                    hintText: 'Leave blank to keep device metadata',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'WaveZero keeps this as a local correction. The original audio file is not rewritten.',
+                  style: WzText.caption,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            if (existing != null)
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop('reset'),
+                child: const Text('Reset'),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop('save'),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      );
+
+      if (action == null) {
+        titleController.dispose();
+        artistController.dispose();
+        albumController.dispose();
+        return;
+      }
+
+      try {
+        if (action == 'reset') {
+          await metadataOverrides.remove(track.trackId);
+        } else {
+          await metadataOverrides.save(
+            WzDeviceMusicMetadataOverride(
+              trackId: track.trackId,
+              title: titleController.text,
+              artistName: artistController.text,
+              albumName: albumController.text,
+              updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+        }
+        await onImportDeviceMusic();
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == 'reset'
+                  ? 'Track info reset to device metadata.'
+                  : 'Track info updated in WaveZero.',
+            ),
+          ),
+        );
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('WaveZero could not save this track info.')),
+          );
+        }
+      } finally {
+        titleController.dispose();
+        artistController.dispose();
+        albumController.dispose();
+      }
     }
 
     return _DeviceMusicEntryRefresh(
@@ -282,6 +400,7 @@ class WzLibraryCatalogPanel extends StatelessWidget {
                       ? null
                       : () => onCache(track),
                   onDeleteCached: isWzCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
+                  onFixInfo: isWzDeviceCatalogTrack(track) ? () => fixDeviceInfo(track) : null,
                 );
               },
             ),
