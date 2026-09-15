@@ -45,7 +45,9 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
   void initState() {
     super.initState();
     _currentUrl = wzResolveWebLocation(widget.initialQuery);
-    _addressController = TextEditingController(text: widget.initialQuery.trim().isEmpty ? _currentUrl : widget.initialQuery.trim());
+    _addressController = TextEditingController(
+      text: widget.initialQuery.trim().isEmpty ? _currentUrl : widget.initialQuery.trim(),
+    );
   }
 
   @override
@@ -56,9 +58,9 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
     super.dispose();
   }
 
-  Future<void> _onWebViewCreated(int id) async {
+  void _onWebViewCreated(int id) {
     final channel = MethodChannel('wavezero/webview/$id');
-    await channel.setMethodCallHandler(_handleWebEvent);
+    channel.setMethodCallHandler(_handleWebEvent);
     if (!mounted) return;
     setState(() => _webChannel = channel);
   }
@@ -87,7 +89,8 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
         break;
       case 'progress':
         if (!mounted) break;
-        setState(() => _progress = (args['progress'] is num ? (args['progress'] as num).toInt() : 0).clamp(0, 100));
+        final rawProgress = args['progress'] is num ? (args['progress'] as num).toInt() : 0;
+        setState(() => _progress = rawProgress.clamp(0, 100).toInt());
         break;
       case 'downloadStarted':
         final task = WzWebDownloadTask.fromMap(args);
@@ -144,9 +147,17 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
     await _webChannel?.invokeMethod<void>('loadUrl', {'url': url});
   }
 
-  Future<void> _goBack() async => _webChannel?.invokeMethod<void>('goBack');
-  Future<void> _goForward() async => _webChannel?.invokeMethod<void>('goForward');
-  Future<void> _reload() async => _webChannel?.invokeMethod<void>('reload');
+  Future<void> _goBack() async {
+    await _webChannel?.invokeMethod<void>('goBack');
+  }
+
+  Future<void> _goForward() async {
+    await _webChannel?.invokeMethod<void>('goForward');
+  }
+
+  Future<void> _reload() async {
+    await _webChannel?.invokeMethod<void>('reload');
+  }
 
   Future<void> _cancelDownload() async {
     final task = _download;
