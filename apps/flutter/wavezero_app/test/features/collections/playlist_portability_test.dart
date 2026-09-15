@@ -116,6 +116,23 @@ content://media/external/audio/media/7
     expect(resolution.unmatched, hasLength(1));
   });
 
+  test('resolver handles Windows-style M3U paths by filename', () {
+    final library = [
+      track(
+        id: 'win',
+        title: 'Windows Song',
+        artist: 'Artist',
+        url: 'content://music/9',
+        displayName: 'windows-song.flac',
+      ),
+    ];
+    final resolution = wzResolveM3uEntries(
+      entries: const [WzM3uEntry(location: r'C:\Users\Omar\Music\windows-song.flac')],
+      libraryTracks: library,
+    );
+    expect(resolution.matched.single.trackId, 'win');
+  });
+
   test('resolver deduplicates repeated entries by resolved track identity', () {
     final library = [
       track(id: 'a', title: 'Song', artist: 'Artist', url: 'content://music/1'),
