@@ -78,5 +78,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-datasource:$media3Version")
     implementation("androidx.media3:media3-session:$media3Version")
+    implementation("androidx.media3:media3-transformer:$media3Version")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
