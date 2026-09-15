@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wavezero_app/shared/widgets/wavezero_artwork.dart';
 
 void main() {
-  testWidgets('generated cover keeps the WZ identity and supplied initials', (tester) async {
+  testWidgets('generated cover uses abstract WaveZero identity without legacy text marks', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: SizedBox(
@@ -18,8 +18,10 @@ void main() {
         ),
       ),
     );
-    expect(find.text('WZ'), findsOneWidget);
-    expect(find.text('ML'), findsOneWidget);
+
+    expect(find.text('WZ'), findsNothing);
+    expect(find.text('ML'), findsNothing);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
   });
 
   testWidgets('artwork without a URL uses the generated cover fallback', (tester) async {
@@ -33,7 +35,9 @@ void main() {
         ),
       ),
     );
+
     expect(find.byType(WzWaveZeroCoverArt), findsOneWidget);
-    expect(find.text('QR'), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+    expect(find.text('QR'), findsNothing);
   });
 }
