@@ -4,7 +4,7 @@ import 'package:wavezero_app/features/downloads/cache_service.dart';
 import 'package:wavezero_app/features/downloads/downloads_panel.dart';
 
 void main() {
-  testWidgets('empty Downloads keeps offline recovery copy and storage action', (tester) async {
+  testWidgets('empty Downloads separates direct audio and offline cache', (tester) async {
     var storageOpened = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -23,10 +23,18 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
     expect(find.text('Downloads'), findsOneWidget);
-    expect(find.text('No downloads yet. Download tracks from Library to listen offline.'), findsOneWidget);
-    expect(find.byTooltip('Clear all downloads'), findsOneWidget);
+    expect(find.text('Direct audio'), findsOneWidget);
+    expect(find.text('Offline library'), findsOneWidget);
+    expect(
+      find.text(
+        'No cached catalog tracks yet. Download tracks from Library to listen offline.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Clear all offline downloads'), findsOneWidget);
 
     await tester.tap(find.text('Manage Storage'));
     await tester.pump();
@@ -70,6 +78,7 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
     expect(find.text('Cached One'), findsOneWidget);
     expect(find.textContaining('Manual'), findsOneWidget);
