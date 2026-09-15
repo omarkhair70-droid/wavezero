@@ -76,7 +76,8 @@ List<WzCollection> wzReorderCollectionTrack({
           if (targetIndex == oldIndex) return collection;
           final tracks = collection.tracks.toList(growable: true);
           final moved = tracks.removeAt(oldIndex);
-          tracks.insert(targetIndex.clamp(0, tracks.length), moved);
+          final safeTargetIndex = targetIndex.clamp(0, tracks.length).toInt();
+          tracks.insert(safeTargetIndex, moved);
           return collection.copyWith(
             updatedAtMs: updatedAtMs,
             tracks: tracks.toList(growable: false),
