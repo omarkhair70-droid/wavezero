@@ -7,6 +7,7 @@ import '../../design/wavezero_design_system.dart';
 import '../../shared/widgets/wavezero_artwork.dart';
 import '../collections/collections_service.dart';
 import '../history/listening_history_service.dart';
+import '../web/web_browser_page.dart';
 import 'search_controls.dart';
 import 'search_results.dart';
 
@@ -74,6 +75,13 @@ class WzSearchPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final query = controller.text.trim();
     final hasQuery = query.isNotEmpty;
+    void openWeb() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => WzWebBrowserPage(initialQuery: query),
+        ),
+      );
+    }
 
     return WzPageScaffold(
       children: [
@@ -85,6 +93,8 @@ class WzSearchPage extends StatelessWidget {
           onClearQuery: onClearQuery,
           onSubmitted: onSubmitted,
         ),
+        const SizedBox(height: 10),
+        _SearchModeBar(onOpenWeb: openWeb),
         const SizedBox(height: 13),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -143,14 +153,16 @@ class WzSearchPage extends StatelessWidget {
             _QuietSearchEmpty(
               onImportDeviceMusic: onImportDeviceMusic,
               onLoadCatalog: onLoadCatalog,
+              onSearchWeb: openWeb,
             ),
           ],
         ] else if (results.isEmpty) ...[
           _QuietSearchEmpty(
-            title: 'Nothing found',
-            subtitle: 'Try another title, artist, or something already on this device.',
+            title: 'Nothing found on this device',
+            subtitle: 'Search the web without leaving WaveZero, then download a supported audio file straight into Device Music.',
             onImportDeviceMusic: onImportDeviceMusic,
             onLoadCatalog: onLoadCatalog,
+            onSearchWeb: openWeb,
           ),
         ] else ...[
           Row(
@@ -182,6 +194,46 @@ class WzSearchPage extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SearchModeBar extends StatelessWidget {
+  const _SearchModeBar({required this.onOpenWeb});
+
+  final VoidCallback onOpenWeb;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: WzColors.surfaceMuted,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: WzColors.borderSoft),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: WzSurface.softShadows,
+                ),
+                alignment: Alignment.center,
+                child: Text('Your music', style: WzText.caption.copyWith(color: WzColors.textPrimary, fontWeight: FontWeight.w700)),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: TextButton.icon(
+                onPressed: onOpenWeb,
+                icon: const Icon(Icons.language_rounded, size: 17),
+                label: const Text('Web'),
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class _SearchField extends StatelessWidget {
@@ -413,15 +465,17 @@ class _DiscoveryTile extends StatelessWidget {
 class _QuietSearchEmpty extends StatelessWidget {
   const _QuietSearchEmpty({
     this.title = 'Your music will appear here',
-    this.subtitle = 'Add music from this device or try again when your online music is ready.',
+    this.subtitle = 'Add music from this device or search the web without leaving WaveZero.',
     required this.onImportDeviceMusic,
     required this.onLoadCatalog,
+    required this.onSearchWeb,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onImportDeviceMusic;
   final VoidCallback onLoadCatalog;
+  final VoidCallback onSearchWeb;
 
   @override
   Widget build(BuildContext context) => WzGlassCard(
@@ -437,7 +491,8 @@ class _QuietSearchEmpty extends StatelessWidget {
               spacing: 9,
               runSpacing: 9,
               children: [
-                WzPrimaryAction(label: 'Device Music', icon: Icons.phone_android_rounded, onPressed: onImportDeviceMusic),
+                WzPrimaryAction(label: 'Search Web', icon: Icons.language_rounded, onPressed: onSearchWeb),
+                OutlinedButton.icon(onPressed: onImportDeviceMusic, icon: const Icon(Icons.phone_android_rounded), label: const Text('Device Music')),
                 OutlinedButton.icon(onPressed: onLoadCatalog, icon: const Icon(Icons.refresh_rounded), label: const Text('Try online music')),
               ],
             ),
