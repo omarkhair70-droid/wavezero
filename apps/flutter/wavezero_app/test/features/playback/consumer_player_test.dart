@@ -87,10 +87,10 @@ void main() {
     await tester.tap(find.byIcon(Icons.favorite_border_rounded));
     expect(liked, isTrue);
 
-    final upNext = find.text('Up next');
-    await tester.ensureVisible(upNext);
+    final queueEmpty = find.text('Queue is empty');
+    await tester.ensureVisible(queueEmpty);
     await tester.pumpAndSettle();
-    await tester.tap(upNext);
+    await tester.tap(queueEmpty);
     expect(queueOpened, isTrue);
   });
 
