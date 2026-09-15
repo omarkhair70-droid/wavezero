@@ -16,6 +16,7 @@ import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 
 private const val IMPORT_INBOX_FILE = "wavezero_import_inbox.json"
@@ -98,7 +99,7 @@ class WaveZeroShareActivity : Activity() {
         val sourceSize = querySize(sourceUri)
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            findExistingImport(safeName, sourceSize)
+            findExistingImport(sourceUri, safeName, sourceSize)
                 ?: importAudioWithMediaStore(sourceUri, mimeType, safeName)
         } else {
             importAudioLegacy(sourceUri, mimeType, safeName)
@@ -137,7 +138,7 @@ class WaveZeroShareActivity : Activity() {
         }
     }
 
-    private fun findExistingImport(displayName: String, sourceSize: Long?): ImportedAudio? {
+    private fun findExistingImport(sourceUri: Uri, displayName: String, sourceSize: Long?): ImportedAudio? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val resolver = contentResolver
         val projection = arrayOf(
@@ -148,6 +149,8 @@ class WaveZeroShareActivity : Activity() {
         val selection =
             "${MediaStore.Audio.Media.RELATIVE_PATH} = ? AND ${MediaStore.Audio.Media.DISPLAY_NAME} = ?"
         val args = arrayOf(WAVEZERO_IMPORT_RELATIVE_PATH, displayName)
+        var sourceDigest: ByteArray? = null
+        var sourceDigestResolved = false
         resolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -161,8 +164,17 @@ class WaveZeroShareActivity : Activity() {
             while (cursor.moveToNext()) {
                 val existingSize = if (cursor.isNull(sizeColumn)) null else cursor.getLong(sizeColumn)
                 if (sourceSize != null && existingSize != null && sourceSize != existingSize) continue
+
                 val id = cursor.getLong(idColumn)
                 val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+                if (!sourceDigestResolved) {
+                    sourceDigest = contentDigest(sourceUri)
+                    sourceDigestResolved = true
+                }
+                val incomingDigest = sourceDigest ?: continue
+                val existingDigest = contentDigest(uri) ?: continue
+                if (!incomingDigest.contentEquals(existingDigest)) continue
+
                 return ImportedAudio(
                     uri = uri,
                     displayName = cursor.getString(nameColumn),
@@ -173,6 +185,19 @@ class WaveZeroShareActivity : Activity() {
         }
         return null
     }
+
+    private fun contentDigest(uri: Uri): ByteArray? = runCatching {
+        val digest = MessageDigest.getInstance("SHA-256")
+        contentResolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        } ?: return@runCatching null
+        digest.digest()
+    }.getOrNull()
 
     private fun importAudioLegacy(sourceUri: Uri, mimeType: String, displayName: String): ImportedAudio {
         val root = getExternalFilesDir(Environment.DIRECTORY_MUSIC)
