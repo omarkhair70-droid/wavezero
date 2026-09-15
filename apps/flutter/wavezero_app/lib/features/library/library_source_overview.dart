@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../design/wavezero_design_system.dart';
-import '../imports/music_inbox_page.dart';
 import 'library_controls.dart';
 
 class WzLibrarySourceOverview extends StatelessWidget {
@@ -23,6 +22,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
     required this.onSourceFilterChanged,
     required this.onRefresh,
     required this.onImportDeviceMusic,
+    required this.onOpenMusicInbox,
     required this.onOpenCollections,
     required this.onOpenFullSearch,
     required this.onOpenCloudVault,
@@ -44,7 +44,8 @@ class WzLibrarySourceOverview extends StatelessWidget {
   final String? deviceLastError;
   final ValueChanged<WzLibrarySourceFilter> onSourceFilterChanged;
   final VoidCallback onRefresh;
-  final VoidCallback onImportDeviceMusic;
+  final Future<void> Function() onImportDeviceMusic;
+  final VoidCallback onOpenMusicInbox;
   final VoidCallback onOpenCollections;
   final VoidCallback onOpenFullSearch;
   final VoidCallback onOpenCloudVault;
@@ -113,9 +114,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
           title: 'Music Inbox',
           subtitle: 'Files and links shared to WaveZero',
           selected: false,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const WzMusicInboxPage()),
-          ),
+          onTap: onOpenMusicInbox,
         ),
         const SizedBox(height: 10),
         Row(
@@ -161,7 +160,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
-              onPressed: refreshDisabled ? null : onImportDeviceMusic,
+              onPressed: refreshDisabled ? null : () => onImportDeviceMusic(),
               icon: Icon(scanningDevice ? Icons.hourglass_top_rounded : Icons.sync_rounded, size: 17),
               label: Text(scanningDevice ? 'Scanning device…' : 'Scan for new music'),
             ),

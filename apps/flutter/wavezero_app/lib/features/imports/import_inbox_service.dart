@@ -16,6 +16,8 @@ class WzImportInboxEntry {
     required this.value,
     required this.createdAtMs,
     this.mimeType,
+    this.trackId,
+    this.duplicateOfExisting = false,
   });
 
   final String id;
@@ -24,10 +26,13 @@ class WzImportInboxEntry {
   final String subtitle;
   final String value;
   final String? mimeType;
+  final String? trackId;
+  final bool duplicateOfExisting;
   final int createdAtMs;
 
   bool get isAudio => kind == WzImportInboxKind.audio;
   bool get isLink => kind == WzImportInboxKind.link;
+  bool get hasResolvableDeviceTrack => isAudio && trackId != null && trackId!.trim().isNotEmpty;
 
   factory WzImportInboxEntry.fromJson(Map<String, Object?> json) {
     final rawKind = json['kind']?.toString();
@@ -42,6 +47,10 @@ class WzImportInboxEntry {
           : 'Shared to WaveZero',
       value: json['value']?.toString() ?? '',
       mimeType: json['mimeType']?.toString(),
+      trackId: json['trackId']?.toString().trim().isNotEmpty == true
+          ? json['trackId']!.toString().trim()
+          : null,
+      duplicateOfExisting: json['duplicateOfExisting'] == true,
       createdAtMs: (json['createdAtMs'] as num?)?.toInt() ?? 0,
     );
   }
@@ -53,6 +62,8 @@ class WzImportInboxEntry {
         'subtitle': subtitle,
         'value': value,
         if (mimeType != null) 'mimeType': mimeType,
+        if (trackId != null) 'trackId': trackId,
+        if (duplicateOfExisting) 'duplicateOfExisting': true,
         'createdAtMs': createdAtMs,
       };
 }
@@ -64,12 +75,17 @@ List<WzImportInboxEntry> wzImportInboxEntriesFromJson(String source) {
 
   final entries = <WzImportInboxEntry>[];
   final seenIds = <String>{};
+  final seenContent = <String>{};
   for (final item in decoded) {
     if (item is! Map) continue;
     final entry = WzImportInboxEntry.fromJson(
       item.map((key, value) => MapEntry(key.toString(), value)),
     );
     if (entry.id.isEmpty || entry.value.isEmpty || !seenIds.add(entry.id)) continue;
+    final contentKey = entry.trackId?.trim().isNotEmpty == true
+        ? 'track:${entry.trackId}'
+        : 'value:${entry.value.trim()}';
+    if (!seenContent.add(contentKey)) continue;
     entries.add(entry);
   }
   entries.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));

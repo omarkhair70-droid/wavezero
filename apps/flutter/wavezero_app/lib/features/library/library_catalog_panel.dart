@@ -5,6 +5,7 @@ import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../../shared/media/track_source.dart';
 import '../../shared/widgets/wavezero_empty_message.dart';
+import '../imports/music_inbox_page.dart';
 import 'library_catalog_items.dart';
 import 'library_controls.dart';
 import 'library_source_overview.dart';
@@ -88,7 +89,7 @@ class WzLibraryCatalogPanel extends StatelessWidget {
   final VoidCallback onOpenFullSearch;
   final VoidCallback onOpenCloudVault;
   final VoidCallback onRefresh;
-  final VoidCallback onImportDeviceMusic;
+  final Future<void> Function() onImportDeviceMusic;
   final ValueChanged<CatalogTrackSummary> onSelectTrack;
   final ValueChanged<ResolvedCuratedDemoPick> onPlayCuratedPick;
   final ValueChanged<CatalogTrackSummary> onAddToQueue;
@@ -112,10 +113,26 @@ class WzLibraryCatalogPanel extends StatelessWidget {
         !loading &&
         deviceScanStatus != 'scanning';
 
+    void openMusicInbox() {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => WzMusicInboxPage(
+            onRefreshDeviceMusic: onImportDeviceMusic,
+            onLoadTrack: onSelectTrack,
+            onAddToQueue: onAddToQueue,
+            onToggleLike: onToggleLike,
+            onAddToCollection: onAddToCollection,
+            isLiked: isLiked,
+            onShowDeviceMusic: () => onSourceFilterChanged(WzLibrarySourceFilter.device),
+          ),
+        ),
+      );
+    }
+
     return _DeviceMusicEntryRefresh(
       active: deviceViewActive,
       ready: deviceAutoRefreshReady,
-      onRefresh: onImportDeviceMusic,
+      onRefresh: () => onImportDeviceMusic(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -136,6 +153,7 @@ class WzLibraryCatalogPanel extends StatelessWidget {
             onSourceFilterChanged: onSourceFilterChanged,
             onRefresh: onRefresh,
             onImportDeviceMusic: onImportDeviceMusic,
+            onOpenMusicInbox: openMusicInbox,
             onOpenCollections: onOpenCollections,
             onOpenFullSearch: onOpenFullSearch,
             onOpenCloudVault: onOpenCloudVault,

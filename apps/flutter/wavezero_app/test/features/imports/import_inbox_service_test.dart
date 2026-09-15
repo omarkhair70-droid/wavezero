@@ -5,9 +5,10 @@ void main() {
   test('parses, sorts, and deduplicates native import inbox entries', () {
     const source = '''
     [
-      {"id":"older","kind":"audio","title":"older.mp3","subtitle":"Shared to WaveZero","value":"content://audio/1","mimeType":"audio/mpeg","createdAtMs":10},
+      {"id":"older","kind":"audio","title":"older.mp3","subtitle":"Shared to WaveZero","value":"content://audio/1","trackId":"device-audio-1","mimeType":"audio/mpeg","createdAtMs":10},
       {"id":"newer","kind":"link","title":"example.com","subtitle":"Shared link","value":"https://example.com/song","mimeType":"text/plain","createdAtMs":30},
-      {"id":"older","kind":"audio","title":"duplicate","subtitle":"duplicate","value":"content://audio/2","createdAtMs":20},
+      {"id":"duplicate-content","kind":"audio","title":"same.mp3","subtitle":"Already in WaveZero","value":"content://audio/1","trackId":"device-audio-1","createdAtMs":20},
+      {"id":"older","kind":"audio","title":"duplicate-id","subtitle":"duplicate","value":"content://audio/2","createdAtMs":25},
       {"id":"","kind":"link","title":"invalid","value":"https://invalid.example","createdAtMs":40}
     ]
     ''';
@@ -19,17 +20,21 @@ void main() {
     expect(entries.first.kind, WzImportInboxKind.link);
     expect(entries.last.id, 'older');
     expect(entries.last.kind, WzImportInboxKind.audio);
+    expect(entries.last.trackId, 'device-audio-1');
+    expect(entries.last.hasResolvableDeviceTrack, isTrue);
   });
 
-  test('round-trips inbox entries without losing source data', () {
+  test('round-trips inbox entries without losing media identity', () {
     const original = <WzImportInboxEntry>[
       WzImportInboxEntry(
         id: 'audio-1',
         kind: WzImportInboxKind.audio,
         title: 'track.m4a',
-        subtitle: 'Shared to WaveZero',
+        subtitle: 'Already in WaveZero',
         value: 'content://media/external/audio/media/42',
         mimeType: 'audio/mp4',
+        trackId: 'device-audio-42',
+        duplicateOfExisting: true,
         createdAtMs: 1234,
       ),
       WzImportInboxEntry(
@@ -47,6 +52,8 @@ void main() {
 
     expect(decoded.map((entry) => entry.id), ['audio-1', 'link-1']);
     expect(decoded.first.value, original.first.value);
+    expect(decoded.first.trackId, 'device-audio-42');
+    expect(decoded.first.duplicateOfExisting, isTrue);
     expect(decoded.last.value, original.last.value);
   });
 
