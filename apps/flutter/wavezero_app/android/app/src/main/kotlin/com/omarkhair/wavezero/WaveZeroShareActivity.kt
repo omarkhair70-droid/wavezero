@@ -428,7 +428,7 @@ class WaveZeroShareActivity : Activity() {
     )
 }
 
-private object WaveZeroImportInbox {
+internal object WaveZeroImportInbox {
     private val lock = Any()
 
     fun append(context: android.content.Context, item: JSONObject) {

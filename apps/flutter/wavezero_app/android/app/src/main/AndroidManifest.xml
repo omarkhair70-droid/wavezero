@@ -58,6 +58,19 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".WaveZeroVideoShareActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@style/LaunchTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name="com.wavezero.player.playback.WaveZeroMediaSessionService"
             android:exported="true"
