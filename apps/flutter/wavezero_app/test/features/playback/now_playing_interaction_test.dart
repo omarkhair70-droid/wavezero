@@ -51,7 +51,7 @@ void main() {
     expect(find.text('Now Playing'), findsOneWidget);
   });
 
-  testWidgets('generated artwork is light identity art without legacy WZ mark', (tester) async {
+  testWidgets('generated artwork is light abstract identity art without legacy text marks', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -66,8 +66,7 @@ void main() {
     );
 
     expect(find.text('WZ'), findsNothing);
+    expect(find.text('AM'), findsNothing);
     expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
-    expect(find.text('Aloomek'), findsOneWidget);
-    expect(find.text('Marwan Moussa'), findsOneWidget);
   });
 }
