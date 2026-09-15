@@ -23,7 +23,8 @@ void main() {
               deviceLastError: null,
               onSourceFilterChanged: onFilterChanged ?? (_) {},
               onRefresh: () {},
-              onImportDeviceMusic: () {},
+              onImportDeviceMusic: () async {},
+              onOpenMusicInbox: () {},
               onOpenCollections: () {},
               onOpenFullSearch: () {},
               onOpenCloudVault: () {},
@@ -37,6 +38,7 @@ void main() {
 
     expect(find.text('Library'), findsOneWidget);
     expect(find.text('All music'), findsOneWidget);
+    expect(find.text('Music Inbox'), findsOneWidget);
     expect(find.text('Device Music'), findsOneWidget);
     expect(find.text('Downloads'), findsWidgets);
     expect(find.text('Collections'), findsOneWidget);
