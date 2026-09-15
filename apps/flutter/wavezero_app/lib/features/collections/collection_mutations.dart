@@ -38,6 +38,29 @@ List<WzCollection> wzUpsertCollectionTrack({
         })
         .toList(growable: false);
 
+List<WzCollection> wzUpsertCollectionTracks({
+  required List<WzCollection> collections,
+  required String collectionId,
+  required List<WzCollectionTrackSnapshot> snapshots,
+  required int updatedAtMs,
+}) {
+  if (snapshots.isEmpty) return collections;
+  final incomingIds = snapshots.map((track) => track.trackId).toSet();
+  return collections
+      .map((collection) {
+        if (collection.id != collectionId) return collection;
+        final tracks = collection.tracks
+            .where((entry) => !incomingIds.contains(entry.trackId))
+            .toList(growable: true)
+          ..addAll(snapshots);
+        return collection.copyWith(
+          updatedAtMs: updatedAtMs,
+          tracks: tracks.toList(growable: false),
+        );
+      })
+      .toList(growable: false);
+}
+
 List<WzCollection> wzRemoveCollectionTrack({
   required List<WzCollection> collections,
   required String collectionId,
@@ -54,6 +77,25 @@ List<WzCollection> wzRemoveCollectionTrack({
               )
             : collection)
         .toList(growable: false);
+
+List<WzCollection> wzRemoveCollectionTracks({
+  required List<WzCollection> collections,
+  required String collectionId,
+  required Set<String> trackIds,
+  required int updatedAtMs,
+}) {
+  if (trackIds.isEmpty) return collections;
+  return collections
+      .map((collection) => collection.id == collectionId
+          ? collection.copyWith(
+              updatedAtMs: updatedAtMs,
+              tracks: collection.tracks
+                  .where((entry) => !trackIds.contains(entry.trackId))
+                  .toList(growable: false),
+            )
+          : collection)
+      .toList(growable: false);
+}
 
 List<WzCollection> wzReorderCollectionTrack({
   required List<WzCollection> collections,
