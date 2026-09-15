@@ -162,25 +162,23 @@ class WzSearchPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          SizedBox(
-            height: math.min(620.0, math.max(260.0, results.length * 78.0)),
-            child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              itemCount: results.length,
-              itemBuilder: (context, index) {
-                final result = results[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 7),
-                  child: _SearchResultRow(
-                    result: result,
-                    onPlay: () => onPlay(result),
-                    onAddToQueue: () => onAddToQueue(result),
-                    onAddToCollection: () => onAddToCollection(result),
-                    onOpenCollection: result.type == WzSearchResultType.collection ? () => onOpenCollection(result) : null,
-                  ),
-                );
-              },
-            ),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: results.length,
+            itemBuilder: (context, index) {
+              final result = results[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: _SearchResultRow(
+                  result: result,
+                  onPlay: () => onPlay(result),
+                  onAddToQueue: () => onAddToQueue(result),
+                  onAddToCollection: () => onAddToCollection(result),
+                  onOpenCollection: result.type == WzSearchResultType.collection ? () => onOpenCollection(result) : null,
+                ),
+              );
+            },
           ),
         ],
       ],
