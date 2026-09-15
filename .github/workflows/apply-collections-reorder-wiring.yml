@@ -37,7 +37,7 @@ jobs:
             );
             await _persistCollections(nextCollections);
           }
-"""
+          """
           new_method = old_method + """
           Future<void> _reorderCollectionTracks(
             WzCollection collection,
@@ -53,7 +53,7 @@ jobs:
             );
             await _persistCollections(nextCollections);
           }
-"""
+          """
           if old_method not in text:
               raise SystemExit('Expected collection removal method was not found')
           text = text.replace(old_method, new_method, 1)
@@ -61,13 +61,13 @@ jobs:
           old_wiring = """        onRemoveTrack: (collection, snapshot) =>
             unawaited(_removeTrackFromCollection(collection, snapshot)),
         resolver: _resolveCollectionTrack,
-"""
+          """
           new_wiring = """        onRemoveTrack: (collection, snapshot) =>
             unawaited(_removeTrackFromCollection(collection, snapshot)),
         onReorderTrack: (collection, oldIndex, newIndex) =>
             unawaited(_reorderCollectionTracks(collection, oldIndex, newIndex)),
         resolver: _resolveCollectionTrack,
-"""
+          """
           if old_wiring not in text:
               raise SystemExit('Expected collection detail wiring was not found')
           path.write_text(text.replace(old_wiring, new_wiring, 1))
