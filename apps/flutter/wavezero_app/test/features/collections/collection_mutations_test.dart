@@ -50,6 +50,31 @@ void main() {
     expect(result.tracks.last.title, 'Newest');
   });
 
+  test('bulk upsert preserves untouched order and appends selected order once', () {
+    final result = wzUpsertCollectionTracks(
+      collections: [collection(tracks: [track('a'), track('b'), track('c')])],
+      collectionId: 'c1',
+      snapshots: [track('b', title: 'B new'), track('d')],
+      updatedAtMs: 25,
+    ).single;
+
+    expect(result.tracks.map((item) => item.trackId), ['a', 'c', 'b', 'd']);
+    expect(result.tracks[2].title, 'B new');
+    expect(result.updatedAtMs, 25);
+  });
+
+  test('bulk remove deletes only selected ids', () {
+    final result = wzRemoveCollectionTracks(
+      collections: [collection(tracks: [track('a'), track('b'), track('c')])],
+      collectionId: 'c1',
+      trackIds: {'a', 'c'},
+      updatedAtMs: 35,
+    ).single;
+
+    expect(result.tracks.map((item) => item.trackId), ['b']);
+    expect(result.updatedAtMs, 35);
+  });
+
   test('reorder follows Flutter list semantics and persists the new order', () {
     final original = collection(tracks: [track('a'), track('b'), track('c')]);
 
