@@ -1,0 +1,36 @@
+name: Apply local lyrics player patch
+
+on:
+  push:
+    branches:
+      - feat/local-lyrics-20260916
+    paths:
+      - scripts/apply-local-lyrics-player-patch.py
+      - .github/workflows/apply-local-lyrics-player-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/local-lyrics-20260916
+          fetch-depth: 0
+
+      - name: Apply focused player patch
+        run: python3 scripts/apply-local-lyrics-player-patch.py
+
+      - name: Commit patch and remove one-shot tooling
+        run: |
+          rm -f scripts/apply-local-lyrics-player-patch.py
+          rm -f .github/workflows/apply-local-lyrics-player-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Connect local lyrics to Now Playing"
+          git push origin HEAD:feat/local-lyrics-20260916
