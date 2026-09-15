@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
+import '../lyrics/local_lyrics_panel.dart';
 import '../../playback/playback_metrics.dart';
 import '../../shared/widgets/wavezero_artwork.dart';
 import 'playback_modes.dart';
@@ -336,6 +337,13 @@ class WzConsumerPlayerSurface extends StatelessWidget {
               onTap: onAddToCollection,
             ),
           ],
+        ),
+        const SizedBox(height: 24),
+        WzLocalLyricsPanel(
+          trackId: manifest?.trackId ?? metrics.currentTrackId,
+          trackTitle: title,
+          positionMs: displayedPositionMs,
+          hasTrack: hasTrack,
         ),
         const SizedBox(height: 24),
         _UpNextHandle(
