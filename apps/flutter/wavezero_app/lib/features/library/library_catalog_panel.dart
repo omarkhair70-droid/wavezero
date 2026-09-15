@@ -6,6 +6,7 @@ import '../../design/wavezero_design_system.dart';
 import '../../shared/media/track_source.dart';
 import '../../shared/widgets/wavezero_empty_message.dart';
 import '../imports/music_inbox_page.dart';
+import 'library_browse.dart';
 import 'library_catalog_items.dart';
 import 'library_controls.dart';
 import 'library_source_overview.dart';
@@ -105,6 +106,11 @@ class WzLibraryCatalogPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasQuery = searchController.text.trim().isNotEmpty;
+    final hasBrowseMetadata = !hasQuery && tracks.any(
+      (track) =>
+          (track.artistName?.trim().isNotEmpty ?? false) ||
+          (track.albumName?.trim().isNotEmpty ?? false),
+    );
     final countLabel = filteredTrackCount == 1 ? '1 track' : '$filteredTrackCount tracks';
     final deviceViewActive = librarySourceFilter == WzLibrarySourceFilter.device;
     final deviceAutoRefreshReady =
@@ -159,6 +165,21 @@ class WzLibraryCatalogPanel extends StatelessWidget {
             onOpenCloudVault: onOpenCloudVault,
             showCloudSource: showCloudSource,
           ),
+          if (hasBrowseMetadata) ...[
+            const SizedBox(height: 24),
+            WzLibraryBrowseSection(
+              tracks: tracks,
+              selectedTrackId: selectedTrackId,
+              addToQueueDisabled: addToQueueDisabled,
+              onSelectTrack: onSelectTrack,
+              onAddToQueue: onAddToQueue,
+              onToggleLike: onToggleLike,
+              onAddToCollection: onAddToCollection,
+              isLiked: isLiked,
+              onCache: onCache,
+              onDeleteCachedTrack: onDeleteCachedTrack,
+            ),
+          ],
           const SizedBox(height: 24),
           WzGlassCard(
             borderRadius: 32,
