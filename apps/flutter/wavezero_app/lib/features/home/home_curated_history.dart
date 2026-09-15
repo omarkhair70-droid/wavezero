@@ -179,39 +179,44 @@ class WzHomeHistorySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final recent = entries.take(5).toList(growable: false);
+    final seenTrackIds = <String>{};
+    final continueTrackId = continueEntry?.trackId;
+    final recent = entries.where((entry) {
+      if (entry.trackId == continueTrackId) return false;
+      return seenTrackIds.add(entry.trackId);
+    }).take(5).toList(growable: false);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Continue Listening', style: WzText.title),
-        const SizedBox(height: 4),
-        const Text('Listening history stays on this device.', style: WzText.caption),
-        const SizedBox(height: 14),
-        if (continueEntry == null)
-          WzGlassCard(
-            child: const Text(
-              'No listening history yet. Play a track from Library, Search, or Downloads to continue here.',
-              style: WzText.body,
-            ),
-          )
-        else
+        if (continueEntry != null) ...[
+          const Text('Continue Listening', style: WzText.title),
+          const SizedBox(height: 4),
+          const Text('Pick up exactly where you left off.', style: WzText.caption),
+          const SizedBox(height: 14),
           _ContinueListeningCard(
             entry: continueEntry!,
             available: resolver(continueEntry!) != null,
             onPlay: () => onPlay(continueEntry!),
           ),
-        const SizedBox(height: 22),
+          const SizedBox(height: 22),
+        ],
         Row(
           children: [
             const Expanded(child: Text('Recently Played', style: WzText.title)),
-            TextButton(onPressed: onViewAll, child: const Text('View all')),
+            if (entries.isNotEmpty) TextButton(onPressed: onViewAll, child: const Text('View all')),
           ],
         ),
         const SizedBox(height: 8),
         if (recent.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text('No listening history yet. Play a track to start.', style: WzText.body),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              continueEntry == null
+                  ? 'Play something and it will stay close here.'
+                  : 'That is the only recent track for now.',
+              style: WzText.body,
+            ),
           )
         else
           ...recent.map(
@@ -288,7 +293,7 @@ class _ContinueListeningCard extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             WzSculptedIconButton(
-              tooltip: entry.lastPositionMs > 0 ? 'Continue' : 'Play',
+              tooltip: 'Continue',
               icon: Icons.play_arrow_rounded,
               size: 50,
               iconSize: 24,
