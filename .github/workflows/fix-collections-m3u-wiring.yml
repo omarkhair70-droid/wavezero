@@ -1,0 +1,28 @@
+name: Fix Collections M3U wiring
+
+on:
+  push:
+    branches:
+      - feat/collections-bulk-m3u-20260916
+    paths:
+      - .github/workflows/fix-collections-m3u-wiring.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/collections-bulk-m3u-20260916
+          fetch-depth: 0
+      - run: python3 scripts/fix_collections_m3u_wiring.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/fix_collections_m3u_wiring.py .github/workflows/fix-collections-m3u-wiring.yml
+          git add apps/flutter/wavezero_app/lib/app/wavezero_app.dart
+          git commit -m "Fix Collections 2 detail wiring"
+          git push origin HEAD:feat/collections-bulk-m3u-20260916
