@@ -54,7 +54,7 @@ class WzWebDownloadService {
       {'url': url},
     );
     if (raw == null) {
-      throw const PlatformException(
+      throw PlatformException(
         code: 'download_unavailable',
         message: 'WaveZero could not start this audio download.',
       );
