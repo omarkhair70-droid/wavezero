@@ -53,6 +53,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusLower = status.toLowerCase();
     final catalogProblem = statusLower.contains('unavailable') || statusLower.contains('error') || statusLower.contains('failed');
+    final scanningDevice = loading || deviceScanStatus == 'checking_permission' || deviceScanStatus == 'scanning';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -110,11 +111,18 @@ class WzLibrarySourceOverview extends StatelessWidget {
           children: [
             Expanded(
               child: _LibraryDestinationTile(
-                icon: Icons.phone_android_rounded,
+                icon: scanningDevice ? Icons.sync_rounded : Icons.phone_android_rounded,
                 title: 'Device Music',
-                subtitle: deviceTrackCount == 0 ? 'Add music from this phone' : '$deviceTrackCount tracks',
+                subtitle: scanningDevice
+                    ? 'Checking for new music…'
+                    : deviceTrackCount == 0
+                        ? 'Open and scan this phone'
+                        : '$deviceTrackCount tracks · refreshes on open',
                 selected: librarySourceFilter == WzLibrarySourceFilter.device,
-                onTap: deviceTrackCount == 0 ? onImportDeviceMusic : () => onSourceFilterChanged(WzLibrarySourceFilter.device),
+                onTap: () {
+                  onSourceFilterChanged(WzLibrarySourceFilter.device);
+                  if (deviceTrackCount == 0 && !refreshDisabled) onImportDeviceMusic();
+                },
               ),
             ),
             const SizedBox(width: 10),
@@ -137,14 +145,14 @@ class WzLibrarySourceOverview extends StatelessWidget {
           selected: false,
           onTap: onOpenCollections,
         ),
-        if (deviceTrackCount > 0) ...[
+        if (deviceTrackCount > 0 || librarySourceFilter == WzLibrarySourceFilter.device) ...[
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: refreshDisabled ? null : onImportDeviceMusic,
-              icon: const Icon(Icons.sync_rounded, size: 17),
-              label: const Text('Rescan device music'),
+              icon: Icon(scanningDevice ? Icons.hourglass_top_rounded : Icons.sync_rounded, size: 17),
+              label: Text(scanningDevice ? 'Scanning device…' : 'Scan for new music'),
             ),
           ),
         ],
