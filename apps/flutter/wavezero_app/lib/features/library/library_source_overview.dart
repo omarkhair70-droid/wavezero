@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design/wavezero_design_system.dart';
+import '../imports/music_inbox_page.dart';
 import 'library_controls.dart';
 
 class WzLibrarySourceOverview extends StatelessWidget {
@@ -105,6 +106,16 @@ class WzLibrarySourceOverview extends StatelessWidget {
           subtitle: combinedTrackCount == 0 ? 'Nothing here yet' : '$combinedTrackCount tracks',
           selected: librarySourceFilter == WzLibrarySourceFilter.all,
           onTap: () => onSourceFilterChanged(WzLibrarySourceFilter.all),
+        ),
+        const SizedBox(height: 10),
+        _PrimaryLibraryTile(
+          icon: Icons.move_to_inbox_rounded,
+          title: 'Music Inbox',
+          subtitle: 'Files and links shared to WaveZero',
+          selected: false,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const WzMusicInboxPage()),
+          ),
         ),
         const SizedBox(height: 10),
         Row(
