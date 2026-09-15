@@ -113,8 +113,8 @@ class WzLibraryCatalogPanel extends StatelessWidget {
         !loading &&
         deviceScanStatus != 'scanning';
 
-    void openMusicInbox() {
-      Navigator.of(context).push(
+    Future<void> openMusicInbox() async {
+      await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => WzMusicInboxPage(
             onRefreshDeviceMusic: onImportDeviceMusic,
