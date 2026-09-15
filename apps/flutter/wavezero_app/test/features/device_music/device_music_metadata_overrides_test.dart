@@ -64,6 +64,19 @@ void main() {
     expect(resolved.albumName, track.albumName);
   });
 
+  test('an override for another device track never changes this track', () {
+    const override = WzDeviceMusicMetadataOverride(
+      trackId: 'device-audio-99',
+      title: 'Wrong track',
+      updatedAtMs: 700,
+    );
+
+    final resolved = wzApplyDeviceMusicMetadataOverride(track, override);
+
+    expect(identical(resolved, track), isTrue);
+    expect(resolved.title, 'Original title');
+  });
+
   test('JSON parser keeps the newest override for each track and ignores empty entries', () {
     const source = '''
     [
