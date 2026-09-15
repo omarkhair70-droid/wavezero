@@ -38,6 +38,26 @@ class WzImportInboxEntry {
   bool get hasResolvableDeviceTrack => isAudio && trackId != null && trackId!.trim().isNotEmpty;
   bool get hasDownloadTask => isDownload && downloadId != null && downloadId! > 0;
 
+  WzImportInboxEntry copyWith({
+    String? title,
+    String? subtitle,
+    int? downloadId,
+    int? createdAtMs,
+  }) {
+    return WzImportInboxEntry(
+      id: id,
+      kind: kind,
+      title: title ?? this.title,
+      subtitle: subtitle ?? this.subtitle,
+      value: value,
+      mimeType: mimeType,
+      trackId: trackId,
+      downloadId: downloadId ?? this.downloadId,
+      duplicateOfExisting: duplicateOfExisting,
+      createdAtMs: createdAtMs ?? this.createdAtMs,
+    );
+  }
+
   factory WzImportInboxEntry.fromJson(Map<String, Object?> json) {
     final rawKind = json['kind']?.toString();
     final rawDownloadId = json['downloadId'];
@@ -109,6 +129,29 @@ List<WzImportInboxEntry> wzImportInboxEntriesFromJson(String source) {
   return entries;
 }
 
+List<WzImportInboxEntry> wzReplaceInboxDownloadTask({
+  required List<WzImportInboxEntry> entries,
+  required String entryId,
+  required int downloadId,
+  required String title,
+  required int createdAtMs,
+}) {
+  final next = entries
+      .map(
+        (entry) => entry.id == entryId
+            ? entry.copyWith(
+                title: title.trim().isEmpty ? entry.title : title.trim(),
+                subtitle: 'Retrying download to WaveZero',
+                downloadId: downloadId,
+                createdAtMs: createdAtMs,
+              )
+            : entry,
+      )
+      .toList(growable: false);
+  next.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+  return next;
+}
+
 String wzImportInboxEntriesToJson(List<WzImportInboxEntry> entries) =>
     jsonEncode(entries.map((entry) => entry.toJson()).toList(growable: false));
 
@@ -133,6 +176,23 @@ class WzImportInboxService {
   Future<List<WzImportInboxEntry>> dismiss(String id) async {
     final current = await load();
     final next = current.where((entry) => entry.id != id).toList(growable: false);
+    await _save(next);
+    return next;
+  }
+
+  Future<List<WzImportInboxEntry>> replaceDownloadTask({
+    required String entryId,
+    required int downloadId,
+    required String title,
+  }) async {
+    final current = await load();
+    final next = wzReplaceInboxDownloadTask(
+      entries: current,
+      entryId: entryId,
+      downloadId: downloadId,
+      title: title,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
     await _save(next);
     return next;
   }
