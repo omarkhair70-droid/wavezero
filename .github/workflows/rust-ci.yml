@@ -1,10 +1,23 @@
 name: Rust CI
+run-name: Rust CI • ${{ github.ref_name }}
 
 on:
   pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'services/api/**'
+      - '.github/workflows/rust-ci.yml'
   push:
     branches:
       - main
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'crates/**'
+      - 'services/api/**'
+      - '.github/workflows/rust-ci.yml'
 
 jobs:
   rust:
