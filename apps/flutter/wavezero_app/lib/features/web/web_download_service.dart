@@ -21,6 +21,7 @@ class WzWebDownloadTask {
 
   bool get isTerminal => status == 'successful' || status == 'failed' || status == 'cancelled' || status == 'missing';
   bool get isSuccessful => status == 'successful';
+  bool get canRetry => status == 'failed' || status == 'cancelled' || status == 'missing';
 
   double? get progress {
     if (totalBytes <= 0) return null;
@@ -46,6 +47,20 @@ class WzWebDownloadService {
   WzWebDownloadService({MethodChannel? channel}) : _channel = channel ?? const MethodChannel('wavezero/web_downloads');
 
   final MethodChannel _channel;
+
+  Future<WzWebDownloadTask> enqueueDirectAudio(String url) async {
+    final raw = await _channel.invokeMapMethod<Object?, Object?>(
+      'enqueueDirectAudio',
+      {'url': url},
+    );
+    if (raw == null) {
+      throw PlatformException(
+        code: 'download_unavailable',
+        message: 'WaveZero could not start this audio download.',
+      );
+    }
+    return WzWebDownloadTask.fromMap(raw);
+  }
 
   Future<WzWebDownloadTask> query(int id) async {
     final raw = await _channel.invokeMapMethod<Object?, Object?>('queryDownload', {'id': id});

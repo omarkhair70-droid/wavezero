@@ -74,6 +74,44 @@ void main() {
     expect(decoded.last.value, original.last.value);
   });
 
+  test('retry replacement keeps source URL while switching DownloadManager identity', () {
+    const original = <WzImportInboxEntry>[
+      WzImportInboxEntry(
+        id: 'retry-me',
+        kind: WzImportInboxKind.download,
+        title: 'old.mp3',
+        subtitle: 'Downloading to WaveZero',
+        value: 'https://cdn.example/audio.mp3',
+        downloadId: 12,
+        createdAtMs: 100,
+      ),
+      WzImportInboxEntry(
+        id: 'other',
+        kind: WzImportInboxKind.link,
+        title: 'Other',
+        subtitle: 'Shared link',
+        value: 'https://example.com',
+        createdAtMs: 200,
+      ),
+    ];
+
+    final replaced = wzReplaceInboxDownloadTask(
+      entries: original,
+      entryId: 'retry-me',
+      downloadId: 99,
+      title: 'audio.mp3',
+      createdAtMs: 300,
+    );
+
+    expect(replaced.first.id, 'retry-me');
+    expect(replaced.first.downloadId, 99);
+    expect(replaced.first.title, 'audio.mp3');
+    expect(replaced.first.subtitle, 'Retrying download to WaveZero');
+    expect(replaced.first.value, 'https://cdn.example/audio.mp3');
+    expect(replaced.first.createdAtMs, 300);
+    expect(replaced.last.id, 'other');
+  });
+
   test('invalid or empty payload stays quiet', () {
     expect(wzImportInboxEntriesFromJson('[]'), isEmpty);
     expect(wzImportInboxEntriesFromJson(''), isEmpty);
