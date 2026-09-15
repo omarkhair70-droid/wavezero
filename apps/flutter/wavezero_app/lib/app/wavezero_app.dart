@@ -3882,6 +3882,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onDelete: _deleteCachedTrack,
             onClearAll: _clearCache,
             onManageStorage: () => _navigateTo(WzAppTab.storage),
+  onRefreshDeviceMusic: _importDeviceMusic,
+  onOpenDeviceMusic: () {
+    setState(() => _librarySourceFilter = WzLibrarySourceFilter.device);
+    _navigateTo(WzAppTab.library);
+  },
           ),
         ],
       ),
