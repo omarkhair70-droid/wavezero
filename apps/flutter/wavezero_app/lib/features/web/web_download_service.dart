@@ -24,7 +24,7 @@ class WzWebDownloadTask {
 
   double? get progress {
     if (totalBytes <= 0) return null;
-    return (downloadedBytes / totalBytes).clamp(0.0, 1.0);
+    return (downloadedBytes / totalBytes).clamp(0.0, 1.0).toDouble();
   }
 
   factory WzWebDownloadTask.fromMap(Map<Object?, Object?> value) {
