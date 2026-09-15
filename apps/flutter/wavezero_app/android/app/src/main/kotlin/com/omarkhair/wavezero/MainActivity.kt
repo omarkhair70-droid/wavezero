@@ -3,6 +3,7 @@ package com.omarkhair.wavezero
 import android.Manifest
 import android.content.ContentUris
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -24,6 +25,7 @@ class MainActivity : FlutterActivity() {
     private var appStartedAtMs: Long = 0L
     private var audioPlayerManager: AudioPlayerManager? = null
     private var pendingDeviceMusicPermissionResult: MethodChannel.Result? = null
+    private var playlistFileBridge: WaveZeroPlaylistFileBridge? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         appStartedAtMs = SystemClock.elapsedRealtime()
@@ -44,6 +46,13 @@ class MainActivity : FlutterActivity() {
             WaveZeroWebViewFactory(this, flutterEngine.dartExecutor.binaryMessenger),
         )
 
+        val playlistBridge = WaveZeroPlaylistFileBridge(this)
+        playlistFileBridge = playlistBridge
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            WaveZeroPlaylistFileBridge.CHANNEL_NAME,
+        ).setMethodCallHandler(playlistBridge)
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             PlaybackMethodChannelHandler.CHANNEL_NAME,
@@ -57,6 +66,11 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (playlistFileBridge?.onActivityResult(requestCode, resultCode, data) == true) return
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != REQUEST_DEVICE_MUSIC_PERMISSION) return
@@ -68,6 +82,8 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         pendingDeviceMusicPermissionResult?.success(deviceMusicPermissionStatusMap(message = "Permission request was cancelled."))
         pendingDeviceMusicPermissionResult = null
+        playlistFileBridge?.dispose()
+        playlistFileBridge = null
         audioPlayerManager = null
         super.onDestroy()
     }

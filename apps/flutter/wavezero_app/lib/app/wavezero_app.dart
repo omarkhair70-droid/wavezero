@@ -52,6 +52,7 @@ import '../features/developer/engine_diagnostics_page.dart';
 import '../features/collections/collections_service.dart';
 import '../features/collections/collection_resolution.dart';
 import '../features/collections/collection_mutations.dart';
+import '../features/collections/playlist_portability.dart';
 import '../features/collections/collections_pages.dart';
 import '../features/home/home_sections.dart';
 import '../features/home/consumer_home.dart';
@@ -1169,6 +1170,158 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
     );
     await _persistCollections(nextCollections);
+  }
+
+  Future<void> _bulkRemoveCollectionTracks(
+    WzCollection collection,
+    List<WzCollectionTrackSnapshot> tracks,
+  ) async {
+    if (tracks.isEmpty) return;
+    final ids = tracks.map((track) => track.trackId).toSet();
+    final nextCollections = wzRemoveCollectionTracks(
+      collections: _collections,
+      collectionId: collection.id,
+      trackIds: ids,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _persistCollections(nextCollections);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Removed ${tracks.length} tracks from ${collection.name}')),
+    );
+  }
+
+  Future<void> _bulkAddCollectionTracks(
+    WzCollection destination,
+    List<WzCollectionTrackSnapshot> tracks,
+  ) async {
+    if (tracks.isEmpty) return;
+    final nextCollections = wzUpsertCollectionTracks(
+      collections: _collections,
+      collectionId: destination.id,
+      snapshots: tracks,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _persistCollections(nextCollections);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Added ${tracks.length} tracks to ${destination.name}')),
+    );
+  }
+
+  Future<void> _bulkQueueCollectionTracks(
+    WzCollection collection,
+    List<WzCollectionTrackSnapshot> tracks,
+  ) async {
+    if (tracks.isEmpty) return;
+    final nextQueue = _queue.toList(growable: true);
+    final existing = nextQueue.map((track) => track.trackId).toSet();
+    var added = 0;
+    var unavailable = 0;
+    for (final snapshot in tracks) {
+      final resolved = _resolveCollectionTrack(snapshot);
+      if (resolved == null) {
+        unavailable += 1;
+        continue;
+      }
+      if (existing.add(resolved.trackId)) {
+        nextQueue.add(resolved);
+        added += 1;
+      }
+    }
+    if (added > 0) {
+      setState(() {
+        _queue = nextQueue;
+        _queueCurrentTrackId ??= _queue.isEmpty ? null : _queue.first.trackId;
+        _queueStatus = 'Added $added selected tracks. $unavailable unavailable.';
+        _sessionStatus = 'Session saved.';
+      });
+      unawaited(_saveSession());
+      unawaited(_pushNotificationQueueSnapshot());
+      unawaited(_updatePredictivePreloadCandidate());
+      unawaited(_maybeAutoCacheNextQueuedTrack());
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Queued $added tracks. $unavailable unavailable.')),
+    );
+  }
+
+  Future<void> _importM3uCollection() async {
+    try {
+      if (_deviceMusicPermissionStatus.status == 'granted') {
+        await _importDeviceMusic();
+      }
+      final payload = await const WzPlaylistFileService().importM3u();
+      if (payload == null || !mounted) return;
+      final entries = wzParseM3u(payload.content);
+      if (entries.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('That playlist does not contain any tracks.')),
+        );
+        return;
+      }
+      final resolution = wzResolveM3uEntries(
+        entries: entries,
+        libraryTracks: _resolvableLibraryTracks,
+      );
+      if (resolution.matched.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No matching tracks found for ${entries.length} playlist entries.')),
+        );
+        return;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final collection = WzCollection(
+        id: 'collection-m3u-$now',
+        name: wzPlaylistNameFromFile(payload.name),
+        type: WzCollectionType.user,
+        createdAtMs: now,
+        updatedAtMs: now,
+        tracks: resolution.matched.map(_snapshotForTrack).toList(growable: false),
+      );
+      await _persistCollections([..._collections, collection]);
+      if (!mounted) return;
+      setState(() => _selectedCollectionId = collection.id);
+      _navigateTo(WzAppTab.collectionDetail);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Imported ${resolution.matched.length} tracks'
+            '${resolution.unmatched.isEmpty ? '' : ' • ${resolution.unmatched.length} unmatched'}',
+          ),
+        ),
+      );
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message ?? 'Could not import playlist.')),
+      );
+    }
+  }
+
+  Future<void> _exportCollectionM3u(WzCollection collection) async {
+    if (collection.tracks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add tracks before exporting this playlist.')),
+      );
+      return;
+    }
+    try {
+      final uri = await const WzPlaylistFileService().exportM3u(
+        fileName: wzPlaylistFileName(collection.name),
+        content: wzSerializeM3u(collection),
+      );
+      if (uri == null || !mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Exported ${collection.name} as M3U')),
+      );
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message ?? 'Could not export playlist.')),
+      );
+    }
   }
 
   Future<void> _renameCollection(WzCollection collection, String name) async {
@@ -3859,6 +4012,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         onBack: () => _navigateBack(fallback: WzAppTab.library),
         onOpen: _openCollection,
         onCreate: _createCollectionFromPage,
+        onImportM3u: () => unawaited(_importM3uCollection()),
         onRename: _showRenameCollectionDialog,
         onDelete: _showDeleteCollectionDialog,
       ),
@@ -3880,6 +4034,13 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             unawaited(_removeTrackFromCollection(collection, snapshot)),
         onReorderTrack: (collection, oldIndex, newIndex) =>
             unawaited(_reorderCollectionTracks(collection, oldIndex, newIndex)),
+        onBulkAddToQueue: (collection, tracks) =>
+            unawaited(_bulkQueueCollectionTracks(collection, tracks)),
+        onBulkRemove: (collection, tracks) =>
+            unawaited(_bulkRemoveCollectionTracks(collection, tracks)),
+        onBulkAddToCollection: (source, destination, tracks) =>
+            unawaited(_bulkAddCollectionTracks(destination, tracks)),
+        onExportM3u: (collection) => unawaited(_exportCollectionM3u(collection)),
         resolver: _resolveCollectionTrack,
       ),
       WzPageScaffold(
