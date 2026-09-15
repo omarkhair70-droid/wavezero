@@ -60,4 +60,44 @@ void main() {
     expect(queued, isTrue);
     expect(collected, isTrue);
   });
+
+  testWidgets('device row exposes Fix track info from More menu', (tester) async {
+    var fixed = false;
+    final track = CatalogTrackSummary(
+      trackId: 'device-audio-42',
+      title: 'Untitled recording',
+      artistName: 'Unknown artist',
+      source: 'device',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: WzLibraryCatalogRow(
+              track: track,
+              selected: false,
+              addDisabled: false,
+              onTap: () {},
+              onAdd: () {},
+              onToggleLike: () {},
+              onAddToCollection: () {},
+              liked: false,
+              onCache: null,
+              onDeleteCached: null,
+              onFixInfo: () => fixed = true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+    expect(find.text('Fix track info'), findsOneWidget);
+
+    await tester.tap(find.text('Fix track info'));
+    await tester.pumpAndSettle();
+    expect(fixed, isTrue);
+  });
 }
