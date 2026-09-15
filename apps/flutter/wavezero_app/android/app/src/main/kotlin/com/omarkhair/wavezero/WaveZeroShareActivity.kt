@@ -21,13 +21,14 @@ import java.util.UUID
 
 private const val IMPORT_INBOX_FILE = "wavezero_import_inbox.json"
 private const val IMPORT_INBOX_MAX_ITEMS = 100
+private const val MAX_BATCH_AUDIO_IMPORTS = 50
 private const val WAVEZERO_IMPORT_RELATIVE_PATH = "Music/WaveZero/Imports/"
 
 class WaveZeroShareActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (intent?.action != Intent.ACTION_SEND) {
+        if (intent?.action !in setOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) {
             finish()
             return
         }
@@ -46,24 +47,25 @@ class WaveZeroShareActivity : Activity() {
     }
 
     private fun receiveShare(intent: Intent): String {
+        if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+            return receiveMultipleAudio(intent)
+        }
+
         val mimeType = intent.type.orEmpty()
         val stream = sharedStream(intent)
         if (stream != null && mimeType.startsWith("audio/")) {
-            val imported = importAudio(stream, mimeType)
-            val item = JSONObject()
-                .put("id", UUID.randomUUID().toString())
-                .put("kind", "audio")
-                .put("title", imported.displayName)
-                .put(
-                    "subtitle",
-                    if (imported.alreadyExists) "Already in WaveZero" else "Shared to WaveZero",
-                )
-                .put("value", imported.uri.toString())
-                .put("mimeType", mimeType)
-                .put("duplicateOfExisting", imported.alreadyExists)
-                .put("createdAtMs", System.currentTimeMillis())
-            imported.trackId?.let { item.put("trackId", it) }
-            WaveZeroImportInbox.append(context = this, item = item)
+            val resolvedMimeType = contentResolver.getType(stream)
+                ?.takeIf { it.startsWith("audio/") }
+                ?: mimeType
+            val imported = importAudio(stream, resolvedMimeType)
+            WaveZeroImportInbox.append(
+                context = this,
+                item = audioInboxItem(
+                    imported = imported,
+                    mimeType = resolvedMimeType,
+                    createdAtMs = System.currentTimeMillis(),
+                ),
+            )
             return if (imported.alreadyExists) {
                 "${imported.displayName} is already in WaveZero"
             } else {
@@ -75,6 +77,81 @@ class WaveZeroShareActivity : Activity() {
         if (text.isNotEmpty()) return receiveSharedText(text)
 
         throw IllegalArgumentException("WaveZero can receive audio files and shared links.")
+    }
+
+    private fun receiveMultipleAudio(intent: Intent): String {
+        val streams = sharedStreams(intent).take(MAX_BATCH_AUDIO_IMPORTS)
+        if (streams.isEmpty()) {
+            throw IllegalArgumentException("No shared audio files were found.")
+        }
+
+        val fallbackMimeType = intent.type.orEmpty()
+        val inboxItems = mutableListOf<JSONObject>()
+        var importedCount = 0
+        var existingCount = 0
+        var failedCount = 0
+        val batchStartedAt = System.currentTimeMillis()
+
+        streams.forEachIndexed { index, stream ->
+            val mimeType = contentResolver.getType(stream)
+                ?.takeIf { it.startsWith("audio/") }
+                ?: fallbackMimeType.takeIf { it.startsWith("audio/") }
+
+            if (mimeType == null) {
+                failedCount += 1
+                return@forEachIndexed
+            }
+
+            runCatching { importAudio(stream, mimeType) }
+                .onSuccess { imported ->
+                    if (imported.alreadyExists) {
+                        existingCount += 1
+                    } else {
+                        importedCount += 1
+                    }
+                    inboxItems += audioInboxItem(
+                        imported = imported,
+                        mimeType = mimeType,
+                        createdAtMs = batchStartedAt + index,
+                    )
+                }
+                .onFailure { failedCount += 1 }
+        }
+
+        if (inboxItems.isEmpty()) {
+            throw IllegalStateException("WaveZero could not import the selected audio files.")
+        }
+        WaveZeroImportInbox.appendAll(context = this, items = inboxItems)
+
+        val summary = mutableListOf<String>()
+        if (importedCount > 0) summary += "$importedCount added"
+        if (existingCount > 0) summary += "$existingCount already here"
+        if (failedCount > 0) summary += "$failedCount skipped"
+        if (streams.size == MAX_BATCH_AUDIO_IMPORTS && sharedStreams(intent).size > MAX_BATCH_AUDIO_IMPORTS) {
+            summary += "first $MAX_BATCH_AUDIO_IMPORTS processed"
+        }
+        return summary.joinToString(" • ").ifBlank { "Audio added to WaveZero" }
+    }
+
+    private fun audioInboxItem(
+        imported: ImportedAudio,
+        mimeType: String,
+        createdAtMs: Long,
+    ): JSONObject {
+        val item = JSONObject()
+            .put("id", UUID.randomUUID().toString())
+            .put("kind", "audio")
+            .put("title", imported.displayName)
+            .put(
+                "subtitle",
+                if (imported.alreadyExists) "Already in WaveZero" else "Shared to WaveZero",
+            )
+            .put("value", imported.uri.toString())
+            .put("mimeType", mimeType)
+            .put("duplicateOfExisting", imported.alreadyExists)
+            .put("createdAtMs", createdAtMs)
+        imported.trackId?.let { item.put("trackId", it) }
+        return item
     }
 
     private fun receiveSharedText(text: String): String {
@@ -240,11 +317,31 @@ class WaveZeroShareActivity : Activity() {
         return ImportedAudio(Uri.fromFile(target), target.name)
     }
 
-    private fun sharedStream(intent: Intent): Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-    } else {
-        @Suppress("DEPRECATION")
-        intent.getParcelableExtra(Intent.EXTRA_STREAM)
+    private fun sharedStream(intent: Intent): Uri? {
+        val fromExtra = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        }
+        return fromExtra ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+    }
+
+    private fun sharedStreams(intent: Intent): List<Uri> {
+        val fromExtra = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
+        }
+        val fromClip = intent.clipData?.let { clip ->
+            buildList {
+                for (index in 0 until clip.itemCount) {
+                    clip.getItemAt(index).uri?.let(::add)
+                }
+            }
+        }.orEmpty()
+        return (fromExtra + fromClip).distinctBy(Uri::toString)
     }
 
     private fun queryDisplayName(uri: Uri): String? {
@@ -335,20 +432,31 @@ private object WaveZeroImportInbox {
     private val lock = Any()
 
     fun append(context: android.content.Context, item: JSONObject) {
+        appendAll(context, listOf(item))
+    }
+
+    fun appendAll(context: android.content.Context, items: List<JSONObject>) {
+        if (items.isEmpty()) return
         synchronized(lock) {
             val target = File(context.filesDir, IMPORT_INBOX_FILE)
             val existing = runCatching {
                 if (target.exists()) JSONArray(target.readText()) else JSONArray()
             }.getOrElse { JSONArray() }
-            val next = JSONArray().put(item)
-            val itemKey = inboxIdentity(item)
-            var kept = 0
+
+            val next = JSONArray()
+            val seenKeys = mutableSetOf<String>()
+            for (item in items.asReversed()) {
+                val key = inboxIdentity(item)
+                if (key != null && !seenKeys.add(key)) continue
+                if (next.length() >= IMPORT_INBOX_MAX_ITEMS) break
+                next.put(item)
+            }
             for (index in 0 until existing.length()) {
+                if (next.length() >= IMPORT_INBOX_MAX_ITEMS) break
                 val candidate = existing.optJSONObject(index) ?: continue
-                if (itemKey != null && inboxIdentity(candidate) == itemKey) continue
-                if (kept >= IMPORT_INBOX_MAX_ITEMS - 1) break
+                val key = inboxIdentity(candidate)
+                if (key != null && !seenKeys.add(key)) continue
                 next.put(candidate)
-                kept += 1
             }
 
             val temp = File(context.filesDir, "$IMPORT_INBOX_FILE.tmp")
@@ -363,6 +471,8 @@ private object WaveZeroImportInbox {
     private fun inboxIdentity(item: JSONObject): String? {
         val trackId = item.optString("trackId").takeIf { it.isNotBlank() }
         if (trackId != null) return "track:$trackId"
+        val downloadId = item.optLong("downloadId", -1L).takeIf { it > 0L }
+        if (downloadId != null) return "download:$downloadId"
         val value = item.optString("value").trim()
         return value.takeIf { it.isNotBlank() }?.let { "value:$it" }
     }
