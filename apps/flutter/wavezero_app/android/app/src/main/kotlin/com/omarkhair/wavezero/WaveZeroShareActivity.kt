@@ -1,6 +1,7 @@
 package com.omarkhair.wavezero
 
 import android.app.Activity
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Intent
 import android.media.MediaScannerConnection
@@ -19,6 +20,7 @@ import java.util.UUID
 
 private const val IMPORT_INBOX_FILE = "wavezero_import_inbox.json"
 private const val IMPORT_INBOX_MAX_ITEMS = 100
+private const val WAVEZERO_IMPORT_RELATIVE_PATH = "Music/WaveZero/Imports/"
 
 class WaveZeroShareActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,18 +49,25 @@ class WaveZeroShareActivity : Activity() {
         val stream = sharedStream(intent)
         if (stream != null && mimeType.startsWith("audio/")) {
             val imported = importAudio(stream, mimeType)
-            WaveZeroImportInbox.append(
-                context = this,
-                item = JSONObject()
-                    .put("id", UUID.randomUUID().toString())
-                    .put("kind", "audio")
-                    .put("title", imported.displayName)
-                    .put("subtitle", "Shared to WaveZero")
-                    .put("value", imported.uri.toString())
-                    .put("mimeType", mimeType)
-                    .put("createdAtMs", System.currentTimeMillis()),
-            )
-            return "${imported.displayName} added to WaveZero"
+            val item = JSONObject()
+                .put("id", UUID.randomUUID().toString())
+                .put("kind", "audio")
+                .put("title", imported.displayName)
+                .put(
+                    "subtitle",
+                    if (imported.alreadyExists) "Already in WaveZero" else "Shared to WaveZero",
+                )
+                .put("value", imported.uri.toString())
+                .put("mimeType", mimeType)
+                .put("duplicateOfExisting", imported.alreadyExists)
+                .put("createdAtMs", System.currentTimeMillis())
+            imported.trackId?.let { item.put("trackId", it) }
+            WaveZeroImportInbox.append(context = this, item = item)
+            return if (imported.alreadyExists) {
+                "${imported.displayName} is already in WaveZero"
+            } else {
+                "${imported.displayName} added to WaveZero"
+            }
         }
 
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
@@ -86,9 +95,11 @@ class WaveZeroShareActivity : Activity() {
             ?.takeIf { it.isNotBlank() }
             ?: "wavezero-import-${System.currentTimeMillis()}.${extensionForMime(mimeType)}"
         val safeName = sanitizeFileName(displayName)
+        val sourceSize = querySize(sourceUri)
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            importAudioWithMediaStore(sourceUri, mimeType, safeName)
+            findExistingImport(safeName, sourceSize)
+                ?: importAudioWithMediaStore(sourceUri, mimeType, safeName)
         } else {
             importAudioLegacy(sourceUri, mimeType, safeName)
         }
@@ -99,7 +110,7 @@ class WaveZeroShareActivity : Activity() {
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
             put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
-            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/WaveZero/Imports")
+            put(MediaStore.Audio.Media.RELATIVE_PATH, WAVEZERO_IMPORT_RELATIVE_PATH)
             put(MediaStore.Audio.Media.IS_PENDING, 1)
         }
         val targetUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
@@ -115,11 +126,52 @@ class WaveZeroShareActivity : Activity() {
             values.clear()
             values.put(MediaStore.Audio.Media.IS_PENDING, 0)
             resolver.update(targetUri, values, null, null)
-            return ImportedAudio(targetUri, displayName)
+            return ImportedAudio(
+                uri = targetUri,
+                displayName = displayName,
+                trackId = deviceTrackId(targetUri),
+            )
         } catch (error: Exception) {
             resolver.delete(targetUri, null, null)
             throw error
         }
+    }
+
+    private fun findExistingImport(displayName: String, sourceSize: Long?): ImportedAudio? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        val resolver = contentResolver
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.SIZE,
+        )
+        val selection =
+            "${MediaStore.Audio.Media.RELATIVE_PATH} = ? AND ${MediaStore.Audio.Media.DISPLAY_NAME} = ?"
+        val args = arrayOf(WAVEZERO_IMPORT_RELATIVE_PATH, displayName)
+        resolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            selection,
+            args,
+            "${MediaStore.Audio.Media.DATE_ADDED} DESC",
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+            while (cursor.moveToNext()) {
+                val existingSize = if (cursor.isNull(sizeColumn)) null else cursor.getLong(sizeColumn)
+                if (sourceSize != null && existingSize != null && sourceSize != existingSize) continue
+                val id = cursor.getLong(idColumn)
+                val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+                return ImportedAudio(
+                    uri = uri,
+                    displayName = cursor.getString(nameColumn),
+                    trackId = "device-audio-$id",
+                    alreadyExists = true,
+                )
+            }
+        }
+        return null
     }
 
     private fun importAudioLegacy(sourceUri: Uri, mimeType: String, displayName: String): ImportedAudio {
@@ -150,6 +202,17 @@ class WaveZeroShareActivity : Activity() {
         }
     }
 
+    private fun querySize(uri: Uri): Long? {
+        return contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (index < 0 || cursor.isNull(index)) null else cursor.getLong(index)
+        }
+    }
+
+    private fun deviceTrackId(uri: Uri): String? =
+        uri.lastPathSegment?.toLongOrNull()?.let { "device-audio-$it" }
+
     private fun firstHttpUrl(text: String): String? {
         val matcher = Patterns.WEB_URL.matcher(text)
         while (matcher.find()) {
@@ -168,7 +231,7 @@ class WaveZeroShareActivity : Activity() {
 
     private fun sanitizeFileName(raw: String): String {
         val clean = raw
-            .replace(Regex("[\\\\/:*?\"<>|]+"), "_")
+            .replace(Regex("[\\/:*?\"<>|]+"), "_")
             .replace(Regex("\\s+"), " ")
             .trim()
             .take(180)
@@ -207,7 +270,12 @@ class WaveZeroShareActivity : Activity() {
         )
     }
 
-    private data class ImportedAudio(val uri: Uri, val displayName: String)
+    private data class ImportedAudio(
+        val uri: Uri,
+        val displayName: String,
+        val trackId: String? = null,
+        val alreadyExists: Boolean = false,
+    )
 }
 
 private object WaveZeroImportInbox {
@@ -220,8 +288,15 @@ private object WaveZeroImportInbox {
                 if (target.exists()) JSONArray(target.readText()) else JSONArray()
             }.getOrElse { JSONArray() }
             val next = JSONArray().put(item)
-            val keep = (existing.length() - (IMPORT_INBOX_MAX_ITEMS - 1)).coerceAtLeast(0)
-            for (index in keep until existing.length()) next.put(existing.get(index))
+            val itemKey = inboxIdentity(item)
+            var kept = 0
+            for (index in 0 until existing.length()) {
+                val candidate = existing.optJSONObject(index) ?: continue
+                if (itemKey != null && inboxIdentity(candidate) == itemKey) continue
+                if (kept >= IMPORT_INBOX_MAX_ITEMS - 1) break
+                next.put(candidate)
+                kept += 1
+            }
 
             val temp = File(context.filesDir, "$IMPORT_INBOX_FILE.tmp")
             temp.writeText(next.toString())
@@ -230,5 +305,12 @@ private object WaveZeroImportInbox {
                 temp.delete()
             }
         }
+    }
+
+    private fun inboxIdentity(item: JSONObject): String? {
+        val trackId = item.optString("trackId").takeIf { it.isNotBlank() }
+        if (trackId != null) return "track:$trackId"
+        val value = item.optString("value").trim()
+        return value.takeIf { it.isNotBlank() }?.let { "value:$it" }
     }
 }
