@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../design/wavezero_design_system.dart';
 import '../../shared/media/media_presentation.dart';
@@ -139,7 +140,7 @@ class _DirectAudioDownloadsState extends State<_DirectAudioDownloads>
   Map<int, WzWebDownloadTask> _tasks = const {};
   Timer? _poller;
   bool _loading = true;
-  int? _busyId;
+  String? _busyEntryId;
 
   @override
   void initState() {
@@ -211,22 +212,62 @@ class _DirectAudioDownloadsState extends State<_DirectAudioDownloads>
   Future<void> _cancel(WzImportInboxEntry entry) async {
     final id = entry.downloadId;
     if (id == null) return;
-    setState(() => _busyId = id);
+    setState(() => _busyEntryId = entry.id);
     try {
       await _downloads.cancel(id);
       await _sync();
     } finally {
-      if (mounted) setState(() => _busyId = null);
+      if (mounted) setState(() => _busyEntryId = null);
+    }
+  }
+
+  Future<void> _retry(WzImportInboxEntry entry) async {
+    setState(() => _busyEntryId = entry.id);
+    try {
+      final task = await _downloads.enqueueDirectAudio(entry.value);
+      if (task.id <= 0) {
+        throw const PlatformException(
+          code: 'download_unavailable',
+          message: 'WaveZero could not start this retry.',
+        );
+      }
+      final updated = await _inbox.replaceDownloadTask(
+        entryId: entry.id,
+        downloadId: task.id,
+        title: task.fileName,
+      );
+      if (!mounted) return;
+      setState(() {
+        _entries = updated
+            .where((item) => item.hasDownloadTask)
+            .toList(growable: false);
+        _tasks = <int, WzWebDownloadTask>{task.id: task};
+      });
+      await _sync();
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message ?? 'WaveZero could not retry this download.'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('WaveZero could not retry this download.')),
+      );
+    } finally {
+      if (mounted) setState(() => _busyEntryId = null);
     }
   }
 
   Future<void> _removeHistory(WzImportInboxEntry entry) async {
-    setState(() => _busyId = entry.downloadId);
+    setState(() => _busyEntryId = entry.id);
     try {
       await _inbox.dismiss(entry.id);
       await _reload();
     } finally {
-      if (mounted) setState(() => _busyId = null);
+      if (mounted) setState(() => _busyEntryId = null);
     }
   }
 
@@ -285,10 +326,11 @@ class _DirectAudioDownloadsState extends State<_DirectAudioDownloads>
             return _DirectDownloadRow(
               entry: entry,
               task: task,
-              busy: _busyId == entry.downloadId,
+              busy: _busyEntryId == entry.id,
               onCancel: task != null && !task.isTerminal
                   ? () => _cancel(entry)
                   : null,
+              onRetry: task?.canRetry == true ? () => _retry(entry) : null,
               onOpen: task?.isSuccessful == true && widget.onOpenDeviceMusic != null
                   ? _openReady
                   : null,
@@ -306,6 +348,7 @@ class _DirectDownloadRow extends StatelessWidget {
     required this.task,
     required this.busy,
     required this.onCancel,
+    required this.onRetry,
     required this.onOpen,
     required this.onRemove,
   });
@@ -314,6 +357,7 @@ class _DirectDownloadRow extends StatelessWidget {
   final WzWebDownloadTask? task;
   final bool busy;
   final VoidCallback? onCancel;
+  final VoidCallback? onRetry;
   final VoidCallback? onOpen;
   final VoidCallback? onRemove;
 
@@ -321,14 +365,22 @@ class _DirectDownloadRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = task?.status ?? 'checking';
     final progress = task?.progress;
+    final transferred = task == null || task!.downloadedBytes <= 0
+        ? null
+        : task!.totalBytes > 0
+            ? '${formatWzCacheBytes(task!.downloadedBytes)} / ${formatWzCacheBytes(task!.totalBytes)}'
+            : formatWzCacheBytes(task!.downloadedBytes);
     final label = switch (status) {
-      'pending' => 'Waiting',
-      'running' => progress == null ? 'Downloading' : 'Downloading ${(progress * 100).round()}%',
+      'pending' => 'Waiting for Android',
+      'running' => [
+          progress == null ? 'Downloading' : 'Downloading ${(progress * 100).round()}%',
+          if (transferred != null) transferred,
+        ].join(' • '),
       'paused' => 'Paused by Android',
       'successful' => 'Ready in Device Music',
-      'failed' => 'Download failed',
-      'cancelled' => 'Cancelled',
-      'missing' => 'No longer available',
+      'failed' => 'Download failed • tap retry',
+      'cancelled' => 'Cancelled • tap retry',
+      'missing' => 'Download record missing • tap retry',
       _ => 'Checking download',
     };
     final terminal = task?.isTerminal == true;
@@ -383,6 +435,14 @@ class _DirectDownloadRow extends StatelessWidget {
                     size: 38,
                     iconSize: 17,
                     onPressed: onOpen,
+                  ),
+                if (onRetry != null)
+                  WzSculptedIconButton(
+                    tooltip: 'Retry download',
+                    icon: Icons.refresh_rounded,
+                    size: 38,
+                    iconSize: 17,
+                    onPressed: onRetry,
                   ),
                 if (onCancel != null)
                   WzSculptedIconButton(
