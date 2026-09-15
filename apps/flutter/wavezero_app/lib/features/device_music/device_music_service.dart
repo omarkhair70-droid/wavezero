@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import 'device_music_metadata_overrides.dart';
 import 'device_music_track.dart';
 
 class DeviceMusicPermissionStatus {
@@ -67,17 +68,39 @@ class DeviceMusicScanResult {
       platformSupported: json['platformSupported'] != false,
     );
   }
+
+  DeviceMusicScanResult withTracks(List<DeviceMusicTrack> tracks) {
+    return DeviceMusicScanResult(
+      status: status,
+      tracks: tracks,
+      count: tracks.length,
+      limit: limit,
+      error: error,
+      scannedAtMs: scannedAtMs,
+      platformSupported: platformSupported,
+    );
+  }
 }
 
 class DeviceMusicService {
-  DeviceMusicService({MethodChannel? channel}) : _channel = channel ?? const MethodChannel('wavezero/playback');
+  DeviceMusicService({
+    MethodChannel? channel,
+    WzDeviceMusicMetadataOverridesService? metadataOverrides,
+  })  : _channel = channel ?? const MethodChannel('wavezero/playback'),
+        _metadataOverrides =
+            metadataOverrides ?? const WzDeviceMusicMetadataOverridesService();
 
   final MethodChannel _channel;
+  final WzDeviceMusicMetadataOverridesService _metadataOverrides;
 
   Future<DeviceMusicPermissionStatus> getPermissionStatus() async {
     try {
-      final result = await _channel.invokeMapMethod<Object?, Object?>('getDeviceMusicPermissionStatus');
-      return DeviceMusicPermissionStatus.fromJson(result ?? const <Object?, Object?>{});
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'getDeviceMusicPermissionStatus',
+      );
+      return DeviceMusicPermissionStatus.fromJson(
+        result ?? const <Object?, Object?>{},
+      );
     } on MissingPluginException catch (error) {
       return DeviceMusicPermissionStatus(
         status: 'unsupported',
@@ -94,8 +117,12 @@ class DeviceMusicService {
 
   Future<DeviceMusicPermissionStatus> requestPermission() async {
     try {
-      final result = await _channel.invokeMapMethod<Object?, Object?>('requestDeviceMusicPermission');
-      return DeviceMusicPermissionStatus.fromJson(result ?? const <Object?, Object?>{});
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'requestDeviceMusicPermission',
+      );
+      return DeviceMusicPermissionStatus.fromJson(
+        result ?? const <Object?, Object?>{},
+      );
     } on MissingPluginException catch (error) {
       return DeviceMusicPermissionStatus(
         status: 'unsupported',
@@ -112,8 +139,17 @@ class DeviceMusicService {
 
   Future<DeviceMusicScanResult> scanDeviceAudioLibrary() async {
     try {
-      final result = await _channel.invokeMapMethod<Object?, Object?>('scanDeviceAudioLibrary');
-      return DeviceMusicScanResult.fromJson(result ?? const <Object?, Object?>{});
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'scanDeviceAudioLibrary',
+      );
+      final parsed = DeviceMusicScanResult.fromJson(
+        result ?? const <Object?, Object?>{},
+      );
+      final overrides = await _metadataOverrides.load();
+      if (overrides.isEmpty || parsed.tracks.isEmpty) return parsed;
+      return parsed.withTracks(
+        wzApplyDeviceMusicMetadataOverrides(parsed.tracks, overrides),
+      );
     } on MissingPluginException catch (error) {
       return DeviceMusicScanResult(
         status: 'unsupported',
