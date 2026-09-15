@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../app/curated_demo_picks.dart';
@@ -199,29 +197,30 @@ class WzLibraryCatalogPanel extends StatelessWidget {
                 : 'Nothing is in ${wzLibrarySourceFilterShortLabel(librarySourceFilter)} yet.',
           )
         else ...[
-          SizedBox(
-            height: math.min(610.0, math.max(230.0, tracks.length * 82.0)),
-            child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              itemCount: tracks.length,
-              itemBuilder: (context, index) {
-                final track = tracks[index];
-                return WzLibraryCatalogRow(
-                  track: track,
-                  selected: track.trackId == selectedTrackId,
-                  addDisabled: addToQueueDisabled || (track.source == 'cloud_vault' && track.primaryAsset == null),
-                  onTap: () => onSelectTrack(track),
-                  onAdd: () => onAddToQueue(track),
-                  onToggleLike: () => onToggleLike(track),
-                  onAddToCollection: () => onAddToCollection(track),
-                  liked: isLiked(track),
-                  onCache: isWzDeviceCatalogTrack(track) || isWzCachedCatalogTrack(track) || track.source == 'cloud_vault'
-                      ? null
-                      : () => onCache(track),
-                  onDeleteCached: isWzCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
-                );
-              },
-            ),
+          // The page already owns the vertical scroll. Keeping a second scrollable
+          // list here traps gestures inside Device Music and makes returning to the
+          // Library header feel broken on long libraries.
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: tracks.length,
+            itemBuilder: (context, index) {
+              final track = tracks[index];
+              return WzLibraryCatalogRow(
+                track: track,
+                selected: track.trackId == selectedTrackId,
+                addDisabled: addToQueueDisabled || (track.source == 'cloud_vault' && track.primaryAsset == null),
+                onTap: () => onSelectTrack(track),
+                onAdd: () => onAddToQueue(track),
+                onToggleLike: () => onToggleLike(track),
+                onAddToCollection: () => onAddToCollection(track),
+                liked: isLiked(track),
+                onCache: isWzDeviceCatalogTrack(track) || isWzCachedCatalogTrack(track) || track.source == 'cloud_vault'
+                    ? null
+                    : () => onCache(track),
+                onDeleteCached: isWzCachedCatalogTrack(track) ? () => onDeleteCachedTrack(track) : null,
+              );
+            },
           ),
           if (onLoadMore != null) ...[
             const SizedBox(height: 12),
