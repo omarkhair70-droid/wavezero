@@ -4,7 +4,7 @@ import 'package:wavezero_app/features/search/search_controls.dart';
 import 'package:wavezero_app/features/search/search_page.dart';
 
 void main() {
-  testWidgets('empty Search page keeps filters and discovery shell', (tester) async {
+  testWidgets('empty Search page keeps filters and Web entry', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
     await tester.pumpWidget(
@@ -40,5 +40,8 @@ void main() {
     );
     expect(find.text('Search'), findsWidgets);
     expect(find.text('All'), findsWidgets);
+    expect(find.text('Your music'), findsOneWidget);
+    expect(find.text('Web'), findsOneWidget);
+    expect(find.text('Search Web'), findsOneWidget);
   });
 }
