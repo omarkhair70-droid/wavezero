@@ -47,6 +47,7 @@ import '../design/wavezero_design_system.dart';
 import '../features/device_music/device_music_service.dart';
 import '../features/device_music/device_music_track.dart';
 import '../features/device_music/device_music_projection.dart';
+import '../features/device_music/device_music_recency.dart';
 import '../features/developer/engine_diagnostics_page.dart';
 import '../features/collections/collections_service.dart';
 import '../features/collections/collection_resolution.dart';
@@ -54,6 +55,7 @@ import '../features/collections/collection_mutations.dart';
 import '../features/collections/collections_pages.dart';
 import '../features/home/home_sections.dart';
 import '../features/home/consumer_home.dart';
+import '../features/home/home_device_recency.dart';
 import '../features/history/listening_history_service.dart';
 import '../features/history/history_selection.dart';
 import '../features/history/history_resolution.dart';
@@ -2308,7 +2310,11 @@ class _PlayerScreenState extends State<_PlayerScreen> {
   int _libraryAddedRank(CatalogTrackSummary track) {
     final cached = _cachedMetadataForTrack(track);
     if (cached != null) return cached.cachedAt;
-    if (isWzDeviceCatalogTrack(track)) return _deviceMusicImportedAtMs ?? 0;
+    if (isWzDeviceCatalogTrack(track)) {
+      final deviceTrack = wzFindDeviceTrackById(_deviceMusicTracks, track.trackId);
+      if (deviceTrack != null) return wzDeviceTrackAddedRank(deviceTrack);
+      return _deviceMusicImportedAtMs ?? 0;
+    }
     return 0;
   }
 
@@ -3498,6 +3504,23 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onPlayPause: _playPause,
             controlsDisabled: _playerDisabled,
           ),
+          if (_deviceMusicTracks.isNotEmpty) ...[
+            const SizedBox(height: WzSpacing.xl),
+            WzHomeFreshDeviceSection(
+              tracks: wzFreshDeviceTracks(_deviceMusicTracks, limit: 8),
+              onPlay: (track) => _loadDeviceMusicTrack(track, autoPlay: true),
+              onAddToQueue: (track) => _addToQueue(wzCatalogSummaryFromDeviceTrack(track)),
+              onOpenDeviceMusic: () {
+                setState(() {
+                  _librarySourceFilter = WzLibrarySourceFilter.device;
+                  _visibleTrackCount = _initialVisibleTrackCount;
+                  _invalidateCatalogMemos();
+                });
+                _navigateTo(WzAppTab.library);
+                unawaited(_importDeviceMusic());
+              },
+            ),
+          ],
           const SizedBox(height: WzSpacing.xl),
           WzHomeCuratedDemoSection(
             shelves: _resolvedCuratedShelves,
