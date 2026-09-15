@@ -1,4 +1,5 @@
 name: Play Release
+run-name: Play Release • ${{ inputs.track }} • ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -16,12 +17,6 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    branches:
-      - main
-    paths:
-      - 'apps/flutter/wavezero_app/pubspec.yaml'
-      - '.github/workflows/play-internal-release.yml'
 
 permissions:
   contents: read
@@ -39,7 +34,7 @@ jobs:
       WAVEZERO_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.WAVEZERO_UPLOAD_KEYSTORE_PASSWORD }}
       WAVEZERO_UPLOAD_KEY_PASSWORD: ${{ secrets.WAVEZERO_UPLOAD_KEY_PASSWORD }}
       WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON }}
-      PLAY_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.track || 'alpha' }}
+      PLAY_TRACK: ${{ inputs.track }}
 
     steps:
       - name: Checkout
