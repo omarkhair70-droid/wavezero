@@ -1,0 +1,234 @@
+package com.omarkhair.wavezero
+
+import android.app.Activity
+import android.content.ContentValues
+import android.content.Intent
+import android.media.MediaScannerConnection
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
+import android.provider.OpenableColumns
+import android.util.Patterns
+import android.widget.Toast
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.util.UUID
+
+private const val IMPORT_INBOX_FILE = "wavezero_import_inbox.json"
+private const val IMPORT_INBOX_MAX_ITEMS = 100
+
+class WaveZeroShareActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        if (intent?.action != Intent.ACTION_SEND) {
+            finish()
+            return
+        }
+
+        Thread {
+            val result = runCatching { receiveShare(intent) }
+            runOnUiThread {
+                val message = result.getOrElse { error ->
+                    error.message ?: "WaveZero could not import this item."
+                }
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                openWaveZero()
+                finish()
+            }
+        }.start()
+    }
+
+    private fun receiveShare(intent: Intent): String {
+        val mimeType = intent.type.orEmpty()
+        val stream = sharedStream(intent)
+        if (stream != null && mimeType.startsWith("audio/")) {
+            val imported = importAudio(stream, mimeType)
+            WaveZeroImportInbox.append(
+                context = this,
+                item = JSONObject()
+                    .put("id", UUID.randomUUID().toString())
+                    .put("kind", "audio")
+                    .put("title", imported.displayName)
+                    .put("subtitle", "Shared to WaveZero")
+                    .put("value", imported.uri.toString())
+                    .put("mimeType", mimeType)
+                    .put("createdAtMs", System.currentTimeMillis()),
+            )
+            return "${imported.displayName} added to WaveZero"
+        }
+
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        if (text.isNotEmpty()) {
+            val link = firstHttpUrl(text) ?: text
+            WaveZeroImportInbox.append(
+                context = this,
+                item = JSONObject()
+                    .put("id", UUID.randomUUID().toString())
+                    .put("kind", "link")
+                    .put("title", linkTitle(link))
+                    .put("subtitle", "Shared link")
+                    .put("value", link)
+                    .put("mimeType", "text/plain")
+                    .put("createdAtMs", System.currentTimeMillis()),
+            )
+            return "Saved to WaveZero Inbox"
+        }
+
+        throw IllegalArgumentException("WaveZero can receive audio files and shared links.")
+    }
+
+    private fun importAudio(sourceUri: Uri, mimeType: String): ImportedAudio {
+        val displayName = queryDisplayName(sourceUri)
+            ?.takeIf { it.isNotBlank() }
+            ?: "wavezero-import-${System.currentTimeMillis()}.${extensionForMime(mimeType)}"
+        val safeName = sanitizeFileName(displayName)
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            importAudioWithMediaStore(sourceUri, mimeType, safeName)
+        } else {
+            importAudioLegacy(sourceUri, mimeType, safeName)
+        }
+    }
+
+    private fun importAudioWithMediaStore(sourceUri: Uri, mimeType: String, displayName: String): ImportedAudio {
+        val resolver = contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
+            put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
+            put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/WaveZero/Imports")
+            put(MediaStore.Audio.Media.IS_PENDING, 1)
+        }
+        val targetUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("Android could not create the WaveZero import.")
+
+        try {
+            resolver.openInputStream(sourceUri)?.use { input ->
+                resolver.openOutputStream(targetUri, "w")?.use { output ->
+                    input.copyTo(output)
+                } ?: throw IllegalStateException("WaveZero could not open the destination file.")
+            } ?: throw IllegalStateException("WaveZero could not read the shared audio file.")
+
+            values.clear()
+            values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+            resolver.update(targetUri, values, null, null)
+            return ImportedAudio(targetUri, displayName)
+        } catch (error: Exception) {
+            resolver.delete(targetUri, null, null)
+            throw error
+        }
+    }
+
+    private fun importAudioLegacy(sourceUri: Uri, mimeType: String, displayName: String): ImportedAudio {
+        val root = getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+            ?: throw IllegalStateException("WaveZero could not access device music storage.")
+        val folder = File(root, "WaveZero/Imports").apply { mkdirs() }
+        val target = uniqueFile(folder, displayName)
+        contentResolver.openInputStream(sourceUri)?.use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        } ?: throw IllegalStateException("WaveZero could not read the shared audio file.")
+
+        MediaScannerConnection.scanFile(this, arrayOf(target.absolutePath), arrayOf(mimeType), null)
+        return ImportedAudio(Uri.fromFile(target), target.name)
+    }
+
+    private fun sharedStream(intent: Intent): Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        intent.getParcelableExtra(Intent.EXTRA_STREAM)
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        return contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index < 0 || cursor.isNull(index)) null else cursor.getString(index)
+        }
+    }
+
+    private fun firstHttpUrl(text: String): String? {
+        val matcher = Patterns.WEB_URL.matcher(text)
+        while (matcher.find()) {
+            val raw = matcher.group().orEmpty()
+            val normalized = if (raw.startsWith("http://") || raw.startsWith("https://")) raw else "https://$raw"
+            val uri = runCatching { Uri.parse(normalized) }.getOrNull()
+            if (uri?.scheme in setOf("http", "https") && !uri?.host.isNullOrBlank()) return normalized
+        }
+        return null
+    }
+
+    private fun linkTitle(value: String): String {
+        val uri = runCatching { Uri.parse(value) }.getOrNull()
+        return uri?.host?.removePrefix("www.")?.takeIf { it.isNotBlank() } ?: "Shared to WaveZero"
+    }
+
+    private fun sanitizeFileName(raw: String): String {
+        val clean = raw
+            .replace(Regex("[\\\\/:*?\"<>|]+"), "_")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(180)
+        return clean.ifBlank { "wavezero-import-${System.currentTimeMillis()}.mp3" }
+    }
+
+    private fun extensionForMime(mimeType: String): String = when (mimeType.lowercase()) {
+        "audio/mp4", "audio/x-m4a" -> "m4a"
+        "audio/aac" -> "aac"
+        "audio/flac", "audio/x-flac" -> "flac"
+        "audio/wav", "audio/x-wav" -> "wav"
+        "audio/ogg" -> "ogg"
+        "audio/opus" -> "opus"
+        else -> "mp3"
+    }
+
+    private fun uniqueFile(folder: File, displayName: String): File {
+        val initial = File(folder, displayName)
+        if (!initial.exists()) return initial
+        val dot = displayName.lastIndexOf('.')
+        val stem = if (dot > 0) displayName.substring(0, dot) else displayName
+        val extension = if (dot > 0) displayName.substring(dot) else ""
+        var index = 2
+        while (true) {
+            val candidate = File(folder, "$stem ($index)$extension")
+            if (!candidate.exists()) return candidate
+            index += 1
+        }
+    }
+
+    private fun openWaveZero() {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
+    }
+
+    private data class ImportedAudio(val uri: Uri, val displayName: String)
+}
+
+private object WaveZeroImportInbox {
+    private val lock = Any()
+
+    fun append(context: android.content.Context, item: JSONObject) {
+        synchronized(lock) {
+            val target = File(context.filesDir, IMPORT_INBOX_FILE)
+            val existing = runCatching {
+                if (target.exists()) JSONArray(target.readText()) else JSONArray()
+            }.getOrElse { JSONArray() }
+            val next = JSONArray().put(item)
+            val keep = (existing.length() - (IMPORT_INBOX_MAX_ITEMS - 1)).coerceAtLeast(0)
+            for (index in keep until existing.length()) next.put(existing.get(index))
+
+            val temp = File(context.filesDir, "$IMPORT_INBOX_FILE.tmp")
+            temp.writeText(next.toString())
+            if (!temp.renameTo(target)) {
+                target.writeText(next.toString())
+                temp.delete()
+            }
+        }
+    }
+}
