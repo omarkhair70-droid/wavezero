@@ -129,6 +129,7 @@ class WzLibraryCatalogRow extends StatelessWidget {
     required this.liked,
     required this.onCache,
     required this.onDeleteCached,
+    this.onFixInfo,
   });
 
   final CatalogTrackSummary track;
@@ -141,6 +142,7 @@ class WzLibraryCatalogRow extends StatelessWidget {
   final bool liked;
   final VoidCallback? onCache;
   final VoidCallback? onDeleteCached;
+  final VoidCallback? onFixInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -148,6 +150,7 @@ class WzLibraryCatalogRow extends StatelessWidget {
     final isDevice = isWzDeviceCatalogTrack(track);
     final isCached = isWzCachedCatalogTrack(track);
     final subtitle = track.artistName ?? track.albumName ?? track.subtitle;
+    final hasMoreActions = onFixInfo != null || onDeleteCached != null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 7),
@@ -234,14 +237,36 @@ class WzLibraryCatalogRow extends StatelessWidget {
                 iconSize: 17,
                 onPressed: onCache,
               )
-            else if (onDeleteCached != null)
+            else if (hasMoreActions)
               PopupMenuButton<String>(
                 tooltip: 'More',
                 icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
                 onSelected: (value) {
+                  if (value == 'fix_info') onFixInfo?.call();
                   if (value == 'remove') onDeleteCached?.call();
                 },
-                itemBuilder: (_) => const [PopupMenuItem(value: 'remove', child: Text('Remove download'))],
+                itemBuilder: (_) => [
+                  if (onFixInfo != null)
+                    const PopupMenuItem(
+                      value: 'fix_info',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.edit_note_rounded),
+                        title: Text('Fix track info'),
+                      ),
+                    ),
+                  if (onDeleteCached != null)
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.delete_outline_rounded),
+                        title: Text('Remove download'),
+                      ),
+                    ),
+                ],
               )
             else
               const SizedBox(width: 4),
