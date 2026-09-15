@@ -28,8 +28,6 @@ class WzWaveZeroCoverArt extends StatelessWidget {
     final seed = _stableArtworkSeed(seedText.isEmpty ? 'wavezero' : seedText);
     final palette = _coverColors(seed, mood ?? title ?? 'wavezero');
     final ink = palette.last;
-    final cleanTitle = title?.trim();
-    final cleanArtist = artist?.trim();
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -57,7 +55,9 @@ class WzWaveZeroCoverArt extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.56),
                 borderRadius: BorderRadius.circular(size * 0.07),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.72),
+                ),
               ),
               child: Icon(
                 Icons.graphic_eq_rounded,
@@ -66,44 +66,6 @@ class WzWaveZeroCoverArt extends StatelessWidget {
               ),
             ),
           ),
-          if (!compact)
-            Positioned(
-              left: size * 0.10,
-              right: size * 0.10,
-              bottom: size * 0.10,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (cleanTitle != null && cleanTitle.isNotEmpty)
-                    Text(
-                      cleanTitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: ink.withValues(alpha: 0.90),
-                        fontSize: math.max(13, size * 0.072),
-                        height: 1.04,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.35,
-                      ),
-                    ),
-                  if (cleanArtist != null && cleanArtist.isNotEmpty) ...[
-                    SizedBox(height: size * 0.025),
-                    Text(
-                      cleanArtist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: ink.withValues(alpha: 0.56),
-                        fontSize: math.max(9, size * 0.041),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
         ],
       ),
     );
@@ -183,7 +145,10 @@ class _WaveZeroCoverPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     canvas.drawCircle(
-      Offset(size.width * (0.75 + (seed % 5) * 0.012), size.height * 0.24),
+      Offset(
+        size.width * (0.75 + (seed % 5) * 0.012),
+        size.height * 0.24,
+      ),
       size.width * 0.30,
       wash,
     );
@@ -229,20 +194,59 @@ int _stableArtworkSeed(String value) {
 
 List<Color> _coverColors(int seed, String hint) {
   final normalized = hint.toLowerCase();
-  if (normalized.contains('folk') || normalized.contains('acoustic') || normalized.contains('calm')) {
-    return const [Color(0xFFF8F3E9), Color(0xFFECE4D2), Color(0xFFD6E2D7), Color(0xFF26362E)];
+  if (normalized.contains('folk') ||
+      normalized.contains('acoustic') ||
+      normalized.contains('calm')) {
+    return const [
+      Color(0xFFF8F3E9),
+      Color(0xFFECE4D2),
+      Color(0xFFD6E2D7),
+      Color(0xFF26362E),
+    ];
   }
   if (normalized.contains('hip') || normalized.contains('beat')) {
-    return const [Color(0xFFF6F0FF), Color(0xFFE6DDF8), Color(0xFFF5DDE5), Color(0xFF332B46)];
+    return const [
+      Color(0xFFF6F0FF),
+      Color(0xFFE6DDF8),
+      Color(0xFFF5DDE5),
+      Color(0xFF332B46),
+    ];
   }
-  if (normalized.contains('ambient') || normalized.contains('focus') || normalized.contains('instrumental')) {
-    return const [Color(0xFFF0F8FC), Color(0xFFDDECF4), Color(0xFFE8F0FA), Color(0xFF203744)];
+  if (normalized.contains('ambient') ||
+      normalized.contains('focus') ||
+      normalized.contains('instrumental')) {
+    return const [
+      Color(0xFFF0F8FC),
+      Color(0xFFDDECF4),
+      Color(0xFFE8F0FA),
+      Color(0xFF203744),
+    ];
   }
   final palettes = const <List<Color>>[
-    [Color(0xFFF7F4FF), Color(0xFFECE7FA), Color(0xFFF4EEF8), Color(0xFF342E45)],
-    [Color(0xFFF0F8FC), Color(0xFFDCECF4), Color(0xFFEEF5F8), Color(0xFF243B48)],
-    [Color(0xFFFFF5EF), Color(0xFFF8E4D9), Color(0xFFF7EEE8), Color(0xFF4A342D)],
-    [Color(0xFFF1F8F4), Color(0xFFDDEEE5), Color(0xFFF0F6F2), Color(0xFF294038)],
+    [
+      Color(0xFFF7F4FF),
+      Color(0xFFECE7FA),
+      Color(0xFFF4EEF8),
+      Color(0xFF342E45),
+    ],
+    [
+      Color(0xFFF0F8FC),
+      Color(0xFFDCECF4),
+      Color(0xFFEEF5F8),
+      Color(0xFF243B48),
+    ],
+    [
+      Color(0xFFFFF5EF),
+      Color(0xFFF8E4D9),
+      Color(0xFFF7EEE8),
+      Color(0xFF4A342D),
+    ],
+    [
+      Color(0xFFF1F8F4),
+      Color(0xFFDDEEE5),
+      Color(0xFFF0F6F2),
+      Color(0xFF294038),
+    ],
   ];
   return palettes[seed % palettes.length];
 }
