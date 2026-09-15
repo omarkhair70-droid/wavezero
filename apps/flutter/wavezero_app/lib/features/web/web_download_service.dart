@@ -43,16 +43,16 @@ class WzWebDownloadTask {
 }
 
 class WzWebDownloadService {
-  WzWebDownloadService({MethodChannel? channel}) : _channel = channel ?? const MethodChannel('wavezero/playback');
+  const WzWebDownloadService(this._channel);
 
   final MethodChannel _channel;
 
   Future<WzWebDownloadTask> query(int id) async {
-    final raw = await _channel.invokeMapMethod<Object?, Object?>('queryWebDownload', {'id': id});
+    final raw = await _channel.invokeMapMethod<Object?, Object?>('queryDownload', {'id': id});
     return WzWebDownloadTask.fromMap(raw ?? <Object?, Object?>{'id': id, 'status': 'missing'});
   }
 
   Future<void> cancel(int id) async {
-    await _channel.invokeMethod<void>('cancelWebDownload', {'id': id});
+    await _channel.invokeMethod<void>('cancelDownload', {'id': id});
   }
 }
