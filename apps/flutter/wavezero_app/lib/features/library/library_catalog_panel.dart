@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../app/curated_demo_picks.dart';
@@ -107,102 +105,128 @@ class WzLibraryCatalogPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasQuery = searchController.text.trim().isNotEmpty;
     final countLabel = filteredTrackCount == 1 ? '1 track' : '$filteredTrackCount tracks';
+    final deviceViewActive = librarySourceFilter == WzLibrarySourceFilter.device;
+    final deviceAutoRefreshReady =
+        devicePermissionStatus == 'granted' &&
+        !refreshDisabled &&
+        !loading &&
+        deviceScanStatus != 'scanning';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        WzLibrarySourceOverview(
-          apiTrackCount: apiTrackCount,
-          deviceTrackCount: deviceTrackCount,
-          cachedTrackCount: cachedTrackCount,
-          cloudTrackCount: cloudTrackCount,
-          combinedTrackCount: combinedTrackCount,
-          cacheBytes: cacheBytes,
-          status: status,
-          loading: loading,
-          refreshDisabled: refreshDisabled,
-          librarySourceFilter: librarySourceFilter,
-          devicePermissionStatus: devicePermissionStatus,
-          deviceScanStatus: deviceScanStatus,
-          deviceLastError: deviceLastError,
-          onSourceFilterChanged: onSourceFilterChanged,
-          onRefresh: onRefresh,
-          onImportDeviceMusic: onImportDeviceMusic,
-          onOpenCollections: onOpenCollections,
-          onOpenFullSearch: onOpenFullSearch,
-          onOpenCloudVault: onOpenCloudVault,
-          showCloudSource: showCloudSource,
-        ),
-        const SizedBox(height: 24),
-        WzGlassCard(
-          borderRadius: 32,
-          padding: const EdgeInsets.fromLTRB(13, 11, 8, 11),
-          child: Row(
-            children: [
-              const Icon(Icons.search_rounded, size: 20, color: WzColors.textMuted),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search your music',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    filled: false,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    suffixIcon: hasQuery
-                        ? IconButton(
-                            tooltip: 'Clear search',
-                            onPressed: onClearSearch,
-                            icon: const Icon(Icons.close_rounded, size: 18),
-                          )
-                        : null,
+    return _DeviceMusicEntryRefresh(
+      active: deviceViewActive,
+      ready: deviceAutoRefreshReady,
+      onRefresh: onImportDeviceMusic,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          WzLibrarySourceOverview(
+            apiTrackCount: apiTrackCount,
+            deviceTrackCount: deviceTrackCount,
+            cachedTrackCount: cachedTrackCount,
+            cloudTrackCount: cloudTrackCount,
+            combinedTrackCount: combinedTrackCount,
+            cacheBytes: cacheBytes,
+            status: status,
+            loading: loading,
+            refreshDisabled: refreshDisabled,
+            librarySourceFilter: librarySourceFilter,
+            devicePermissionStatus: devicePermissionStatus,
+            deviceScanStatus: deviceScanStatus,
+            deviceLastError: deviceLastError,
+            onSourceFilterChanged: onSourceFilterChanged,
+            onRefresh: onRefresh,
+            onImportDeviceMusic: onImportDeviceMusic,
+            onOpenCollections: onOpenCollections,
+            onOpenFullSearch: onOpenFullSearch,
+            onOpenCloudVault: onOpenCloudVault,
+            showCloudSource: showCloudSource,
+          ),
+          const SizedBox(height: 24),
+          WzGlassCard(
+            borderRadius: 32,
+            padding: const EdgeInsets.fromLTRB(13, 11, 8, 11),
+            child: Row(
+              children: [
+                const Icon(Icons.search_rounded, size: 20, color: WzColors.textMuted),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search your music',
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: false,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                      suffixIcon: hasQuery
+                          ? IconButton(
+                              tooltip: 'Clear search',
+                              onPressed: onClearSearch,
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                            )
+                          : null,
+                    ),
                   ),
                 ),
+                PopupMenuButton<WzLibrarySortMode>(
+                  tooltip: 'Sort Library',
+                  icon: const Icon(Icons.swap_vert_rounded, color: WzColors.textMuted),
+                  onSelected: onSortModeChanged,
+                  itemBuilder: (_) => WzLibrarySortMode.values
+                      .map((mode) => PopupMenuItem(value: mode, child: Text(mode.label)))
+                      .toList(growable: false),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  librarySourceFilter == WzLibrarySourceFilter.all ? 'Your music' : wzLibrarySourceFilterShortLabel(librarySourceFilter),
+                  style: WzText.title,
+                ),
               ),
-              PopupMenuButton<WzLibrarySortMode>(
-                tooltip: 'Sort Library',
-                icon: const Icon(Icons.swap_vert_rounded, color: WzColors.textMuted),
-                onSelected: onSortModeChanged,
-                itemBuilder: (_) => WzLibrarySortMode.values
-                    .map((mode) => PopupMenuItem(value: mode, child: Text(mode.label)))
-                    .toList(growable: false),
-              ),
+              Text(countLabel, style: WzText.caption),
             ],
           ),
-        ),
-        const SizedBox(height: 22),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                librarySourceFilter == WzLibrarySourceFilter.all ? 'Your music' : wzLibrarySourceFilterShortLabel(librarySourceFilter),
-                style: WzText.title,
-              ),
+          if (deviceViewActive && devicePermissionStatus == 'granted') ...[
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                const Icon(Icons.sync_rounded, size: 14, color: WzColors.accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    loading || deviceScanStatus == 'scanning'
+                        ? 'Checking this device for new music…'
+                        : 'Device Music refreshes when you open it.',
+                    style: WzText.caption,
+                  ),
+                ),
+              ],
             ),
-            Text(countLabel, style: WzText.caption),
           ],
-        ),
-        const SizedBox(height: 12),
-        if (totalTrackCount == 0)
-          WzEmptyCatalogMessage(
-            message: offlineMode
-                ? 'Nothing is saved offline yet.'
-                : 'Your Library is quiet. Add Device Music or come back when your online music is available.',
-          )
-        else if (tracks.isEmpty)
-          WzEmptyCatalogMessage(
-            message: hasQuery
-                ? 'Nothing matches this search.'
-                : 'Nothing is in ${wzLibrarySourceFilterShortLabel(librarySourceFilter)} yet.',
-          )
-        else ...[
-          SizedBox(
-            height: math.min(610.0, math.max(230.0, tracks.length * 82.0)),
-            child: ListView.builder(
-              physics: const BouncingScrollPhysics(),
+          const SizedBox(height: 12),
+          if (totalTrackCount == 0)
+            WzEmptyCatalogMessage(
+              message: offlineMode
+                  ? 'Nothing is saved offline yet.'
+                  : 'Your Library is quiet. Add Device Music or come back when your online music is available.',
+            )
+          else if (tracks.isEmpty)
+            WzEmptyCatalogMessage(
+              message: hasQuery
+                  ? 'Nothing matches this search.'
+                  : 'Nothing is in ${wzLibrarySourceFilterShortLabel(librarySourceFilter)} yet.',
+            )
+          else ...[
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: tracks.length,
               itemBuilder: (context, index) {
                 final track = tracks[index];
@@ -222,19 +246,74 @@ class WzLibraryCatalogPanel extends StatelessWidget {
                 );
               },
             ),
-          ),
-          if (onLoadMore != null) ...[
-            const SizedBox(height: 12),
-            Center(
-              child: TextButton.icon(
-                onPressed: onLoadMore,
-                icon: const Icon(Icons.expand_more_rounded),
-                label: const Text('Show more'),
+            if (onLoadMore != null) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton.icon(
+                  onPressed: onLoadMore,
+                  icon: const Icon(Icons.expand_more_rounded),
+                  label: const Text('Show more'),
+                ),
               ),
-            ),
+            ],
           ],
         ],
-      ],
+      ),
     );
   }
+}
+
+class _DeviceMusicEntryRefresh extends StatefulWidget {
+  const _DeviceMusicEntryRefresh({
+    required this.active,
+    required this.ready,
+    required this.onRefresh,
+    required this.child,
+  });
+
+  final bool active;
+  final bool ready;
+  final VoidCallback onRefresh;
+  final Widget child;
+
+  @override
+  State<_DeviceMusicEntryRefresh> createState() => _DeviceMusicEntryRefreshState();
+}
+
+class _DeviceMusicEntryRefreshState extends State<_DeviceMusicEntryRefresh> {
+  bool _refreshScheduledForCurrentEntry = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _scheduleRefreshWhenReady();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeviceMusicEntryRefresh oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.active) {
+      _refreshScheduledForCurrentEntry = false;
+      return;
+    }
+    if (!oldWidget.active && widget.active) {
+      _refreshScheduledForCurrentEntry = false;
+    }
+    _scheduleRefreshWhenReady();
+  }
+
+  void _scheduleRefreshWhenReady() {
+    if (!widget.active || !widget.ready || _refreshScheduledForCurrentEntry) return;
+    _refreshScheduledForCurrentEntry = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.active || !widget.ready) {
+        _refreshScheduledForCurrentEntry = false;
+        return;
+      }
+      widget.onRefresh();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
