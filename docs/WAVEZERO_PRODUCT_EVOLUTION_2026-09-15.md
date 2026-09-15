@@ -18,6 +18,16 @@ Priority: NOW.
 - Fresh on your device shelf is driven from real import/MediaStore timestamps.
 - Avoid automatic destructive duplicate removal.
 
+### Lane 1.5 — Local media to audio
+
+After the Inbox flow is stable, allow the user to share/select a local video file and extract its audio on-device into WaveZero. This is a local file utility, not a website ripper.
+
+- `Share local video -> WaveZero -> Extract audio`.
+- MP4/MOV/MKV/WebM and other practical input formats where the Android/native conversion stack supports them.
+- Save the result as M4A/MP3 or another explicit user-selected audio format.
+- No upload to a WaveZero server is required.
+- Keep this path separate from social-site URL handling: a local file supplied by the user can be converted; a restricted third-party streaming URL is not silently ripped.
+
 ## Lane 2 — Library Intelligence
 
 - Folder browsing.
@@ -54,7 +64,7 @@ The current effect presets are product/state foundations and must not be present
 
 ## Distribution / policy boundary
 
-Google Play currently allows many generic browser/media downloader apps. The product boundary is therefore not “no downloading”. WaveZero may support ordinary user-directed downloads and imports where the content is downloadable and the user has the right to save it.
+Google Play currently allows many generic browser/media downloader and local media-converter apps. The product boundary is therefore not “no downloading” or “no audio extraction”. WaveZero may support ordinary user-directed downloads, imports and local file conversion where the content is downloadable and the user has the right to save or transform it.
 
 Do not ship platform-specific circumvention or extraction whose purpose is to defeat a service's restrictions. In particular, the Play build must not present or implement YouTube-to-MP3 / YouTube offline extraction. YouTube's current terms and developer policies prohibit downloading content except when the service expressly permits it, and explicitly prohibit separating audio/video components in API clients.
 
