@@ -30,6 +30,31 @@ class WaveZeroWebViewFactory(
     init {
         MethodChannel(messenger, WAVEZERO_WEB_DOWNLOAD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
+                "enqueueDirectAudio" -> {
+                    val url = call.argument<String>("url")?.trim().orEmpty()
+                    if (!WaveZeroWebDownloads.isHttpUrl(url)) {
+                        result.error("invalid_url", "enqueueDirectAudio requires an http/https URL", null)
+                    } else {
+                        try {
+                            result.success(
+                                WaveZeroWebDownloads.enqueue(
+                                    context = context,
+                                    url = url,
+                                    userAgent = WebSettings.getDefaultUserAgent(context),
+                                    contentDisposition = null,
+                                    mimeType = null,
+                                    referer = null,
+                                ),
+                            )
+                        } catch (error: Exception) {
+                            result.error(
+                                "download_unavailable",
+                                error.message ?: "WaveZero could not start this audio download.",
+                                null,
+                            )
+                        }
+                    }
+                }
                 "queryDownload" -> {
                     val id = (call.argument<Number>("id"))?.toLong()
                     if (id == null) {
