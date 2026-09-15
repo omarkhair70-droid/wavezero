@@ -16,7 +16,7 @@ class WzConsumerHomeHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        constraints: const BoxConstraints(minHeight: 250),
+        constraints: const BoxConstraints(minHeight: 148),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
@@ -25,15 +25,15 @@ class WzConsumerHomeHero extends StatelessWidget {
             stops: [0.0, 0.58, 1.0],
           ),
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(44),
-            topRight: Radius.circular(76),
-            bottomLeft: Radius.circular(66),
-            bottomRight: Radius.circular(38),
+            topLeft: Radius.circular(38),
+            topRight: Radius.circular(60),
+            bottomLeft: Radius.circular(54),
+            bottomRight: Radius.circular(32),
           ),
           border: Border.all(color: const Color(0xF2FFFFFF), width: 1.2),
           boxShadow: const [
-            BoxShadow(color: Color(0x130D2A40), blurRadius: 38, offset: Offset(0, 17)),
-            BoxShadow(color: Color(0xDFFFFFFF), blurRadius: 12, offset: Offset(-4, -5)),
+            BoxShadow(color: Color(0x100D2A40), blurRadius: 30, offset: Offset(0, 13)),
+            BoxShadow(color: Color(0xDFFFFFFF), blurRadius: 10, offset: Offset(-3, -4)),
           ],
         ),
         clipBehavior: Clip.antiAlias,
@@ -41,54 +41,57 @@ class WzConsumerHomeHero extends StatelessWidget {
           children: [
             Positioned.fill(child: CustomPaint(painter: _HomeRibbonPainter(accent: themeConfig.accent))),
             Positioned(
-              right: -34,
-              top: -24,
+              right: -22,
+              top: -30,
               child: Container(
-                width: 200,
-                height: 200,
+                width: 142,
+                height: 142,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [themeConfig.accent.withValues(alpha: 0.15), themeConfig.accent.withValues(alpha: 0.0)],
+                    colors: [themeConfig.accent.withValues(alpha: 0.14), themeConfig.accent.withValues(alpha: 0.0)],
                   ),
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(26, 28, 26, 30),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 380),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('WaveZero', style: WzText.eyebrow.copyWith(color: themeConfig.accent)),
-                    const SizedBox(height: 16),
-                    Text(
-                      'The voice is close.\nThe music is with you.',
-                      style: WzText.display.copyWith(fontSize: 38, height: 1.05, fontWeight: FontWeight.w700),
+              padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('WaveZero', style: WzText.eyebrow.copyWith(color: themeConfig.accent)),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Your music, close.',
+                          style: WzText.display.copyWith(fontSize: 28, height: 1.02, fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          'موسيقاك معاك.',
+                          textDirection: TextDirection.rtl,
+                          style: WzText.body.copyWith(fontSize: 14, color: WzColors.textMuted),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 18),
-                    Text(
-                      'الصوت قريب منك. الموسيقى معاك.',
-                      textDirection: TextDirection.rtl,
-                      style: WzText.body.copyWith(fontSize: 15, color: WzColors.textMuted),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xDFFFFFFF),
+                      border: Border.all(color: const Color(0xFFFFFFFF)),
+                      boxShadow: WzSurface.softShadows,
                     ),
-                    const SizedBox(height: 24),
-                    Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xDFFFFFFF),
-                        border: Border.all(color: const Color(0xFFFFFFFF)),
-                        boxShadow: WzSurface.softShadows,
-                      ),
-                      alignment: Alignment.center,
-                      child: Icon(Icons.graphic_eq_rounded, color: themeConfig.accent, size: 25),
-                    ),
-                  ],
-                ),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.graphic_eq_rounded, color: themeConfig.accent, size: 23),
+                  ),
+                ],
               ),
             ),
           ],
