@@ -4,11 +4,13 @@ import 'package:wavezero_app/features/library/library_catalog_panel.dart';
 import 'package:wavezero_app/features/library/library_controls.dart';
 
 void main() {
-  testWidgets('empty Library catalog panel keeps a human recovery path', (tester) async {
-    final searchController = TextEditingController();
-    addTearDown(searchController.dispose);
-
-    await tester.pumpWidget(
+  Widget panel({
+    required TextEditingController searchController,
+    WzLibrarySourceFilter filter = WzLibrarySourceFilter.all,
+    String permission = 'unknown',
+    int deviceTrackCount = 0,
+    VoidCallback? onImportDeviceMusic,
+  }) =>
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
@@ -16,10 +18,10 @@ void main() {
               tracks: const [],
               totalTrackCount: 0,
               apiTrackCount: 0,
-              deviceTrackCount: 0,
+              deviceTrackCount: deviceTrackCount,
               cachedTrackCount: 0,
               cloudTrackCount: 0,
-              combinedTrackCount: 0,
+              combinedTrackCount: deviceTrackCount,
               visibleTrackCount: 0,
               filteredTrackCount: 0,
               catalogLimit: 200,
@@ -33,10 +35,10 @@ void main() {
               refreshDisabled: false,
               addToQueueDisabled: false,
               searchController: searchController,
-              librarySourceFilter: WzLibrarySourceFilter.all,
+              librarySourceFilter: filter,
               librarySortMode: WzLibrarySortMode.recentlyAdded,
-              devicePermissionStatus: 'unknown',
-              deviceScanStatus: 'Not scanned',
+              devicePermissionStatus: permission,
+              deviceScanStatus: 'success',
               deviceLastError: null,
               onSourceFilterChanged: (_) {},
               onSortModeChanged: (_) {},
@@ -44,7 +46,7 @@ void main() {
               onOpenFullSearch: () {},
               onOpenCloudVault: () {},
               onRefresh: () {},
-              onImportDeviceMusic: () {},
+              onImportDeviceMusic: onImportDeviceMusic ?? () {},
               onSelectTrack: (_) {},
               onPlayCuratedPick: (_) {},
               onAddToQueue: (_) {},
@@ -57,11 +59,36 @@ void main() {
             ),
           ),
         ),
-      ),
-    );
+      );
+
+  testWidgets('empty Library catalog panel keeps a human recovery path', (tester) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+
+    await tester.pumpWidget(panel(searchController: searchController));
 
     expect(find.text('Library'), findsOneWidget);
     expect(find.text('Your Library is quiet. Add Device Music or come back when your online music is available.'), findsOneWidget);
     expect(find.byTooltip('Sort Library'), findsOneWidget);
+  });
+
+  testWidgets('opening Device Music with permission refreshes it automatically', (tester) async {
+    final searchController = TextEditingController();
+    addTearDown(searchController.dispose);
+    var scans = 0;
+
+    await tester.pumpWidget(
+      panel(
+        searchController: searchController,
+        filter: WzLibrarySourceFilter.device,
+        permission: 'granted',
+        deviceTrackCount: 3,
+        onImportDeviceMusic: () => scans += 1,
+      ),
+    );
+    await tester.pump();
+
+    expect(scans, 1);
+    expect(find.text('Device Music refreshes when you open it.'), findsOneWidget);
   });
 }
