@@ -2,6 +2,7 @@ package com.omarkhair.wavezero
 
 import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.webkit.CookieManager
@@ -138,6 +139,7 @@ private class WaveZeroNativeWebView(
                     "pageFinished",
                     mapOf(
                         "url" to url.orEmpty(),
+                        "title" to webView.title.orEmpty(),
                         "canGoBack" to webView.canGoBack(),
                         "canGoForward" to webView.canGoForward(),
                     ),
@@ -212,6 +214,36 @@ private class WaveZeroNativeWebView(
             "reload" -> {
                 webView.reload()
                 result.success(null)
+            }
+            "openExternal" -> {
+                val url = call.argument<String>("url")?.trim().orEmpty()
+                if (!WaveZeroWebDownloads.isHttpUrl(url)) {
+                    result.error("invalid_url", "openExternal requires an http/https URL", null)
+                    return
+                }
+                try {
+                    webView.context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    result.success(null)
+                } catch (error: Exception) {
+                    result.error("open_failed", error.message ?: "Could not open this page outside WaveZero.", null)
+                }
+            }
+            "shareUrl" -> {
+                val url = call.argument<String>("url")?.trim().orEmpty()
+                if (!WaveZeroWebDownloads.isHttpUrl(url)) {
+                    result.error("invalid_url", "shareUrl requires an http/https URL", null)
+                    return
+                }
+                try {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, url)
+                    }
+                    webView.context.startActivity(Intent.createChooser(shareIntent, "Share link"))
+                    result.success(null)
+                } catch (error: Exception) {
+                    result.error("share_failed", error.message ?: "Could not share this page.", null)
+                }
             }
             else -> result.notImplemented()
         }
