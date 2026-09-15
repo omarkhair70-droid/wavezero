@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../design/wavezero_design_system.dart';
 import '../device_music/device_music_service.dart';
 import 'web_download_service.dart';
+import 'web_library_service.dart';
 
 String wzResolveWebLocation(String input) {
   final value = input.trim();
@@ -16,6 +17,31 @@ String wzResolveWebLocation(String input) {
     return parsed.toString();
   }
   return Uri.https('www.google.com', '/search', {'q': value}).toString();
+}
+
+String wzFormatWebTransferBytes(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  final kb = bytes / 1024;
+  if (kb < 1024) return '${kb.toStringAsFixed(kb >= 100 ? 0 : 1)} KB';
+  final mb = kb / 1024;
+  return '${mb.toStringAsFixed(mb >= 100 ? 0 : 1)} MB';
+}
+
+String wzFormatWebTransferRate(double bytesPerSecond) {
+  if (bytesPerSecond <= 0) return '';
+  return '${wzFormatWebTransferBytes(bytesPerSecond.round())}/s';
+}
+
+String wzFormatWebTransferEta({
+  required int downloadedBytes,
+  required int totalBytes,
+  required double bytesPerSecond,
+}) {
+  if (bytesPerSecond <= 0 || totalBytes <= downloadedBytes || totalBytes <= 0) return '';
+  final seconds = ((totalBytes - downloadedBytes) / bytesPerSecond).ceil();
+  if (seconds < 60) return '~${seconds}s left';
+  final minutes = (seconds / 60).ceil();
+  return '~${minutes}m left';
 }
 
 class WzWebBrowserPage extends StatefulWidget {
@@ -30,16 +56,22 @@ class WzWebBrowserPage extends StatefulWidget {
 class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
   final WzWebDownloadService _downloadService = WzWebDownloadService();
   final DeviceMusicService _deviceMusicService = DeviceMusicService();
+  final WzWebLibraryService _webLibraryService = const WzWebLibraryService();
   late final TextEditingController _addressController;
 
   MethodChannel? _webChannel;
   Timer? _downloadPoller;
   WzWebDownloadTask? _download;
+  WzWebLibraryState _webLibrary = const WzWebLibraryState();
   String _currentUrl = '';
+  String _pageTitle = '';
   int _progress = 0;
   bool _canGoBack = false;
   bool _canGoForward = false;
   String? _pageError;
+  int? _lastDownloadSampleBytes;
+  DateTime? _lastDownloadSampleAt;
+  double? _downloadBytesPerSecond;
 
   @override
   void initState() {
@@ -48,6 +80,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
     _addressController = TextEditingController(
       text: widget.initialQuery.trim().isEmpty ? _currentUrl : widget.initialQuery.trim(),
     );
+    unawaited(_loadWebLibrary());
   }
 
   @override
@@ -56,6 +89,12 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
     _webChannel?.setMethodCallHandler(null);
     _addressController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadWebLibrary() async {
+    final state = await _webLibraryService.load();
+    if (!mounted) return;
+    setState(() => _webLibrary = state);
   }
 
   void _onWebViewCreated(int id) {
@@ -79,13 +118,17 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
         break;
       case 'pageFinished':
         if (!mounted) break;
+        final url = args['url']?.toString() ?? _currentUrl;
+        final title = args['title']?.toString().trim() ?? '';
         setState(() {
-          _currentUrl = args['url']?.toString() ?? _currentUrl;
+          _currentUrl = url;
+          _pageTitle = title;
           _addressController.text = _currentUrl;
           _canGoBack = args['canGoBack'] == true;
           _canGoForward = args['canGoForward'] == true;
           _progress = 100;
         });
+        unawaited(_recordVisit(url: url, title: title));
         break;
       case 'progress':
         if (!mounted) break;
@@ -95,7 +138,12 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
       case 'downloadStarted':
         final task = WzWebDownloadTask.fromMap(args);
         if (!mounted) break;
-        setState(() => _download = task);
+        setState(() {
+          _download = task;
+          _lastDownloadSampleBytes = task.downloadedBytes;
+          _lastDownloadSampleAt = DateTime.now();
+          _downloadBytesPerSecond = null;
+        });
         _startDownloadPolling(task.id);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Downloading ${task.fileName} to Music/WaveZero')),
@@ -115,12 +163,25 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
     return null;
   }
 
+  Future<void> _recordVisit({required String url, required String title}) async {
+    final next = _webLibrary.recordVisit(
+      url: url,
+      title: title,
+      visitedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    if (identical(next, _webLibrary)) return;
+    _webLibrary = next;
+    await _webLibraryService.save(next);
+    if (mounted) setState(() {});
+  }
+
   void _startDownloadPolling(int id) {
     _downloadPoller?.cancel();
-    _downloadPoller = Timer.periodic(const Duration(milliseconds: 800), (_) async {
+    _downloadPoller = Timer.periodic(const Duration(milliseconds: 700), (_) async {
       try {
         final task = await _downloadService.query(id);
         if (!mounted) return;
+        _updateDownloadRate(task);
         setState(() => _download = task);
         if (!task.isTerminal) return;
         _downloadPoller?.cancel();
@@ -131,20 +192,42 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
           );
         }
       } catch (_) {
-        // Android's DownloadManager remains the source of truth. A transient
+        // Android DownloadManager remains the source of truth. A transient
         // polling failure should not cancel a download already in progress.
       }
     });
   }
 
+  void _updateDownloadRate(WzWebDownloadTask task) {
+    final now = DateTime.now();
+    final previousBytes = _lastDownloadSampleBytes;
+    final previousAt = _lastDownloadSampleAt;
+    if (previousBytes != null && previousAt != null && task.downloadedBytes >= previousBytes) {
+      final seconds = now.difference(previousAt).inMilliseconds / 1000;
+      final delta = task.downloadedBytes - previousBytes;
+      if (seconds > 0 && delta > 0) {
+        final instant = delta / seconds;
+        _downloadBytesPerSecond = _downloadBytesPerSecond == null
+            ? instant
+            : (_downloadBytesPerSecond! * .6) + (instant * .4);
+      }
+    }
+    _lastDownloadSampleBytes = task.downloadedBytes;
+    _lastDownloadSampleAt = now;
+  }
+
   Future<void> _loadAddress() async {
     final url = wzResolveWebLocation(_addressController.text);
+    await _loadLocation(url);
+  }
+
+  Future<void> _loadLocation(String url) async {
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
-      _currentUrl = url;
+      _currentUrl = wzResolveWebLocation(url);
       _pageError = null;
     });
-    await _webChannel?.invokeMethod<void>('loadUrl', {'url': url});
+    await _webChannel?.invokeMethod<void>('loadUrl', {'url': _currentUrl});
   }
 
   Future<void> _goBack() async {
@@ -157,6 +240,94 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
 
   Future<void> _reload() async {
     await _webChannel?.invokeMethod<void>('reload');
+  }
+
+  Future<void> _toggleBookmark() async {
+    final next = _webLibrary.toggleBookmark(
+      url: _currentUrl,
+      title: _pageTitle,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _webLibraryService.save(next);
+    if (!mounted) return;
+    setState(() => _webLibrary = next);
+  }
+
+  Future<void> _clearHistory() async {
+    final next = _webLibrary.clearHistory();
+    await _webLibraryService.save(next);
+    if (!mounted) return;
+    setState(() => _webLibrary = next);
+  }
+
+  Future<void> _openExternal() async {
+    await _webChannel?.invokeMethod<void>('openExternal', {'url': _currentUrl});
+  }
+
+  Future<void> _shareCurrent() async {
+    await _webChannel?.invokeMethod<void>('shareUrl', {'url': _currentUrl});
+  }
+
+  Future<void> _openSavedAndRecent() async {
+    final selectedUrl = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: WzColors.canvas,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .76,
+        child: DefaultTabController(
+          length: 2,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 10, 8),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('Web library', style: WzText.title.copyWith(fontSize: 19))),
+                    TextButton(
+                      onPressed: _webLibrary.history.isEmpty
+                          ? null
+                          : () async {
+                              await _clearHistory();
+                              if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                            },
+                      child: const Text('Clear history'),
+                    ),
+                  ],
+                ),
+              ),
+              const TabBar(
+                tabs: [
+                  Tab(text: 'Saved'),
+                  Tab(text: 'Recent'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _WebPageList(
+                      pages: _webLibrary.bookmarks,
+                      emptyLabel: 'No saved pages yet.',
+                      onOpen: (url) => Navigator.of(sheetContext).pop(url),
+                    ),
+                    _WebPageList(
+                      pages: _webLibrary.history,
+                      emptyLabel: 'No browsing history yet.',
+                      onOpen: (url) => Navigator.of(sheetContext).pop(url),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selectedUrl == null) return;
+    _addressController.text = selectedUrl;
+    await _loadLocation(selectedUrl);
   }
 
   Future<void> _cancelDownload() async {
@@ -173,12 +344,14 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
         downloadedBytes: task.downloadedBytes,
         totalBytes: task.totalBytes,
       );
+      _downloadBytesPerSecond = null;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final download = _download;
+    final bookmarked = _webLibrary.isBookmarked(_currentUrl);
     return Scaffold(
       backgroundColor: WzColors.canvas,
       body: SafeArea(
@@ -194,7 +367,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+              padding: const EdgeInsets.fromLTRB(14, 0, 10, 8),
               child: Row(
                 children: [
                   WzSculptedIconButton(
@@ -204,7 +377,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
                     iconSize: 20,
                     onPressed: _canGoBack ? _goBack : null,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 7),
                   WzSculptedIconButton(
                     icon: Icons.arrow_forward_rounded,
                     tooltip: 'Forward',
@@ -212,7 +385,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
                     iconSize: 20,
                     onPressed: _canGoForward ? _goForward : null,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 7),
                   WzSculptedIconButton(
                     icon: Icons.refresh_rounded,
                     tooltip: 'Refresh',
@@ -221,7 +394,34 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
                     onPressed: _reload,
                   ),
                   const Spacer(),
-                  Text('Web', style: WzText.eyebrow),
+                  WzSculptedIconButton(
+                    icon: bookmarked ? Icons.star_rounded : Icons.star_border_rounded,
+                    tooltip: bookmarked ? 'Remove bookmark' : 'Save page',
+                    selected: bookmarked,
+                    size: 42,
+                    iconSize: 19,
+                    onPressed: _toggleBookmark,
+                  ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    tooltip: 'Web options',
+                    icon: const Icon(Icons.more_horiz_rounded, color: WzColors.textMuted),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'library':
+                          unawaited(_openSavedAndRecent());
+                        case 'external':
+                          unawaited(_openExternal());
+                        case 'share':
+                          unawaited(_shareCurrent());
+                      }
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'library', child: Text('Saved & recent')),
+                      PopupMenuItem(value: 'external', child: Text('Open in browser')),
+                      PopupMenuItem(value: 'share', child: Text('Share link')),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -248,6 +448,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
             if (download != null)
               _DownloadStrip(
                 task: download,
+                bytesPerSecond: _downloadBytesPerSecond,
                 onCancel: download.isTerminal ? null : _cancelDownload,
                 onClose: download.isTerminal ? () => setState(() => _download = null) : null,
               ),
@@ -328,10 +529,51 @@ class _AddressBar extends StatelessWidget {
       );
 }
 
+class _WebPageList extends StatelessWidget {
+  const _WebPageList({
+    required this.pages,
+    required this.emptyLabel,
+    required this.onOpen,
+  });
+
+  final List<WzWebPageRecord> pages;
+  final String emptyLabel;
+  final ValueChanged<String> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    if (pages.isEmpty) return Center(child: Text(emptyLabel, style: WzText.caption));
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
+      itemCount: pages.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 7),
+      itemBuilder: (context, index) {
+        final page = pages[index];
+        final host = Uri.tryParse(page.url)?.host ?? page.url;
+        return ListTile(
+          tileColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          leading: const Icon(Icons.language_rounded, color: WzColors.accent),
+          title: Text(page.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(host, maxLines: 1, overflow: TextOverflow.ellipsis),
+          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+          onTap: () => onOpen(page.url),
+        );
+      },
+    );
+  }
+}
+
 class _DownloadStrip extends StatelessWidget {
-  const _DownloadStrip({required this.task, this.onCancel, this.onClose});
+  const _DownloadStrip({
+    required this.task,
+    this.bytesPerSecond,
+    this.onCancel,
+    this.onClose,
+  });
 
   final WzWebDownloadTask task;
+  final double? bytesPerSecond;
   final VoidCallback? onCancel;
   final VoidCallback? onClose;
 
@@ -344,6 +586,25 @@ class _DownloadStrip extends StatelessWidget {
         'cancelled' => 'Cancelled',
         _ => task.status,
       };
+
+  String get _transferLabel {
+    if (task.downloadedBytes <= 0) return _statusLabel;
+    final parts = <String>[_statusLabel];
+    if (task.totalBytes > 0) {
+      parts.add('${wzFormatWebTransferBytes(task.downloadedBytes)} / ${wzFormatWebTransferBytes(task.totalBytes)}');
+    } else {
+      parts.add(wzFormatWebTransferBytes(task.downloadedBytes));
+    }
+    final rate = wzFormatWebTransferRate(bytesPerSecond ?? 0);
+    if (rate.isNotEmpty && !task.isTerminal) parts.add(rate);
+    final eta = wzFormatWebTransferEta(
+      downloadedBytes: task.downloadedBytes,
+      totalBytes: task.totalBytes,
+      bytesPerSecond: bytesPerSecond ?? 0,
+    );
+    if (eta.isNotEmpty && !task.isTerminal) parts.add(eta);
+    return parts.join(' • ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -363,7 +624,7 @@ class _DownloadStrip extends StatelessWidget {
               children: [
                 Text(task.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle.copyWith(fontSize: 13.5)),
                 const SizedBox(height: 3),
-                Text(_statusLabel, style: WzText.caption),
+                Text(_transferLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
                 if (progress != null && !task.isTerminal) ...[
                   const SizedBox(height: 6),
                   LinearProgressIndicator(value: progress, minHeight: 3),
