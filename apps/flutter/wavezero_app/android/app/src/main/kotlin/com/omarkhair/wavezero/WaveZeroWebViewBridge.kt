@@ -204,7 +204,7 @@ private class WaveZeroNativeWebView(
     }
 }
 
-private object WaveZeroWebDownloads {
+object WaveZeroWebDownloads {
     private val supportedExtensions = setOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
 
     fun isHttpUrl(url: String): Boolean {

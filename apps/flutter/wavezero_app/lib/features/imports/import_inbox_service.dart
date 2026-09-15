@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 const _wzImportInboxFileName = 'wavezero_import_inbox.json';
 
-enum WzImportInboxKind { audio, link }
+enum WzImportInboxKind { audio, link, download }
 
 class WzImportInboxEntry {
   const WzImportInboxEntry({
@@ -17,6 +17,7 @@ class WzImportInboxEntry {
     required this.createdAtMs,
     this.mimeType,
     this.trackId,
+    this.downloadId,
     this.duplicateOfExisting = false,
   });
 
@@ -27,18 +28,26 @@ class WzImportInboxEntry {
   final String value;
   final String? mimeType;
   final String? trackId;
+  final int? downloadId;
   final bool duplicateOfExisting;
   final int createdAtMs;
 
   bool get isAudio => kind == WzImportInboxKind.audio;
   bool get isLink => kind == WzImportInboxKind.link;
+  bool get isDownload => kind == WzImportInboxKind.download;
   bool get hasResolvableDeviceTrack => isAudio && trackId != null && trackId!.trim().isNotEmpty;
+  bool get hasDownloadTask => isDownload && downloadId != null && downloadId! > 0;
 
   factory WzImportInboxEntry.fromJson(Map<String, Object?> json) {
     final rawKind = json['kind']?.toString();
+    final rawDownloadId = json['downloadId'];
     return WzImportInboxEntry(
       id: json['id']?.toString() ?? '',
-      kind: rawKind == 'audio' ? WzImportInboxKind.audio : WzImportInboxKind.link,
+      kind: switch (rawKind) {
+        'audio' => WzImportInboxKind.audio,
+        'download' => WzImportInboxKind.download,
+        _ => WzImportInboxKind.link,
+      },
       title: json['title']?.toString().trim().isNotEmpty == true
           ? json['title']!.toString().trim()
           : 'WaveZero import',
@@ -50,6 +59,7 @@ class WzImportInboxEntry {
       trackId: json['trackId']?.toString().trim().isNotEmpty == true
           ? json['trackId']!.toString().trim()
           : null,
+      downloadId: rawDownloadId is num ? rawDownloadId.toInt() : int.tryParse(rawDownloadId?.toString() ?? ''),
       duplicateOfExisting: json['duplicateOfExisting'] == true,
       createdAtMs: (json['createdAtMs'] as num?)?.toInt() ?? 0,
     );
@@ -57,12 +67,17 @@ class WzImportInboxEntry {
 
   Map<String, Object?> toJson() => <String, Object?>{
         'id': id,
-        'kind': kind == WzImportInboxKind.audio ? 'audio' : 'link',
+        'kind': switch (kind) {
+          WzImportInboxKind.audio => 'audio',
+          WzImportInboxKind.link => 'link',
+          WzImportInboxKind.download => 'download',
+        },
         'title': title,
         'subtitle': subtitle,
         'value': value,
         if (mimeType != null) 'mimeType': mimeType,
         if (trackId != null) 'trackId': trackId,
+        if (downloadId != null) 'downloadId': downloadId,
         if (duplicateOfExisting) 'duplicateOfExisting': true,
         'createdAtMs': createdAtMs,
       };
@@ -84,7 +99,9 @@ List<WzImportInboxEntry> wzImportInboxEntriesFromJson(String source) {
     if (entry.id.isEmpty || entry.value.isEmpty || !seenIds.add(entry.id)) continue;
     final contentKey = entry.trackId?.trim().isNotEmpty == true
         ? 'track:${entry.trackId}'
-        : 'value:${entry.value.trim()}';
+        : entry.downloadId != null
+            ? 'download:${entry.downloadId}'
+            : '${entry.kind.name}:${entry.value.trim()}';
     if (!seenContent.add(contentKey)) continue;
     entries.add(entry);
   }
@@ -104,9 +121,9 @@ class WzImportInboxService {
   }
 
   Future<List<WzImportInboxEntry>> load() async {
-    final file = await _file();
-    if (!await file.exists()) return const <WzImportInboxEntry>[];
     try {
+      final file = await _file();
+      if (!await file.exists()) return const <WzImportInboxEntry>[];
       return wzImportInboxEntriesFromJson(await file.readAsString());
     } catch (_) {
       return const <WzImportInboxEntry>[];

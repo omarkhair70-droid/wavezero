@@ -24,7 +24,7 @@ void main() {
               onSourceFilterChanged: (_) {},
               onRefresh: () {},
               onImportDeviceMusic: () async {},
-              onOpenMusicInbox: () {},
+              onOpenMusicInbox: () async {},
               onOpenCollections: () {},
               onOpenFullSearch: () {},
               onOpenCloudVault: () {},

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../web/web_browser_page.dart';
+import '../web/web_download_service.dart';
 import 'import_inbox_projection.dart';
 import 'import_inbox_service.dart';
 
@@ -33,7 +36,10 @@ class WzMusicInboxPage extends StatefulWidget {
 }
 
 class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBindingObserver {
+  final WzWebDownloadService _downloadService = WzWebDownloadService();
   List<WzImportInboxEntry> _entries = const <WzImportInboxEntry>[];
+  Map<int, WzWebDownloadTask> _downloadTasks = const <int, WzWebDownloadTask>{};
+  Timer? _downloadPoller;
   bool _loading = true;
   String? _busyEntryId;
 
@@ -46,6 +52,7 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
 
   @override
   void dispose() {
+    _downloadPoller?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -62,18 +69,59 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
       _entries = entries;
       _loading = false;
     });
+    await _syncDownloadTasks();
+  }
+
+  Future<void> _syncDownloadTasks() async {
+    final ids = _entries.where((entry) => entry.hasDownloadTask).map((entry) => entry.downloadId!).toSet();
+    if (ids.isEmpty) {
+      _downloadPoller?.cancel();
+      _downloadPoller = null;
+      if (mounted && _downloadTasks.isNotEmpty) setState(() => _downloadTasks = const {});
+      return;
+    }
+
+    final next = <int, WzWebDownloadTask>{};
+    var completedNow = false;
+    for (final id in ids) {
+      try {
+        final task = await _downloadService.query(id);
+        next[id] = task;
+        if (task.isSuccessful && _downloadTasks[id]?.isSuccessful != true) completedNow = true;
+      } catch (_) {
+        final previous = _downloadTasks[id];
+        if (previous != null) next[id] = previous;
+      }
+    }
+    if (!mounted) return;
+    setState(() => _downloadTasks = next);
+
+    if (completedNow) await widget.onRefreshDeviceMusic?.call();
+    final hasActive = next.values.any((task) => !task.isTerminal);
+    if (hasActive) {
+      _downloadPoller ??= Timer.periodic(const Duration(seconds: 2), (_) => _syncDownloadTasks());
+    } else {
+      _downloadPoller?.cancel();
+      _downloadPoller = null;
+    }
   }
 
   Future<void> _dismiss(WzImportInboxEntry entry) async {
     final next = await widget.service.dismiss(entry.id);
     if (!mounted) return;
     setState(() => _entries = next);
+    await _syncDownloadTasks();
   }
 
   Future<void> _clear() async {
     await widget.service.clear();
+    _downloadPoller?.cancel();
+    _downloadPoller = null;
     if (!mounted) return;
-    setState(() => _entries = const <WzImportInboxEntry>[]);
+    setState(() {
+      _entries = const <WzImportInboxEntry>[];
+      _downloadTasks = const <int, WzWebDownloadTask>{};
+    });
   }
 
   void _openLink(WzImportInboxEntry entry) {
@@ -82,6 +130,39 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
         builder: (_) => WzWebBrowserPage(initialQuery: entry.value),
       ),
     );
+  }
+
+  Future<void> _openCompletedDownload(WzImportInboxEntry entry) async {
+    setState(() => _busyEntryId = entry.id);
+    try {
+      await widget.onRefreshDeviceMusic?.call();
+      widget.onShowDeviceMusic?.call();
+      if (mounted) Navigator.of(context).maybePop();
+    } finally {
+      if (mounted) setState(() => _busyEntryId = null);
+    }
+  }
+
+  Future<void> _cancelDownload(WzImportInboxEntry entry) async {
+    final id = entry.downloadId;
+    if (id == null) return;
+    setState(() => _busyEntryId = entry.id);
+    try {
+      await _downloadService.cancel(id);
+      if (!mounted) return;
+      setState(() {
+        _downloadTasks = <int, WzWebDownloadTask>{
+          ..._downloadTasks,
+          id: WzWebDownloadTask(
+            id: id,
+            status: 'cancelled',
+            fileName: entry.title,
+          ),
+        };
+      });
+    } finally {
+      if (mounted) setState(() => _busyEntryId = null);
+    }
   }
 
   Future<CatalogTrackSummary?> _prepareAudio(WzImportInboxEntry entry) async {
@@ -153,7 +234,7 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
                       children: [
                         Text('Music Inbox', style: WzText.pageTitle.copyWith(fontSize: 30)),
                         const SizedBox(height: 3),
-                        Text('Files and links you share to WaveZero land here.', style: WzText.caption),
+                        Text('Files, direct audio downloads, and links you share to WaveZero land here.', style: WzText.caption),
                       ],
                     ),
                   ),
@@ -175,18 +256,30 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
                 ..._entries.map(
                   (entry) {
                     final projected = wzCatalogTrackFromInboxEntry(entry);
+                    final downloadTask = entry.downloadId == null ? null : _downloadTasks[entry.downloadId!];
+                    final downloadReady = downloadTask?.isSuccessful == true;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _InboxEntryCard(
                         entry: entry,
+                        downloadTask: downloadTask,
                         busy: _busyEntryId == entry.id,
                         liked: projected != null && (widget.isLiked?.call(projected) ?? false),
-                        onPrimary: entry.isLink ? () => _openLink(entry) : () => _loadAudio(entry),
+                        onPrimary: entry.isLink
+                            ? () => _openLink(entry)
+                            : entry.isDownload
+                                ? downloadReady
+                                    ? () => _openCompletedDownload(entry)
+                                    : () => _openLink(entry)
+                                : () => _loadAudio(entry),
                         onQueue: projected == null || widget.onAddToQueue == null ? null : () => _queueAudio(entry),
                         onToggleLike: projected == null || widget.onToggleLike == null ? null : () => _toggleLike(entry),
                         onAddToCollection: projected == null || widget.onAddToCollection == null
                             ? null
                             : () => _addToCollection(entry),
+                        onCancelDownload: entry.isDownload && downloadTask != null && !downloadTask.isTerminal
+                            ? () => _cancelDownload(entry)
+                            : null,
                         onDismiss: () => _dismiss(entry),
                       ),
                     );
@@ -214,7 +307,7 @@ class _InboxHowItWorksCard extends StatelessWidget {
                   Text('Share → WaveZero', style: WzText.sectionTitle),
                   const SizedBox(height: 4),
                   Text(
-                    'Shared audio is copied into Music/WaveZero/Imports. Shared links stay here until you open or dismiss them.',
+                    'Audio files are imported. Direct audio links start a normal Android download. Other links stay here for WaveZero Web.',
                     style: WzText.body,
                   ),
                 ],
@@ -252,12 +345,15 @@ class _InboxEntryCard extends StatelessWidget {
     required this.liked,
     required this.onPrimary,
     required this.onDismiss,
+    this.downloadTask,
     this.onQueue,
     this.onToggleLike,
     this.onAddToCollection,
+    this.onCancelDownload,
   });
 
   final WzImportInboxEntry entry;
+  final WzWebDownloadTask? downloadTask;
   final bool busy;
   final bool liked;
   final VoidCallback onPrimary;
@@ -265,14 +361,26 @@ class _InboxEntryCard extends StatelessWidget {
   final VoidCallback? onQueue;
   final VoidCallback? onToggleLike;
   final VoidCallback? onAddToCollection;
+  final VoidCallback? onCancelDownload;
 
   @override
   Widget build(BuildContext context) {
     final audio = entry.isAudio;
+    final download = entry.isDownload;
+    final downloadActive = download && downloadTask != null && !downloadTask!.isTerminal;
+    final downloadReady = downloadTask?.isSuccessful == true;
+    final detail = audio
+        ? entry.duplicateOfExisting
+            ? 'Already in Device Music'
+            : 'Ready in Device Music'
+        : download
+            ? _downloadStatusLabel(downloadTask)
+            : entry.value;
+
     return WzPressableSurface(
-      onTap: busy ? null : onPrimary,
+      onTap: busy || downloadActive ? null : onPrimary,
       radius: 30,
-      decoration: WzSurface.sculpted(selected: audio),
+      decoration: WzSurface.sculpted(selected: audio || downloadReady),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -280,10 +388,16 @@ class _InboxEntryCard extends StatelessWidget {
           Row(
             children: [
               WzSculptedIcon(
-                icon: audio ? Icons.audio_file_rounded : Icons.link_rounded,
+                icon: audio
+                    ? Icons.audio_file_rounded
+                    : download
+                        ? downloadReady
+                            ? Icons.download_done_rounded
+                            : Icons.downloading_rounded
+                        : Icons.link_rounded,
                 size: 50,
                 iconSize: 22,
-                color: audio ? WzColors.accent : WzColors.textPrimary,
+                color: audio || downloadReady ? WzColors.accent : WzColors.textPrimary,
               ),
               const SizedBox(width: 13),
               Expanded(
@@ -300,14 +414,12 @@ class _InboxEntryCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      audio
-                          ? entry.duplicateOfExisting
-                              ? 'Already in Device Music'
-                              : 'Ready in Device Music'
-                          : entry.value,
+                      detail,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: WzText.caption.copyWith(color: audio ? WzColors.accent : WzColors.textMuted),
+                      style: WzText.caption.copyWith(
+                        color: audio || downloadReady ? WzColors.accent : WzColors.textMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -325,16 +437,41 @@ class _InboxEntryCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (downloadActive) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(value: downloadTask?.progress, minHeight: 3),
+            ),
+          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 6,
             runSpacing: 4,
             children: [
-              TextButton.icon(
-                onPressed: busy ? null : onPrimary,
-                icon: Icon(audio ? Icons.library_music_rounded : Icons.open_in_browser_rounded, size: 17),
-                label: Text(audio ? 'Load' : 'Open'),
-              ),
+              if (!downloadActive)
+                TextButton.icon(
+                  onPressed: busy ? null : onPrimary,
+                  icon: Icon(
+                    audio || downloadReady ? Icons.library_music_rounded : Icons.open_in_browser_rounded,
+                    size: 17,
+                  ),
+                  label: Text(audio ? 'Load' : downloadReady ? 'Library' : 'Open'),
+                ),
+              if (download)
+                TextButton.icon(
+                  onPressed: busy ? null : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => WzWebBrowserPage(initialQuery: entry.value)),
+                  ),
+                  icon: const Icon(Icons.open_in_browser_rounded, size: 17),
+                  label: const Text('Source'),
+                ),
+              if (onCancelDownload != null)
+                TextButton.icon(
+                  onPressed: busy ? null : onCancelDownload,
+                  icon: const Icon(Icons.close_rounded, size: 17),
+                  label: const Text('Cancel'),
+                ),
               if (audio && onQueue != null)
                 TextButton.icon(
                   onPressed: busy ? null : onQueue,
@@ -359,6 +496,22 @@ class _InboxEntryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _downloadStatusLabel(WzWebDownloadTask? task) {
+  if (task == null) return 'Checking download…';
+  return switch (task.status) {
+    'pending' => 'Waiting to download',
+    'running' => task.progress == null
+        ? 'Downloading…'
+        : 'Downloading ${(task.progress! * 100).round()}%',
+    'paused' => 'Download paused',
+    'successful' => 'Ready in Device Music',
+    'failed' => 'Download failed — open source to retry',
+    'cancelled' => 'Download cancelled',
+    'missing' => 'Download is no longer available',
+    _ => 'Download ${task.status}',
+  };
 }
 
 String _relativeTime(int timestampMs) {
