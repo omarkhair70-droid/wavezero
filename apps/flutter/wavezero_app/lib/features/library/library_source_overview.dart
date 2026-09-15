@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../design/wavezero_design_system.dart';
+import '../imports/import_inbox_service.dart';
 import 'library_controls.dart';
 
 class WzLibrarySourceOverview extends StatelessWidget {
@@ -45,7 +46,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
   final ValueChanged<WzLibrarySourceFilter> onSourceFilterChanged;
   final VoidCallback onRefresh;
   final Future<void> Function() onImportDeviceMusic;
-  final VoidCallback onOpenMusicInbox;
+  final Future<void> Function() onOpenMusicInbox;
   final VoidCallback onOpenCollections;
   final VoidCallback onOpenFullSearch;
   final VoidCallback onOpenCloudVault;
@@ -109,13 +110,7 @@ class WzLibrarySourceOverview extends StatelessWidget {
           onTap: () => onSourceFilterChanged(WzLibrarySourceFilter.all),
         ),
         const SizedBox(height: 10),
-        _PrimaryLibraryTile(
-          icon: Icons.move_to_inbox_rounded,
-          title: 'Music Inbox',
-          subtitle: 'Files and links shared to WaveZero',
-          selected: false,
-          onTap: onOpenMusicInbox,
-        ),
+        _MusicInboxTile(onOpen: onOpenMusicInbox),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -225,6 +220,64 @@ String wzLibrarySourceFilterShortLabel(WzLibrarySourceFilter filter) => switch (
       WzLibrarySourceFilter.downloads => 'Downloads',
       WzLibrarySourceFilter.cloud => 'Cloud',
     };
+
+class _MusicInboxTile extends StatefulWidget {
+  const _MusicInboxTile({required this.onOpen});
+
+  final Future<void> Function() onOpen;
+
+  @override
+  State<_MusicInboxTile> createState() => _MusicInboxTileState();
+}
+
+class _MusicInboxTileState extends State<_MusicInboxTile> with WidgetsBindingObserver {
+  final WzImportInboxService _service = const WzImportInboxService();
+  int _count = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _reload();
+  }
+
+  Future<void> _reload() async {
+    final entries = await _service.load();
+    if (!mounted) return;
+    setState(() => _count = entries.length);
+  }
+
+  Future<void> _open() async {
+    await widget.onOpen();
+    await _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) => _PrimaryLibraryTile(
+        icon: _count > 0 ? Icons.mark_email_unread_rounded : Icons.move_to_inbox_rounded,
+        title: 'Music Inbox',
+        subtitle: _count == 0
+            ? 'Nothing waiting · share files or links here'
+            : _count == 1
+                ? '1 item waiting'
+                : '$_count items waiting',
+        selected: _count > 0,
+        onTap: () {
+          _open();
+        },
+      );
+}
 
 class _PrimaryLibraryTile extends StatelessWidget {
   const _PrimaryLibraryTile({
