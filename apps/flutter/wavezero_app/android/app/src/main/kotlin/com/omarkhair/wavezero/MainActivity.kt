@@ -39,6 +39,11 @@ class MainActivity : FlutterActivity() {
         audioPlayerManager = manager
         manager.markScreenReady()
 
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            WaveZeroWebViewFactory.VIEW_TYPE,
+            WaveZeroWebViewFactory(this, flutterEngine.dartExecutor.binaryMessenger),
+        )
+
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             PlaybackMethodChannelHandler.CHANNEL_NAME,
@@ -83,6 +88,7 @@ class MainActivity : FlutterActivity() {
             .apply()
         requestPermissions(arrayOf(deviceMusicPermissionName()), REQUEST_DEVICE_MUSIC_PERMISSION)
     }
+
     private fun hasDeviceMusicPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         return checkSelfPermission(deviceMusicPermissionName()) == PackageManager.PERMISSION_GRANTED
@@ -358,7 +364,6 @@ class PlaybackMethodChannelHandler(
             }
         }
     }
-
 
     private fun hasDeviceMusicPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
