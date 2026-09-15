@@ -121,9 +121,9 @@ class WzImportInboxService {
   }
 
   Future<List<WzImportInboxEntry>> load() async {
-    final file = await _file();
-    if (!await file.exists()) return const <WzImportInboxEntry>[];
     try {
+      final file = await _file();
+      if (!await file.exists()) return const <WzImportInboxEntry>[];
       return wzImportInboxEntriesFromJson(await file.readAsString());
     } catch (_) {
       return const <WzImportInboxEntry>[];
