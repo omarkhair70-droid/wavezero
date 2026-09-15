@@ -55,6 +55,36 @@ List<WzCollection> wzRemoveCollectionTrack({
             : collection)
         .toList(growable: false);
 
+List<WzCollection> wzReorderCollectionTrack({
+  required List<WzCollection> collections,
+  required String collectionId,
+  required int oldIndex,
+  required int newIndex,
+  required int updatedAtMs,
+}) =>
+    collections
+        .map((collection) {
+          if (collection.id != collectionId ||
+              oldIndex < 0 ||
+              oldIndex >= collection.tracks.length ||
+              newIndex < 0 ||
+              newIndex > collection.tracks.length) {
+            return collection;
+          }
+          var targetIndex = newIndex;
+          if (targetIndex > oldIndex) targetIndex -= 1;
+          if (targetIndex == oldIndex) return collection;
+          final tracks = collection.tracks.toList(growable: true);
+          final moved = tracks.removeAt(oldIndex);
+          final safeTargetIndex = targetIndex.clamp(0, tracks.length).toInt();
+          tracks.insert(safeTargetIndex, moved);
+          return collection.copyWith(
+            updatedAtMs: updatedAtMs,
+            tracks: tracks.toList(growable: false),
+          );
+        })
+        .toList(growable: false);
+
 List<WzCollection> wzRenameCollection({
   required List<WzCollection> collections,
   required String collectionId,

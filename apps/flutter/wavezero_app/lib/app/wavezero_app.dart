@@ -1156,6 +1156,21 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     await _persistCollections(nextCollections);
   }
 
+  Future<void> _reorderCollectionTracks(
+    WzCollection collection,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final nextCollections = wzReorderCollectionTrack(
+      collections: _collections,
+      collectionId: collection.id,
+      oldIndex: oldIndex,
+      newIndex: newIndex,
+      updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _persistCollections(nextCollections);
+  }
+
   Future<void> _renameCollection(WzCollection collection, String name) async {
     if (collection.type == WzCollectionType.liked) return;
     final trimmed = name.trim().isEmpty ? 'My Collection' : name.trim();
@@ -3863,6 +3878,8 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             unawaited(_addCollectionSnapshotToQueue(snapshot)),
         onRemoveTrack: (collection, snapshot) =>
             unawaited(_removeTrackFromCollection(collection, snapshot)),
+        onReorderTrack: (collection, oldIndex, newIndex) =>
+            unawaited(_reorderCollectionTracks(collection, oldIndex, newIndex)),
         resolver: _resolveCollectionTrack,
       ),
       WzPageScaffold(
