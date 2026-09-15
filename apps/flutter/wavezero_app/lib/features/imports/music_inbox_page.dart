@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
+import '../device_music/device_music_metadata_overrides.dart';
 import '../web/web_browser_page.dart';
 import '../web/web_download_service.dart';
 import 'import_inbox_projection.dart';
@@ -35,10 +36,14 @@ class WzMusicInboxPage extends StatefulWidget {
   State<WzMusicInboxPage> createState() => _WzMusicInboxPageState();
 }
 
-class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBindingObserver {
+class _WzMusicInboxPageState extends State<WzMusicInboxPage>
+    with WidgetsBindingObserver {
   final WzWebDownloadService _downloadService = WzWebDownloadService();
+  final WzDeviceMusicMetadataOverridesService _metadataOverrides =
+      const WzDeviceMusicMetadataOverridesService();
   List<WzImportInboxEntry> _entries = const <WzImportInboxEntry>[];
-  Map<int, WzWebDownloadTask> _downloadTasks = const <int, WzWebDownloadTask>{};
+  Map<int, WzWebDownloadTask> _downloadTasks =
+      const <int, WzWebDownloadTask>{};
   Timer? _downloadPoller;
   bool _loading = true;
   String? _busyEntryId;
@@ -73,11 +78,16 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
   }
 
   Future<void> _syncDownloadTasks() async {
-    final ids = _entries.where((entry) => entry.hasDownloadTask).map((entry) => entry.downloadId!).toSet();
+    final ids = _entries
+        .where((entry) => entry.hasDownloadTask)
+        .map((entry) => entry.downloadId!)
+        .toSet();
     if (ids.isEmpty) {
       _downloadPoller?.cancel();
       _downloadPoller = null;
-      if (mounted && _downloadTasks.isNotEmpty) setState(() => _downloadTasks = const {});
+      if (mounted && _downloadTasks.isNotEmpty) {
+        setState(() => _downloadTasks = const {});
+      }
       return;
     }
 
@@ -87,7 +97,9 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
       try {
         final task = await _downloadService.query(id);
         next[id] = task;
-        if (task.isSuccessful && _downloadTasks[id]?.isSuccessful != true) completedNow = true;
+        if (task.isSuccessful && _downloadTasks[id]?.isSuccessful != true) {
+          completedNow = true;
+        }
       } catch (_) {
         final previous = _downloadTasks[id];
         if (previous != null) next[id] = previous;
@@ -99,7 +111,10 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
     if (completedNow) await widget.onRefreshDeviceMusic?.call();
     final hasActive = next.values.any((task) => !task.isTerminal);
     if (hasActive) {
-      _downloadPoller ??= Timer.periodic(const Duration(seconds: 2), (_) => _syncDownloadTasks());
+      _downloadPoller ??= Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => _syncDownloadTasks(),
+      );
     } else {
       _downloadPoller?.cancel();
       _downloadPoller = null;
@@ -212,6 +227,126 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
     widget.onAddToCollection!(track);
   }
 
+  Future<void> _fixInfo(WzImportInboxEntry entry) async {
+    final trackId = entry.trackId?.trim();
+    if (trackId == null || trackId.isEmpty) return;
+
+    final existing = (await _metadataOverrides.load())[trackId];
+    if (!mounted) return;
+    final titleController = TextEditingController(
+      text: existing?.title ?? _titleFromInboxName(entry.title),
+    );
+    final artistController = TextEditingController(
+      text: existing?.artistName ?? '',
+    );
+    final albumController = TextEditingController(
+      text: existing?.albumName ?? '',
+    );
+
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Fix track info'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: artistController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Artist',
+                  hintText: 'Leave blank to keep device metadata',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: albumController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                  labelText: 'Album',
+                  hintText: 'Leave blank to keep device metadata',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'WaveZero keeps this as a local correction. The original audio file is not rewritten.',
+                style: WzText.caption,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          if (existing != null)
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('reset'),
+              child: const Text('Reset'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop('save'),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (action == null || !mounted) {
+      titleController.dispose();
+      artistController.dispose();
+      albumController.dispose();
+      return;
+    }
+
+    setState(() => _busyEntryId = entry.id);
+    try {
+      if (action == 'reset') {
+        await _metadataOverrides.remove(trackId);
+      } else {
+        await _metadataOverrides.save(
+          WzDeviceMusicMetadataOverride(
+            trackId: trackId,
+            title: titleController.text,
+            artistName: artistController.text,
+            albumName: albumController.text,
+            updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+      }
+      await widget.onRefreshDeviceMusic?.call();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            action == 'reset'
+                ? 'Track info reset to device metadata.'
+                : 'Track info updated in WaveZero.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('WaveZero could not save this track info.')),
+        );
+      }
+    } finally {
+      titleController.dispose();
+      artistController.dispose();
+      albumController.dispose();
+      if (mounted) setState(() => _busyEntryId = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: WzColors.canvas,
@@ -232,9 +367,15 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Music Inbox', style: WzText.pageTitle.copyWith(fontSize: 30)),
+                        Text(
+                          'Music Inbox',
+                          style: WzText.pageTitle.copyWith(fontSize: 30),
+                        ),
                         const SizedBox(height: 3),
-                        Text('Files, direct audio downloads, and links you share to WaveZero land here.', style: WzText.caption),
+                        Text(
+                          'Files, direct audio downloads, and links you share to WaveZero land here.',
+                          style: WzText.caption,
+                        ),
                       ],
                     ),
                   ),
@@ -249,14 +390,21 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
               _InboxHowItWorksCard(),
               const SizedBox(height: 18),
               if (_loading)
-                const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()))
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(28),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
               else if (_entries.isEmpty)
                 _EmptyInbox()
               else
                 ..._entries.map(
                   (entry) {
                     final projected = wzCatalogTrackFromInboxEntry(entry);
-                    final downloadTask = entry.downloadId == null ? null : _downloadTasks[entry.downloadId!];
+                    final downloadTask = entry.downloadId == null
+                        ? null
+                        : _downloadTasks[entry.downloadId!];
                     final downloadReady = downloadTask?.isSuccessful == true;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
@@ -264,7 +412,8 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
                         entry: entry,
                         downloadTask: downloadTask,
                         busy: _busyEntryId == entry.id,
-                        liked: projected != null && (widget.isLiked?.call(projected) ?? false),
+                        liked: projected != null &&
+                            (widget.isLiked?.call(projected) ?? false),
                         onPrimary: entry.isLink
                             ? () => _openLink(entry)
                             : entry.isDownload
@@ -272,12 +421,24 @@ class _WzMusicInboxPageState extends State<WzMusicInboxPage> with WidgetsBinding
                                     ? () => _openCompletedDownload(entry)
                                     : () => _openLink(entry)
                                 : () => _loadAudio(entry),
-                        onQueue: projected == null || widget.onAddToQueue == null ? null : () => _queueAudio(entry),
-                        onToggleLike: projected == null || widget.onToggleLike == null ? null : () => _toggleLike(entry),
-                        onAddToCollection: projected == null || widget.onAddToCollection == null
+                        onQueue: projected == null ||
+                                widget.onAddToQueue == null
+                            ? null
+                            : () => _queueAudio(entry),
+                        onToggleLike: projected == null ||
+                                widget.onToggleLike == null
+                            ? null
+                            : () => _toggleLike(entry),
+                        onAddToCollection: projected == null ||
+                                widget.onAddToCollection == null
                             ? null
                             : () => _addToCollection(entry),
-                        onCancelDownload: entry.isDownload && downloadTask != null && !downloadTask.isTerminal
+                        onFixInfo: entry.hasResolvableDeviceTrack
+                            ? () => _fixInfo(entry)
+                            : null,
+                        onCancelDownload: entry.isDownload &&
+                                downloadTask != null &&
+                                !downloadTask.isTerminal
                             ? () => _cancelDownload(entry)
                             : null,
                         onDismiss: () => _dismiss(entry),
@@ -298,7 +459,12 @@ class _InboxHowItWorksCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const WzSculptedIcon(icon: Icons.ios_share_rounded, size: 46, iconSize: 20, color: WzColors.accent),
+            const WzSculptedIcon(
+              icon: Icons.ios_share_rounded,
+              size: 46,
+              iconSize: 20,
+              color: WzColors.accent,
+            ),
             const SizedBox(width: 13),
             Expanded(
               child: Column(
@@ -325,7 +491,12 @@ class _EmptyInbox extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const WzSculptedIcon(icon: Icons.inbox_rounded, size: 52, iconSize: 23, color: WzColors.textMuted),
+            const WzSculptedIcon(
+              icon: Icons.inbox_rounded,
+              size: 52,
+              iconSize: 23,
+              color: WzColors.textMuted,
+            ),
             const SizedBox(height: 14),
             Text('Nothing waiting here', style: WzText.title),
             const SizedBox(height: 5),
@@ -349,6 +520,7 @@ class _InboxEntryCard extends StatelessWidget {
     this.onQueue,
     this.onToggleLike,
     this.onAddToCollection,
+    this.onFixInfo,
     this.onCancelDownload,
   });
 
@@ -361,13 +533,15 @@ class _InboxEntryCard extends StatelessWidget {
   final VoidCallback? onQueue;
   final VoidCallback? onToggleLike;
   final VoidCallback? onAddToCollection;
+  final VoidCallback? onFixInfo;
   final VoidCallback? onCancelDownload;
 
   @override
   Widget build(BuildContext context) {
     final audio = entry.isAudio;
     final download = entry.isDownload;
-    final downloadActive = download && downloadTask != null && !downloadTask!.isTerminal;
+    final downloadActive =
+        download && downloadTask != null && !downloadTask!.isTerminal;
     final downloadReady = downloadTask?.isSuccessful == true;
     final detail = audio
         ? entry.duplicateOfExisting
@@ -397,14 +571,21 @@ class _InboxEntryCard extends StatelessWidget {
                         : Icons.link_rounded,
                 size: 50,
                 iconSize: 22,
-                color: audio || downloadReady ? WzColors.accent : WzColors.textPrimary,
+                color: audio || downloadReady
+                    ? WzColors.accent
+                    : WzColors.textPrimary,
               ),
               const SizedBox(width: 13),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(entry.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: WzText.sectionTitle),
+                    Text(
+                      entry.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: WzText.sectionTitle,
+                    ),
                     const SizedBox(height: 3),
                     Text(
                       '${entry.subtitle} • ${_relativeTime(entry.createdAtMs)}',
@@ -418,7 +599,9 @@ class _InboxEntryCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: WzText.caption.copyWith(
-                        color: audio || downloadReady ? WzColors.accent : WzColors.textMuted,
+                        color: audio || downloadReady
+                            ? WzColors.accent
+                            : WzColors.textMuted,
                       ),
                     ),
                   ],
@@ -427,7 +610,11 @@ class _InboxEntryCard extends StatelessWidget {
               if (busy)
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 )
               else
                 IconButton(
@@ -441,7 +628,10 @@ class _InboxEntryCard extends StatelessWidget {
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(value: downloadTask?.progress, minHeight: 3),
+              child: LinearProgressIndicator(
+                value: downloadTask?.progress,
+                minHeight: 3,
+              ),
             ),
           ],
           const SizedBox(height: 8),
@@ -453,16 +643,26 @@ class _InboxEntryCard extends StatelessWidget {
                 TextButton.icon(
                   onPressed: busy ? null : onPrimary,
                   icon: Icon(
-                    audio || downloadReady ? Icons.library_music_rounded : Icons.open_in_browser_rounded,
+                    audio || downloadReady
+                        ? Icons.library_music_rounded
+                        : Icons.open_in_browser_rounded,
                     size: 17,
                   ),
-                  label: Text(audio ? 'Load' : downloadReady ? 'Library' : 'Open'),
+                  label: Text(
+                    audio ? 'Load' : downloadReady ? 'Library' : 'Open',
+                  ),
                 ),
               if (download)
                 TextButton.icon(
-                  onPressed: busy ? null : () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => WzWebBrowserPage(initialQuery: entry.value)),
-                  ),
+                  onPressed: busy
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => WzWebBrowserPage(
+                                initialQuery: entry.value,
+                              ),
+                            ),
+                          ),
                   icon: const Icon(Icons.open_in_browser_rounded, size: 17),
                   label: const Text('Source'),
                 ),
@@ -481,14 +681,26 @@ class _InboxEntryCard extends StatelessWidget {
               if (audio && onToggleLike != null)
                 TextButton.icon(
                   onPressed: busy ? null : onToggleLike,
-                  icon: Icon(liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, size: 17),
+                  icon: Icon(
+                    liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    size: 17,
+                  ),
                   label: Text(liked ? 'Liked' : 'Like'),
                 ),
               if (audio && onAddToCollection != null)
                 TextButton.icon(
                   onPressed: busy ? null : onAddToCollection,
-                  icon: const Icon(Icons.playlist_add_circle_outlined, size: 17),
+                  icon: const Icon(
+                    Icons.playlist_add_circle_outlined,
+                    size: 17,
+                  ),
                   label: const Text('Collection'),
+                ),
+              if (audio && onFixInfo != null)
+                TextButton.icon(
+                  onPressed: busy ? null : onFixInfo,
+                  icon: const Icon(Icons.edit_note_rounded, size: 17),
+                  label: const Text('Fix info'),
                 ),
             ],
           ),
@@ -514,9 +726,28 @@ String _downloadStatusLabel(WzWebDownloadTask? task) {
   };
 }
 
+String _titleFromInboxName(String value) {
+  final trimmed = value.trim();
+  final dot = trimmed.lastIndexOf('.');
+  if (dot <= 0 || dot == trimmed.length - 1) return trimmed;
+  final extension = trimmed.substring(dot + 1).toLowerCase();
+  const audioExtensions = <String>{
+    'mp3',
+    'm4a',
+    'aac',
+    'flac',
+    'wav',
+    'ogg',
+    'opus',
+  };
+  return audioExtensions.contains(extension) ? trimmed.substring(0, dot) : trimmed;
+}
+
 String _relativeTime(int timestampMs) {
   if (timestampMs <= 0) return 'recently';
-  final difference = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(timestampMs));
+  final difference = DateTime.now().difference(
+    DateTime.fromMillisecondsSinceEpoch(timestampMs),
+  );
   if (difference.inMinutes < 1) return 'now';
   if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
   if (difference.inHours < 24) return '${difference.inHours}h ago';
