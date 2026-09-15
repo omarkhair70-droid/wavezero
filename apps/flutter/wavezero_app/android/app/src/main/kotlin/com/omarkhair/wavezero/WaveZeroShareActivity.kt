@@ -72,23 +72,51 @@ class WaveZeroShareActivity : Activity() {
         }
 
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
-        if (text.isNotEmpty()) {
-            val link = firstHttpUrl(text) ?: text
-            WaveZeroImportInbox.append(
-                context = this,
-                item = JSONObject()
-                    .put("id", UUID.randomUUID().toString())
-                    .put("kind", "link")
-                    .put("title", linkTitle(link))
-                    .put("subtitle", "Shared link")
-                    .put("value", link)
-                    .put("mimeType", "text/plain")
-                    .put("createdAtMs", System.currentTimeMillis()),
-            )
-            return "Saved to WaveZero Inbox"
-        }
+        if (text.isNotEmpty()) return receiveSharedText(text)
 
         throw IllegalArgumentException("WaveZero can receive audio files and shared links.")
+    }
+
+    private fun receiveSharedText(text: String): String {
+        val httpUrl = firstHttpUrl(text)
+        if (httpUrl != null && WaveZeroWebDownloads.looksLikeAudio(httpUrl, null, null)) {
+            val task = WaveZeroWebDownloads.enqueue(
+                context = applicationContext,
+                url = httpUrl,
+                userAgent = null,
+                contentDisposition = null,
+                mimeType = null,
+                referer = null,
+            )
+            val downloadId = (task["id"] as? Number)?.toLong()
+            val fileName = task["fileName"]?.toString()?.takeIf { it.isNotBlank() }
+                ?: "WaveZero audio download"
+            val item = JSONObject()
+                .put("id", UUID.randomUUID().toString())
+                .put("kind", "download")
+                .put("title", fileName)
+                .put("subtitle", "Downloading to WaveZero")
+                .put("value", httpUrl)
+                .put("mimeType", "text/plain")
+                .put("createdAtMs", System.currentTimeMillis())
+            if (downloadId != null) item.put("downloadId", downloadId)
+            WaveZeroImportInbox.append(context = this, item = item)
+            return "$fileName download started"
+        }
+
+        val value = httpUrl ?: text
+        WaveZeroImportInbox.append(
+            context = this,
+            item = JSONObject()
+                .put("id", UUID.randomUUID().toString())
+                .put("kind", "link")
+                .put("title", linkTitle(value))
+                .put("subtitle", "Shared link")
+                .put("value", value)
+                .put("mimeType", "text/plain")
+                .put("createdAtMs", System.currentTimeMillis()),
+        )
+        return "Saved to WaveZero Inbox"
     }
 
     private fun importAudio(sourceUri: Uri, mimeType: String): ImportedAudio {
