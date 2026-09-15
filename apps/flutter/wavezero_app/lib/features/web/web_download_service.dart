@@ -43,7 +43,7 @@ class WzWebDownloadTask {
 }
 
 class WzWebDownloadService {
-  const WzWebDownloadService(this._channel);
+  WzWebDownloadService({MethodChannel? channel}) : _channel = channel ?? const MethodChannel('wavezero/web_downloads');
 
   final MethodChannel _channel;
 
