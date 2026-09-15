@@ -1,7 +1,21 @@
-name: Play Internal Release
+name: Play Release
 
 on:
   workflow_dispatch:
+    inputs:
+      track:
+        description: Google Play track
+        required: true
+        default: alpha
+        type: choice
+        options:
+          - alpha
+          - production
+      confirm_production:
+        description: Required only for production releases
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -14,7 +28,7 @@ permissions:
 
 jobs:
   publish:
-    name: Build signed AAB and publish to Google Play Internal
+    name: Build signed AAB and publish to Google Play
     runs-on: ubuntu-latest
     timeout-minutes: 35
     defaults:
@@ -25,10 +39,18 @@ jobs:
       WAVEZERO_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.WAVEZERO_UPLOAD_KEYSTORE_PASSWORD }}
       WAVEZERO_UPLOAD_KEY_PASSWORD: ${{ secrets.WAVEZERO_UPLOAD_KEY_PASSWORD }}
       WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON }}
+      PLAY_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.track || 'alpha' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Guard production release
+        if: ${{ env.PLAY_TRACK == 'production' && inputs.confirm_production != true }}
+        shell: bash
+        run: |
+          echo '::error::Production release requires confirm_production=true.'
+          exit 1
 
       - name: Verify release secrets exist
         shell: bash
@@ -91,16 +113,16 @@ jobs:
       - name: Upload signed AAB artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wavezero-play-internal-aab
+          name: wavezero-play-${{ env.PLAY_TRACK }}-aab
           path: apps/flutter/wavezero_app/build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish to Google Play Internal testing
+      - name: Publish to Google Play
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.omarkhair.wavezero
           releaseFiles: apps/flutter/wavezero_app/build/app/outputs/bundle/release/app-release.aab
-          track: internal
+          track: ${{ env.PLAY_TRACK }}
           status: completed
