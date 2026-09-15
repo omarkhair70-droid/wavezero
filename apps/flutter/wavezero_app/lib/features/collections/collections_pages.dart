@@ -159,6 +159,7 @@ class WzCollectionDetailPage extends StatelessWidget {
     required this.onPlayTrack,
     required this.onAddTrackToQueue,
     required this.onRemoveTrack,
+    required this.onReorderTrack,
     required this.resolver,
   });
 
@@ -171,6 +172,7 @@ class WzCollectionDetailPage extends StatelessWidget {
   final ValueChanged<WzCollectionTrackSnapshot> onPlayTrack;
   final ValueChanged<WzCollectionTrackSnapshot> onAddTrackToQueue;
   final void Function(WzCollection collection, WzCollectionTrackSnapshot track) onRemoveTrack;
+  final void Function(WzCollection collection, int oldIndex, int newIndex) onReorderTrack;
   final CatalogTrackSummary? Function(WzCollectionTrackSnapshot track) resolver;
 
   @override
@@ -226,34 +228,71 @@ class WzCollectionDetailPage extends StatelessWidget {
                 ),
               ],
             ),
+          if (collection.tracks.length > 1) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.drag_handle_rounded, size: 16, color: WzColors.textMuted),
+                const SizedBox(width: 6),
+                Text('Hold the handle to reorder', style: WzText.caption),
+              ],
+            ),
+          ],
           const SizedBox(height: 18),
           if (collection.tracks.isEmpty)
             const WzGlassCard(child: Text('This collection is empty. Add something you want to keep close.', style: WzText.body))
           else
-            ...collection.tracks.map(
-              (track) => Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: _CollectionTrackRow(
-                  track: track,
-                  available: resolver(track) != null,
-                  onPlay: () => onPlayTrack(track),
-                  onAddToQueue: () => onAddTrackToQueue(track),
-                  onRemove: () => onRemoveTrack(collection, track),
-                ),
-              ),
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: collection.tracks.length,
+              onReorder: (oldIndex, newIndex) {
+                HapticFeedback.selectionClick();
+                onReorderTrack(collection, oldIndex, newIndex);
+              },
+              itemBuilder: (context, index) {
+                final track = collection.tracks[index];
+                return Padding(
+                  key: ValueKey('collection-track-${track.trackId}'),
+                  padding: const EdgeInsets.only(bottom: 7),
+                  child: _CollectionTrackRow(
+                    track: track,
+                    available: resolver(track) != null,
+                    onPlay: () => onPlayTrack(track),
+                    onAddToQueue: () => onAddTrackToQueue(track),
+                    onRemove: () => onRemoveTrack(collection, track),
+                    dragHandle: ReorderableDelayedDragStartListener(
+                      index: index,
+                      child: const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: Icon(Icons.drag_handle_rounded, size: 20, color: WzColors.textMuted),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
         ],
       );
 }
 
 class _CollectionTrackRow extends StatelessWidget {
-  const _CollectionTrackRow({required this.track, required this.available, required this.onPlay, required this.onAddToQueue, required this.onRemove});
+  const _CollectionTrackRow({
+    required this.track,
+    required this.available,
+    required this.onPlay,
+    required this.onAddToQueue,
+    required this.onRemove,
+    required this.dragHandle,
+  });
 
   final WzCollectionTrackSnapshot track;
   final bool available;
   final VoidCallback onPlay;
   final VoidCallback onAddToQueue;
   final VoidCallback onRemove;
+  final Widget dragHandle;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -265,6 +304,7 @@ class _CollectionTrackRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
             child: Row(
               children: [
+                dragHandle,
                 ClipRRect(
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(17),
