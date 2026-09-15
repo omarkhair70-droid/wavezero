@@ -37,4 +37,19 @@ void main() {
     expect(done.isSuccessful, isTrue);
     expect(done.isTerminal, isTrue);
   });
+
+  test('web transfer feedback formats bytes, rate, and ETA', () {
+    expect(wzFormatWebTransferBytes(512), '512 B');
+    expect(wzFormatWebTransferBytes(1536), '1.5 KB');
+    expect(wzFormatWebTransferBytes(5 * 1024 * 1024), '5.0 MB');
+    expect(wzFormatWebTransferRate(512 * 1024), '512 KB/s');
+    expect(
+      wzFormatWebTransferEta(
+        downloadedBytes: 5 * 1024 * 1024,
+        totalBytes: 10 * 1024 * 1024,
+        bytesPerSecond: 1024 * 1024,
+      ),
+      '~5s left',
+    );
+  });
 }
