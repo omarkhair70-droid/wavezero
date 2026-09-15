@@ -4018,6 +4018,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       ),
       WzCollectionDetailPage(
         collection: _selectedCollection ?? _likedCollection,
+        collections: _collections,
         onBack: () => _navigateBack(fallback: WzAppTab.collections),
         onPlayFirst: (collection) {
           if (collection.tracks.isNotEmpty)
