@@ -45,7 +45,7 @@ class WzHomeFreshDeviceSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 198,
+          height: 218,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
