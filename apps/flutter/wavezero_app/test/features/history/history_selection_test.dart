@@ -7,6 +7,8 @@ void main() {
     String id, {
     required int playCount,
     required int lastPlayedAtMs,
+    int lastPositionMs = 0,
+    int? durationMs,
   }) =>
       WzListeningHistoryEntry(
         trackId: id,
@@ -16,6 +18,8 @@ void main() {
         lastPlayedAtMs: lastPlayedAtMs,
         firstPlayedAtMs: 1,
         playCount: playCount,
+        lastPositionMs: lastPositionMs,
+        durationMs: durationMs,
       );
 
   test('empty history has no continue or most-played entry', () {
@@ -23,10 +27,45 @@ void main() {
     expect(wzMostPlayedHistoryEntry(const []), isNull);
   });
 
-  test('continue listening keeps the first persisted entry', () {
-    final first = entry('first', playCount: 1, lastPlayedAtMs: 20);
-    final second = entry('second', playCount: 5, lastPlayedAtMs: 30);
-    expect(wzContinueListeningEntry([first, second]), same(first));
+  test('continue listening skips tracks that barely started', () {
+    final barelyStarted = entry(
+      'first',
+      playCount: 1,
+      lastPlayedAtMs: 30,
+      lastPositionMs: 3000,
+      durationMs: 180000,
+    );
+    final resumable = entry(
+      'second',
+      playCount: 1,
+      lastPlayedAtMs: 20,
+      lastPositionMs: 45000,
+      durationMs: 180000,
+    );
+    expect(wzContinueListeningEntry([barelyStarted, resumable]), same(resumable));
+  });
+
+  test('continue listening skips tracks already at the end', () {
+    final completed = entry(
+      'completed',
+      playCount: 1,
+      lastPlayedAtMs: 30,
+      lastPositionMs: 176000,
+      durationMs: 180000,
+    );
+    final resumable = entry(
+      'resumable',
+      playCount: 1,
+      lastPlayedAtMs: 20,
+      lastPositionMs: 70000,
+      durationMs: 180000,
+    );
+    expect(wzContinueListeningEntry([completed, resumable]), same(resumable));
+  });
+
+  test('continue listening returns null when nothing is meaningfully resumable', () {
+    final fresh = entry('fresh', playCount: 1, lastPlayedAtMs: 10);
+    expect(wzContinueListeningEntry([fresh]), isNull);
   });
 
   test('most played prefers larger play count', () {
