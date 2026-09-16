@@ -29,6 +29,26 @@ void main() {
     );
   });
 
+  test('auto advance only consumes its dedupe guard when a route can run', () {
+    final app = File('lib/app/wavezero_app.dart').readAsStringSync();
+    final start = app.indexOf('Future<void> _maybeAutoAdvance');
+    final end = app.indexOf('void _recordSmartDownloadSkip', start);
+    expect(start, greaterThanOrEqualTo(0));
+    expect(end, greaterThan(start));
+    final autoAdvance = app.substring(start, end);
+
+    final triggerGate = autoAdvance.indexOf('if (!trigger.shouldAdvance) return;');
+    final repeatBranch = autoAdvance.indexOf('if (_repeatMode == WzRepeatMode.one)');
+    final firstGuardWrite = autoAdvance.indexOf(
+      '_lastAutoAdvanceTrackId = trigger.trackId;',
+      triggerGate,
+    );
+    expect(repeatBranch, greaterThan(triggerGate));
+    expect(firstGuardWrite, greaterThan(repeatBranch));
+    expect(autoAdvance, contains('if (shuffled) {'));
+    expect(autoAdvance, contains('if (_canNext) {'));
+  });
+
   test('direct track taps play immediately instead of only selecting', () {
     final app = File('lib/app/wavezero_app.dart').readAsStringSync();
 

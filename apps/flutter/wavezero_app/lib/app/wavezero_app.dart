@@ -2082,21 +2082,26 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     );
     if (trigger.clearLastTrackGuard) _lastAutoAdvanceTrackId = null;
     if (!trigger.shouldAdvance) return;
-    _lastAutoAdvanceTrackId = trigger.trackId;
 
     if (_repeatMode == WzRepeatMode.one) {
+      _lastAutoAdvanceTrackId = trigger.trackId;
       setState(() => _queueStatus = 'Repeat one: replaying current track.');
       await _seekTo(0);
       await widget.playbackBridge.play();
       return;
     }
-    if (_shuffleEnabled &&
-        await _playRandomQueueTrack(
-          autoStart: true,
-          source: QueueAdvanceSource.auto,
-        ))
-      return;
+    if (_shuffleEnabled) {
+      final shuffled = await _playRandomQueueTrack(
+        autoStart: true,
+        source: QueueAdvanceSource.auto,
+      );
+      if (shuffled) {
+        _lastAutoAdvanceTrackId = trigger.trackId;
+        return;
+      }
+    }
     if (_canNext) {
+      _lastAutoAdvanceTrackId = trigger.trackId;
       await _playNext(
         autoStart: true,
         source: QueueAdvanceSource.auto,
@@ -2104,12 +2109,14 @@ class _PlayerScreenState extends State<_PlayerScreen> {
       );
       return;
     }
-    if (_repeatMode == WzRepeatMode.all && _queue.isNotEmpty)
+    if (_repeatMode == WzRepeatMode.all && _queue.isNotEmpty) {
+      _lastAutoAdvanceTrackId = trigger.trackId;
       await _playQueueTrack(
         _queue.first,
         autoStart: true,
         source: QueueAdvanceSource.auto,
       );
+    }
   }
 
   void _recordSmartDownloadSkip(String reason) {
