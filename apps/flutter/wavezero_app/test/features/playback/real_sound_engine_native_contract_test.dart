@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('Android playback owns a session-scoped real Equalizer lifecycle', () {
     final dsp = File(
-      '../../../../android/app/src/main/java/com/wavezero/player/playback/NativeDspController.kt',
+      '../../android/app/src/main/java/com/wavezero/player/playback/NativeDspController.kt',
     ).readAsStringSync();
     final manager = File(
-      '../../../../android/app/src/main/java/com/wavezero/player/playback/AudioPlayerManager.kt',
+      '../../android/app/src/main/java/com/wavezero/player/playback/AudioPlayerManager.kt',
     ).readAsStringSync();
 
     expect(dsp, contains('import android.media.audiofx.Equalizer'));
@@ -35,12 +35,12 @@ void main() {
     expect(activity, isNot(contains('Native Android DSP is not enabled in this safe foundation build')));
     expect(manifest, contains('android.permission.MODIFY_AUDIO_SETTINGS'));
     expect(bridge, contains("invokeMapMethod<Object?, Object?>('audioEffectStatus')"));
-    expect(bridge, contains("Mock playback has no native DSP session."));
+    expect(bridge, contains('Mock playback has no native DSP session.'));
   });
 
   test('native profile keeps clipping headroom and frequency regions explicit', () {
     final dsp = File(
-      '../../../../android/app/src/main/java/com/wavezero/player/playback/NativeDspController.kt',
+      '../../android/app/src/main/java/com/wavezero/player/playback/NativeDspController.kt',
     ).readAsStringSync();
 
     expect(dsp, contains('frequencyHz < 250 -> bassGainDb'));
