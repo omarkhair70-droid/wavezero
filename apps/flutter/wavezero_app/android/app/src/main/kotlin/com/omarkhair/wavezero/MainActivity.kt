@@ -331,6 +331,13 @@ class PlaybackMethodChannelHandler(
 
                 "audioEffectStatus" -> result.success(audioPlayerManager.audioEffectStatusMap())
 
+                "setLoudnessNormalizationEnabled" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    result.success(audioPlayerManager.setLoudnessNormalizationEnabled(enabled))
+                }
+
+                "loudnessNormalizationStatus" -> result.success(audioPlayerManager.loudnessNormalizationStatusMap())
+
                 "metricsSnapshot" -> result.success(audioPlayerManager.metricsSnapshotMap())
 
                 "getDeviceMusicPermissionStatus" -> result.success(deviceMusicPermissionStatusMap())

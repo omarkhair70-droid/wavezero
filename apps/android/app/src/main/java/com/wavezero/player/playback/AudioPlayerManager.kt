@@ -7,6 +7,8 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Metadata
+import androidx.media3.common.Tracks
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -56,6 +58,8 @@ class AudioPlayerManager(
     private val nativeDspController = NativeDspController()
 
     private val appContext = context.applicationContext
+    private val soundEnginePreferences = appContext.getSharedPreferences(SOUND_ENGINE_PREFS, Context.MODE_PRIVATE)
+    private var loudnessNormalizationEnabled = soundEnginePreferences.getBoolean(LOUDNESS_NORMALIZATION_KEY, false)
 
     private var player: ExoPlayer = buildPrimaryPlayer()
 
@@ -150,6 +154,16 @@ class AudioPlayerManager(
             }
         }
 
+        override fun onTracksChanged(tracks: Tracks) {
+            applyReplayGainFromTracks(tracks)
+        }
+
+        override fun onMetadata(metadata: Metadata) {
+            ReplayGainMetadata.parse(metadata)?.let { info ->
+                nativeDspController.setReplayGain(info, player)
+            }
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             if (softStopped) {
                 playCommandInFlight = false
@@ -219,6 +233,7 @@ class AudioPlayerManager(
         player.addListener(playerListener)
         player.addAnalyticsListener(analyticsListener)
         prebufferPlayer.addListener(prebufferListener)
+        nativeDspController.setLoudnessNormalizationEnabled(loudnessNormalizationEnabled, player)
     }
 
     fun markScreenReady() {
@@ -231,6 +246,7 @@ class AudioPlayerManager(
 
     fun loadTrack(track: NotificationTrackSnapshot) {
         clearNativePrebuffer(NativePrebufferClearReason.TrackLoaded)
+        nativeDspController.clearReplayGain(player)
         applyCurrentTrack(track)
         currentTrackLoaded = true
         playCommandInFlight = false
@@ -405,6 +421,7 @@ class AudioPlayerManager(
     fun retry() {
         softStopped = false
         clearNativePrebuffer(NativePrebufferClearReason.Retry)
+        nativeDspController.clearReplayGain(player)
         player.stop()
         player.clearMediaItems()
         player.setMediaItem(mediaItemFor(currentTrack))
@@ -445,6 +462,14 @@ class AudioPlayerManager(
 
     fun audioEffectStatusMap(): Map<String, Any?> = nativeDspController.statusMap()
 
+    fun setLoudnessNormalizationEnabled(enabled: Boolean): Map<String, Any?> {
+        loudnessNormalizationEnabled = enabled
+        soundEnginePreferences.edit().putBoolean(LOUDNESS_NORMALIZATION_KEY, enabled).apply()
+        return nativeDspController.setLoudnessNormalizationEnabled(enabled, player)
+    }
+
+    fun loudnessNormalizationStatusMap(): Map<String, Any?> = nativeDspController.statusMap()
+
     fun metricsSnapshotMap(): Map<String, Any?> {
         val durationMs = currentTrack.durationMs ?: player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
         val dspStatus = nativeDspController.statusMap()
@@ -472,6 +497,12 @@ class AudioPlayerManager(
             "nativeAudioEffectProfileId" to dspStatus["profileId"],
             "nativeAudioEffectMessage" to dspStatus["message"],
             "nativeAudioEffectSessionId" to dspStatus["audioSessionId"],
+            "loudnessNormalizationEnabled" to dspStatus["loudnessNormalizationEnabled"],
+            "replayGainTrackDb" to dspStatus["replayGainTrackDb"],
+            "replayGainAlbumDb" to dspStatus["replayGainAlbumDb"],
+            "appliedNormalizationGainDb" to dspStatus["appliedNormalizationGainDb"],
+            "loudnessEnhancerActive" to dspStatus["loudnessEnhancerActive"],
+            "loudnessNormalizationMessage" to dspStatus["loudnessNormalizationMessage"],
         )
     }
 
@@ -523,6 +554,7 @@ class AudioPlayerManager(
         previousPrimaryPlayer.removeListener(playerListener)
         previousPrimaryPlayer.removeAnalyticsListener(analyticsListener)
 
+        nativeDspController.clearReplayGain(previousPrimaryPlayer)
         preparedPlayer.removeListener(prebufferListener)
         configurePrimaryPlayer(preparedPlayer)
         preparedPlayer.addListener(playerListener)
@@ -533,6 +565,7 @@ class AudioPlayerManager(
         configurePrebufferPlayer(prebufferPlayer)
         prebufferPlayer.addListener(prebufferListener)
         mediaSession?.setPlayer(player)
+        applyReplayGainFromTracks(player.currentTracks)
 
         publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
         publish(metricsTracker.markPlayTapped())
@@ -580,6 +613,18 @@ class AudioPlayerManager(
             prebufferPlayer.playbackState == Player.STATE_READY &&
             prebufferPlayer.mediaItemCount > 0 &&
             prebufferPlayer.currentMediaItem?.mediaId == trackId
+    }
+
+    private fun applyReplayGainFromTracks(tracks: Tracks) {
+        for (group in tracks.groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO || !group.isSelected) continue
+            for (index in 0 until group.length) {
+                if (!group.isTrackSelected(index)) continue
+                val info = ReplayGainMetadata.parse(group.getTrackFormat(index).metadata) ?: continue
+                nativeDspController.setReplayGain(info, player)
+                return
+            }
+        }
     }
 
     private fun ensureCurrentMediaItemLoaded() {
@@ -710,6 +755,8 @@ class AudioPlayerManager(
     private companion object {
         const val POSITION_UPDATE_MS = 250L
         const val MEDIA_SESSION_ID = "wavezero-playback"
+        const val SOUND_ENGINE_PREFS = "wavezero_sound_engine"
+        const val LOUDNESS_NORMALIZATION_KEY = "loudness_normalization_enabled"
     }
 }
 
