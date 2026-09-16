@@ -338,6 +338,18 @@ class PlaybackMethodChannelHandler(
 
                 "loudnessNormalizationStatus" -> result.success(audioPlayerManager.loudnessNormalizationStatusMap())
 
+                "setChannelBalance" -> {
+                    val balance = call.argument<Number>("balance")?.toDouble() ?: 0.0
+                    result.success(audioPlayerManager.setChannelBalance(balance))
+                }
+
+                "setMonoOutput" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    result.success(audioPlayerManager.setMonoOutput(enabled))
+                }
+
+                "channelAudioStatus" -> result.success(audioPlayerManager.channelAudioStatusMap())
+
                 "metricsSnapshot" -> result.success(audioPlayerManager.metricsSnapshotMap())
 
                 "getDeviceMusicPermissionStatus" -> result.success(deviceMusicPermissionStatusMap())

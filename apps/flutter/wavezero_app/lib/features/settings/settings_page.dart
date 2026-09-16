@@ -243,6 +243,8 @@ class WzSettingsPage extends StatelessWidget {
                 Text('Off / Original disables native EQ completely. $lastAudioEffectApplyResult', maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.caption),
                 const SizedBox(height: WzSpacing.md),
                 const _WzLoudnessNormalizationTile(),
+                const SizedBox(height: WzSpacing.md),
+                const _WzChannelAudioControls(),
               ],
             ),
           ),
@@ -519,6 +521,171 @@ class _WzLoudnessNormalizationTileState extends State<_WzLoudnessNormalizationTi
             onChanged: _busy ? null : (value) => unawaited(_setEnabled(value)),
           ),
           Text(_message, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
+        ],
+      );
+}
+
+
+class _WzChannelAudioControls extends StatefulWidget {
+  const _WzChannelAudioControls();
+
+  @override
+  State<_WzChannelAudioControls> createState() => _WzChannelAudioControlsState();
+}
+
+class _WzChannelAudioControlsState extends State<_WzChannelAudioControls> {
+  static const MethodChannel _channel = MethodChannel('wavezero/playback');
+  double _balance = 0;
+  bool _mono = false;
+  bool _loading = true;
+  bool _monoBusy = false;
+  Timer? _balanceDebounce;
+  String _status = 'Reading channel controls…';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _balanceDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>('channelAudioStatus');
+      if (!mounted) return;
+      final rawBalance = result?['balance'];
+      setState(() {
+        _balance = rawBalance is num ? rawBalance.toDouble().clamp(-1.0, 1.0).toDouble() : 0;
+        _mono = result?['mono'] == true;
+        _status = _processorStatus(result);
+        _loading = false;
+      });
+    } on MissingPluginException {
+      if (mounted) setState(() {
+        _loading = false;
+        _status = 'Native channel controls are unavailable on this build.';
+      });
+    } on PlatformException catch (error) {
+      if (mounted) setState(() {
+        _loading = false;
+        _status = error.message ?? 'Could not read channel controls.';
+      });
+    }
+  }
+
+  void _onBalanceChanged(double value) {
+    setState(() => _balance = value);
+    _balanceDebounce?.cancel();
+    _balanceDebounce = Timer(const Duration(milliseconds: 80), () {
+      unawaited(_persistBalance(value));
+    });
+  }
+
+  Future<void> _persistBalance(double value) async {
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'setChannelBalance',
+        <String, Object?>{'balance': value},
+      );
+      if (!mounted) return;
+      final rawBalance = result?['balance'];
+      setState(() {
+        if (rawBalance is num) _balance = rawBalance.toDouble().clamp(-1.0, 1.0).toDouble();
+        _status = _processorStatus(result);
+      });
+    } on MissingPluginException {
+      if (mounted) setState(() => _status = 'Native channel controls are unavailable on this build.');
+    } on PlatformException catch (error) {
+      if (mounted) setState(() => _status = error.message ?? 'Could not change balance.');
+    }
+  }
+
+  Future<void> _setMono(bool enabled) async {
+    if (_monoBusy) return;
+    setState(() {
+      _mono = enabled;
+      _monoBusy = true;
+    });
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'setMonoOutput',
+        <String, Object?>{'enabled': enabled},
+      );
+      if (!mounted) return;
+      setState(() {
+        _mono = result?['mono'] == true;
+        _status = _processorStatus(result);
+      });
+    } on MissingPluginException {
+      if (mounted) setState(() {
+        _mono = !enabled;
+        _status = 'Native channel controls are unavailable on this build.';
+      });
+    } on PlatformException catch (error) {
+      if (mounted) setState(() {
+        _mono = !enabled;
+        _status = error.message ?? 'Could not change mono output.';
+      });
+    } finally {
+      if (mounted) setState(() => _monoBusy = false);
+    }
+  }
+
+  String _processorStatus(Map<Object?, Object?>? result) {
+    if (result?['pcmStereoConfigured'] == true) {
+      return 'Stereo PCM channel processing is active for the current playback path.';
+    }
+    return 'Saved. It will apply when playback uses a supported stereo PCM path.';
+  }
+
+  String get _balanceLabel {
+    if (_balance.abs() < 0.025) return 'Center';
+    final percent = (_balance.abs() * 100).round();
+    return _balance < 0 ? 'Left $percent%' : 'Right $percent%';
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Channel output', style: WzText.sectionTitle),
+          const SizedBox(height: WzSpacing.xs),
+          Row(
+            children: [
+              const Icon(Icons.surround_sound, size: 20),
+              const SizedBox(width: WzSpacing.xs),
+              Expanded(child: Text('Balance · $_balanceLabel', style: WzText.body)),
+            ],
+          ),
+          Slider(
+            min: -1,
+            max: 1,
+            divisions: 40,
+            value: _balance,
+            label: _balanceLabel,
+            onChanged: _loading ? null : _onBalanceChanged,
+          ),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('L', style: WzText.caption),
+              Text('Center', style: WzText.caption),
+              Text('R', style: WzText.caption),
+            ],
+          ),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Mono output'),
+            subtitle: const Text('Mixes left and right together, then sends the same signal to both stereo channels.'),
+            value: _mono,
+            onChanged: _loading || _monoBusy ? null : (value) => unawaited(_setMono(value)),
+          ),
+          Text(_status, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
         ],
       );
 }
