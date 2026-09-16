@@ -2,6 +2,7 @@ package com.wavezero.player.playback
 
 import android.media.audiofx.Equalizer
 import androidx.media3.exoplayer.ExoPlayer
+import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -115,9 +116,9 @@ class NativeDspController {
                 )
             }
 
-            // Existing profiles use non-positive preamp values. Applying the
-            // headroom on the primary ExoPlayer avoids clipping after positive EQ
-            // boosts without changing the prebuffer player's muted state.
+            // Keep headroom on the primary ExoPlayer so positive EQ boosts do
+            // not immediately clip the digital signal. The prebuffer player stays
+            // muted and receives the same profile only when promoted to primary.
             player.volume = dbToLinear(activeProfile.preampGainDb)
             eq.enabled = true
 
@@ -171,6 +172,11 @@ class NativeDspController {
     }
 }
 
+data class NativeEqBand(
+    val frequencyHz: Int,
+    val gainDb: Double,
+)
+
 data class NativeEqProfile(
     val id: String,
     val label: String,
@@ -178,13 +184,34 @@ data class NativeEqProfile(
     val midGainDb: Double,
     val trebleGainDb: Double,
     val preampGainDb: Double,
+    val customBands: List<NativeEqBand> = emptyList(),
 ) {
     val isOff: Boolean get() = id == "off"
+    val isCustom: Boolean get() = id == "custom" && customBands.isNotEmpty()
 
-    fun gainForFrequencyHz(frequencyHz: Int): Double = when {
-        frequencyHz < 250 -> bassGainDb
-        frequencyHz < 5000 -> midGainDb
-        else -> trebleGainDb
+    fun gainForFrequencyHz(frequencyHz: Int): Double {
+        if (!isCustom) {
+            return when {
+                frequencyHz < 250 -> bassGainDb
+                frequencyHz < 5000 -> midGainDb
+                else -> trebleGainDb
+            }
+        }
+
+        val sorted = customBands.sortedBy { it.frequencyHz }
+        if (frequencyHz <= sorted.first().frequencyHz) return sorted.first().gainDb
+        if (frequencyHz >= sorted.last().frequencyHz) return sorted.last().gainDb
+
+        val upperIndex = sorted.indexOfFirst { frequencyHz <= it.frequencyHz }
+        val lower = sorted[upperIndex - 1]
+        val upper = sorted[upperIndex]
+        val lowerLog = ln(lower.frequencyHz.toDouble())
+        val upperLog = ln(upper.frequencyHz.toDouble())
+        val frequencyLog = ln(frequencyHz.toDouble())
+        val span = upperLog - lowerLog
+        if (span <= 0.0) return lower.gainDb
+        val ratio = ((frequencyLog - lowerLog) / span).coerceIn(0.0, 1.0)
+        return lower.gainDb + ((upper.gainDb - lower.gainDb) * ratio)
     }
 
     companion object {
