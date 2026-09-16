@@ -1,8 +1,8 @@
 /// User-selectable audio effect profiles and diagnostics metadata.
 ///
-/// The gain values are intentionally subtle and are used by Flutter diagnostics
-/// and native bridge requests. They do not imply that native DSP is active unless
-/// the playback bridge returns [NativeAudioEffectStatus.applied].
+/// The preset gain values are intentionally subtle. Custom EQ uses a separately
+/// persisted ten-point native curve, but still shares the same profile identity
+/// so selection survives app restarts.
 enum AudioEffectProfile {
   off,
   bassBoost,
@@ -10,6 +10,7 @@ enum AudioEffectProfile {
   warm,
   bright,
   nightSoft,
+  custom,
 }
 
 enum AudioEffectSafety { qualitySafe, subtle, stronger }
@@ -31,6 +32,8 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
         return 'bright';
       case AudioEffectProfile.nightSoft:
         return 'night_soft';
+      case AudioEffectProfile.custom:
+        return 'custom';
     }
   }
 
@@ -48,6 +51,8 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
         return 'Bright';
       case AudioEffectProfile.nightSoft:
         return 'Night / Soft';
+      case AudioEffectProfile.custom:
+        return 'Custom EQ';
     }
   }
 
@@ -65,6 +70,8 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
         return 'Bright';
       case AudioEffectProfile.nightSoft:
         return 'Night';
+      case AudioEffectProfile.custom:
+        return 'Custom';
     }
   }
 
@@ -81,7 +88,9 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
       case AudioEffectProfile.bright:
         return 'Light treble lift for a more open presentation without harsh settings.';
       case AudioEffectProfile.nightSoft:
-        return 'Low-intensity listening profile foundation; no compression is claimed unless native support reports it.';
+        return 'Low-intensity listening profile with a softer tonal balance.';
+      case AudioEffectProfile.custom:
+        return 'Your ten-point EQ curve, mapped onto the native bands exposed by this Android device.';
     }
   }
 
@@ -96,6 +105,8 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
       case AudioEffectProfile.bright:
       case AudioEffectProfile.nightSoft:
         return AudioEffectSafety.subtle;
+      case AudioEffectProfile.custom:
+        return AudioEffectSafety.stronger;
     }
   }
 
@@ -113,6 +124,7 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
   double get bassGainDb {
     switch (this) {
       case AudioEffectProfile.off:
+      case AudioEffectProfile.custom:
         return 0;
       case AudioEffectProfile.bassBoost:
         return 2.0;
@@ -130,6 +142,7 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
   double get midGainDb {
     switch (this) {
       case AudioEffectProfile.off:
+      case AudioEffectProfile.custom:
         return 0;
       case AudioEffectProfile.bassBoost:
         return 0.2;
@@ -147,6 +160,7 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
   double get trebleGainDb {
     switch (this) {
       case AudioEffectProfile.off:
+      case AudioEffectProfile.custom:
         return 0;
       case AudioEffectProfile.bassBoost:
         return -0.2;
@@ -164,6 +178,7 @@ extension AudioEffectProfileInfo on AudioEffectProfile {
   double get preampGainDb {
     switch (this) {
       case AudioEffectProfile.off:
+      case AudioEffectProfile.custom:
         return 0;
       case AudioEffectProfile.bassBoost:
         return -1.5;

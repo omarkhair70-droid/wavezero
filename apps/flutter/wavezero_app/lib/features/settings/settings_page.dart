@@ -11,6 +11,7 @@ import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../../shared/media/media_presentation.dart';
 import '../downloads/downloads_presentation.dart';
+import '../playback/custom_equalizer_page.dart';
 import '../playback/playback_modes.dart';
 import 'legal_licenses_page.dart';
 
@@ -218,8 +219,27 @@ class WzSettingsPage extends StatelessWidget {
                       .map((profile) => ChoiceChip(label: Text(profile.shortLabel), selected: selectedAudioEffectProfile == profile, onSelected: controlsDisabled ? null : (_) => onAudioEffectChanged(profile)))
                       .toList(growable: false),
                 ),
+                const SizedBox(height: WzSpacing.sm),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: controlsDisabled
+                        ? null
+                        : () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => WzCustomEqualizerPage(
+                                  onActivated: () => onAudioEffectChanged(AudioEffectProfile.custom),
+                                ),
+                              ),
+                            );
+                          },
+                    icon: const Icon(Icons.tune),
+                    label: const Text('Tune Custom EQ'),
+                  ),
+                ),
                 const SizedBox(height: WzSpacing.xs),
-                Text('Off / Original is the safest default. ${nativeAudioEffectStatus == NativeAudioEffectStatus.unsupported ? 'Effect profile saved. Native DSP support is still foundation-level.' : lastAudioEffectApplyResult}', maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                Text('Off / Original disables native EQ completely. $lastAudioEffectApplyResult', maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.caption),
               ],
             ),
           ),

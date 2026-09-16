@@ -21,6 +21,14 @@ void main() {
     expect(await store.load(), AudioEffectProfile.warm);
   });
 
+  test('restores custom EQ as a stable selectable profile', () async {
+    SharedPreferences.setMockInitialValues({
+      WzAudioEffectPreferences.preferenceKey: AudioEffectProfile.custom.id,
+    });
+    expect(await store.load(), AudioEffectProfile.custom);
+    expect(AudioEffectProfile.custom.shortLabel, 'Custom');
+  });
+
   test('unknown persisted values safely fall back to off', () async {
     SharedPreferences.setMockInitialValues({
       WzAudioEffectPreferences.preferenceKey: 'future-profile',
