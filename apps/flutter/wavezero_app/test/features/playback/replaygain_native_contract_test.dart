@@ -24,7 +24,7 @@ void main() {
     ).readAsStringSync();
 
     expect(dsp, contains('import android.media.audiofx.LoudnessEnhancer'));
-    expect(dsp, contains('activeProfile.preampGainDb + min(requestedNormalizationDb, 0.0)'));
+    expect(dsp, contains('profilePreampGainDb + min(requestedNormalizationDb, 0.0)'));
     expect(dsp, contains('enhancer.setTargetGain((positiveGainDb * 100.0).roundToInt())'));
     expect(dsp, contains('effectiveProfilePreampDb()'));
     expect(dsp, contains('eqResult.status == "applied"'));
