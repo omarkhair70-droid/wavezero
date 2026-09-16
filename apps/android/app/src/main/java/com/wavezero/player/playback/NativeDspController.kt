@@ -38,13 +38,13 @@ class NativeDspController {
 
     fun setLoudnessNormalizationEnabled(enabled: Boolean, player: ExoPlayer): Map<String, Any?> {
         normalizationEnabled = enabled
-        applyGainStages(player, player.audioSessionId)
+        applyGainStages(player, player.audioSessionId, effectiveProfilePreampDb())
         return normalizationStatusMap()
     }
 
     fun setReplayGain(info: ReplayGainInfo?, player: ExoPlayer): Map<String, Any?> {
         replayGainInfo = info
-        applyGainStages(player, player.audioSessionId)
+        applyGainStages(player, player.audioSessionId, effectiveProfilePreampDb())
         return normalizationStatusMap()
     }
 
@@ -86,7 +86,9 @@ class NativeDspController {
         if (audioSessionId <= 0) {
             releaseEqualizer()
             releaseLoudnessEnhancer()
-            applyGainStages(player, audioSessionId)
+            // Do not attenuate for an EQ that is not attached yet. ReplayGain is
+            // applied once a real audio session or usable static metadata exists.
+            applyGainStages(player, audioSessionId, profilePreampGainDb = 0.0)
             return if (activeProfile.isOff) {
                 NativeDspApplyResult.off()
             } else {
@@ -102,7 +104,12 @@ class NativeDspController {
         } else {
             applyEqualizer(audioSessionId)
         }
-        applyGainStages(player, audioSessionId)
+        val profilePreampGainDb = if (eqResult.status == "applied") {
+            activeProfile.preampGainDb
+        } else {
+            0.0
+        }
+        applyGainStages(player, audioSessionId, profilePreampGainDb)
         return eqResult
     }
 
@@ -166,7 +173,11 @@ class NativeDspController {
         }
     }
 
-    private fun applyGainStages(player: ExoPlayer, audioSessionId: Int) {
+    private fun applyGainStages(
+        player: ExoPlayer,
+        audioSessionId: Int,
+        profilePreampGainDb: Double,
+    ) {
         val requestedNormalizationDb = if (normalizationEnabled) {
             replayGainInfo?.preferredTrackGainDb() ?: 0.0
         } else {
@@ -174,7 +185,7 @@ class NativeDspController {
         }
         appliedNormalizationGainDb = requestedNormalizationDb
 
-        val attenuationDb = activeProfile.preampGainDb + min(requestedNormalizationDb, 0.0)
+        val attenuationDb = profilePreampGainDb + min(requestedNormalizationDb, 0.0)
         player.volume = dbToLinear(attenuationDb)
 
         val positiveGainDb = max(requestedNormalizationDb, 0.0)
@@ -185,7 +196,7 @@ class NativeDspController {
         }
         if (replayGainInfo == null) {
             releaseLoudnessEnhancer()
-            normalizationMessage = "No ReplayGain tag found; playback level is unchanged."
+            normalizationMessage = "No ReplayGain tag found; normalization leaves this track unchanged."
             return
         }
         if (positiveGainDb <= 0.0) {
@@ -216,7 +227,15 @@ class NativeDspController {
         } catch (_: RuntimeException) {
             releaseLoudnessEnhancer()
             appliedNormalizationGainDb = 0.0
-            normalizationMessage = "ReplayGain boost unavailable on this output; original level preserved."
+            normalizationMessage = "ReplayGain boost unavailable on this output; normalization leaves the level unchanged."
+        }
+    }
+
+    private fun effectiveProfilePreampDb(): Double {
+        return if (equalizer?.enabled == true && !activeProfile.isOff) {
+            activeProfile.preampGainDb
+        } else {
+            0.0
         }
     }
 
