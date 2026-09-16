@@ -608,6 +608,11 @@ class MockPlaybackBridge implements PlaybackBridge {
   }
 
   @override
+  Future<AudioEffectApplyResult> audioEffectStatus() async {
+    return AudioEffectApplyResult.off('Mock playback has no native DSP session.');
+  }
+
+  @override
   Future<PlaybackMetrics> metricsSnapshot() async => _metrics;
 }
 
