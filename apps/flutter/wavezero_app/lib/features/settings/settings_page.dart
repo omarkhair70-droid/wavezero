@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/app_config.dart';
 import '../../app/navigation/wavezero_navigation.dart';
@@ -240,6 +241,8 @@ class WzSettingsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: WzSpacing.xs),
                 Text('Off / Original disables native EQ completely. $lastAudioEffectApplyResult', maxLines: 3, overflow: TextOverflow.ellipsis, style: WzText.caption),
+                const SizedBox(height: WzSpacing.md),
+                const _WzLoudnessNormalizationTile(),
               ],
             ),
           ),
@@ -424,6 +427,98 @@ class WzSettingsPage extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      );
+}
+
+
+class _WzLoudnessNormalizationTile extends StatefulWidget {
+  const _WzLoudnessNormalizationTile();
+
+  @override
+  State<_WzLoudnessNormalizationTile> createState() => _WzLoudnessNormalizationTileState();
+}
+
+class _WzLoudnessNormalizationTileState extends State<_WzLoudnessNormalizationTile> {
+  static const MethodChannel _channel = MethodChannel('wavezero/playback');
+  bool _enabled = false;
+  bool _busy = true;
+  String _message = 'Reading ReplayGain normalization status…';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>('loudnessNormalizationStatus');
+      if (!mounted) return;
+      setState(() {
+        _enabled = result?['loudnessNormalizationEnabled'] == true;
+        _message = (result?['loudnessNormalizationMessage'] as String?) ??
+            'ReplayGain normalization is ready.';
+        _busy = false;
+      });
+    } on MissingPluginException {
+      if (mounted) setState(() {
+        _busy = false;
+        _message = 'Native loudness normalization is unavailable on this build.';
+      });
+    } on PlatformException catch (error) {
+      if (mounted) setState(() {
+        _busy = false;
+        _message = error.message ?? 'Could not read loudness normalization status.';
+      });
+    }
+  }
+
+  Future<void> _setEnabled(bool enabled) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _enabled = enabled;
+      _message = enabled ? 'Enabling ReplayGain normalization…' : 'Turning normalization off…';
+    });
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>(
+        'setLoudnessNormalizationEnabled',
+        <String, Object?>{'enabled': enabled},
+      );
+      if (!mounted) return;
+      setState(() {
+        _enabled = result?['loudnessNormalizationEnabled'] == true;
+        _message = (result?['loudnessNormalizationMessage'] as String?) ??
+            (_enabled ? 'ReplayGain normalization is on.' : 'Loudness normalization is off.');
+      });
+    } on MissingPluginException {
+      if (mounted) setState(() {
+        _enabled = false;
+        _message = 'Native loudness normalization is unavailable on this build.';
+      });
+    } on PlatformException catch (error) {
+      if (mounted) setState(() {
+        _enabled = !enabled;
+        _message = error.message ?? 'Could not change loudness normalization.';
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Loudness normalization'),
+            subtitle: const Text('Uses ReplayGain tags when tracks provide them. Untagged music stays at its original level.'),
+            value: _enabled,
+            onChanged: _busy ? null : (value) => unawaited(_setEnabled(value)),
+          ),
+          Text(_message, maxLines: 2, overflow: TextOverflow.ellipsis, style: WzText.caption),
         ],
       );
 }
