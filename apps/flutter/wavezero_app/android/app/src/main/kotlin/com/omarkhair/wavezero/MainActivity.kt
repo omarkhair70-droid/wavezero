@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import com.wavezero.player.playback.AudioPlayerManager
 import com.wavezero.player.playback.NotificationTrackSnapshot
+import com.wavezero.player.playback.NativeEqProfile
 import com.wavezero.player.playback.WaveZeroPlaybackSession
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -303,24 +304,18 @@ class PlaybackMethodChannelHandler(
                 }
 
                 "setAudioEffectProfile" -> {
-                    val profileId = call.argument<String>("id").orEmpty()
-                    if (profileId == "off") {
-                        result.success(
-                            mapOf(
-                                "status" to "off",
-                                "message" to "Audio effects are off; native playback remains original/no-effect.",
-                            ),
-                        )
-                        return
-                    }
-
-                    result.success(
-                        mapOf(
-                            "status" to "unsupported",
-                            "message" to "Native Android DSP is not enabled in this safe foundation build; profile ${profileId.ifBlank { "unknown" }} is stored for diagnostics only.",
-                        ),
+                    val profile = NativeEqProfile(
+                        id = call.argument<String>("id").orEmpty().ifBlank { "off" },
+                        label = call.argument<String>("label").orEmpty().ifBlank { "Audio effect" },
+                        bassGainDb = call.argument<Number>("bassGainDb")?.toDouble() ?: 0.0,
+                        midGainDb = call.argument<Number>("midGainDb")?.toDouble() ?: 0.0,
+                        trebleGainDb = call.argument<Number>("trebleGainDb")?.toDouble() ?: 0.0,
+                        preampGainDb = call.argument<Number>("preampGainDb")?.toDouble() ?: 0.0,
                     )
+                    result.success(audioPlayerManager.setAudioEffectProfile(profile))
                 }
+
+                "audioEffectStatus" -> result.success(audioPlayerManager.audioEffectStatusMap())
 
                 "metricsSnapshot" -> result.success(audioPlayerManager.metricsSnapshotMap())
 

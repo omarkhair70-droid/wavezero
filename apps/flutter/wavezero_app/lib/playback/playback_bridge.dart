@@ -61,6 +61,8 @@ abstract class PlaybackBridge {
 
   Future<AudioEffectApplyResult> setAudioEffectProfile(AudioEffectProfile profile);
 
+  Future<AudioEffectApplyResult> audioEffectStatus();
+
   Future<PlaybackMetrics> metricsSnapshot();
 }
 
@@ -226,6 +228,23 @@ class PlatformChannelPlaybackBridge implements PlaybackBridge {
       return AudioEffectApplyResult.unsupported(message);
     } on PlatformException catch (error) {
       final message = 'Android audio effects bridge error: ${error.message ?? error.code}';
+      _lastBridgeError = message;
+      return AudioEffectApplyResult.failed(message);
+    }
+  }
+
+  @override
+  Future<AudioEffectApplyResult> audioEffectStatus() async {
+    try {
+      final result = await _channel.invokeMapMethod<Object?, Object?>('audioEffectStatus');
+      _lastBridgeError = null;
+      return AudioEffectApplyResult.fromJson(result ?? const <Object?, Object?>{});
+    } on MissingPluginException catch (error) {
+      final message = 'Android audio effects bridge is not available: $error';
+      _lastBridgeError = message;
+      return AudioEffectApplyResult.unsupported(message);
+    } on PlatformException catch (error) {
+      final message = 'Android audio effects status error: ${error.message ?? error.code}';
       _lastBridgeError = message;
       return AudioEffectApplyResult.failed(message);
     }
@@ -586,6 +605,11 @@ class MockPlaybackBridge implements PlaybackBridge {
     return AudioEffectApplyResult.unsupported(
       'Mock bridge accepted ${profile.label}; no native DSP is active in mock playback.',
     );
+  }
+
+  @override
+  Future<AudioEffectApplyResult> audioEffectStatus() async {
+    return AudioEffectApplyResult.off('Mock playback has no native DSP session.');
   }
 
   @override

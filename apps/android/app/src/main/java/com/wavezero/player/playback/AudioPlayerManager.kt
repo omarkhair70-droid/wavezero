@@ -53,6 +53,7 @@ class AudioPlayerManager(
     private var nativePrebufferTitle: String? = null
     private var nativePrebufferUrl: String? = null
     private var nativePrebufferStartedAtMs: Long? = null
+    private val nativeDspController = NativeDspController()
 
     private val appContext = context.applicationContext
 
@@ -192,6 +193,13 @@ class AudioPlayerManager(
     }
 
     private val analyticsListener = object : AnalyticsListener {
+        override fun onAudioSessionIdChanged(
+            eventTime: AnalyticsListener.EventTime,
+            audioSessionId: Int,
+        ) {
+            nativeDspController.onAudioSessionChanged(audioSessionId, player)
+        }
+
         override fun onLoadCompleted(
             eventTime: AnalyticsListener.EventTime,
             loadEventInfo: LoadEventInfo,
@@ -429,8 +437,17 @@ class AudioPlayerManager(
         }
     }
 
+    fun setAudioEffectProfile(profile: NativeEqProfile): Map<String, Any?> {
+        return nativeDspController.setProfile(profile, player).toMap() + mapOf(
+            "profileId" to profile.id,
+        )
+    }
+
+    fun audioEffectStatusMap(): Map<String, Any?> = nativeDspController.statusMap()
+
     fun metricsSnapshotMap(): Map<String, Any?> {
         val durationMs = currentTrack.durationMs ?: player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+        val dspStatus = nativeDspController.statusMap()
         return metricsTracker.snapshot().toMap() + mapOf(
             "durationMs" to durationMs,
             "currentTrackId" to currentTrack.trackId,
@@ -451,11 +468,16 @@ class AudioPlayerManager(
             "mediaSessionStatus" to if (mediaSession == null) "disabled" else "active",
             "mediaNotificationShown" to mediaNotificationShown,
             "currentTrackLoaded" to currentTrackLoaded,
+            "nativeAudioEffectStatus" to dspStatus["status"],
+            "nativeAudioEffectProfileId" to dspStatus["profileId"],
+            "nativeAudioEffectMessage" to dspStatus["message"],
+            "nativeAudioEffectSessionId" to dspStatus["audioSessionId"],
         )
     }
 
     fun release() {
         positionJob?.cancel()
+        nativeDspController.release()
         player.removeListener(playerListener)
         player.removeAnalyticsListener(analyticsListener)
         prebufferPlayer.removeListener(prebufferListener)
@@ -590,6 +612,7 @@ class AudioPlayerManager(
         )
         exoPlayer.setHandleAudioBecomingNoisy(true)
         exoPlayer.volume = 1f
+        nativeDspController.onPrimaryPlayerChanged(exoPlayer)
     }
 
     private fun configurePrebufferPlayer(exoPlayer: ExoPlayer) {
