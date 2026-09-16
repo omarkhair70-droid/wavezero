@@ -1922,6 +1922,16 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _capturePlaybackBaselineMetrics(next);
         _alignQueueWithNativeNotificationAction(next);
       });
+      if (_selectedAudioEffectProfile != AudioEffectProfile.off &&
+          _nativeAudioEffectStatus == NativeAudioEffectStatus.pending) {
+        final effectStatus = await widget.playbackBridge.audioEffectStatus();
+        if (mounted && effectStatus.status != NativeAudioEffectStatus.pending) {
+          setState(() {
+            _nativeAudioEffectStatus = effectStatus.status;
+            _lastAudioEffectApplyResult = effectStatus.message;
+          });
+        }
+      }
       if (allowAutoAdvance) await _maybeAutoAdvance(next);
     } finally {
       _refreshingMetrics = false;
