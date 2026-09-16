@@ -62,6 +62,7 @@ class CloudVaultTrack {
   });
 
   final String cloudTrackId;
+  String get trackId => cloudTrackId;
   final String title;
   final String? artistName;
   final String? albumName;
