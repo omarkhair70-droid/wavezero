@@ -319,7 +319,6 @@ class AudioPlayerManager(
         prebufferPlayer.prepare()
     }
 
-
     fun playPreparedNextTrackIfReady(trackId: String, title: String, hlsUrl: String): Boolean {
         return playPreparedNextTrackIfReady(
             trackId = trackId,
@@ -527,6 +526,8 @@ class AudioPlayerManager(
             "monoOutputEnabled" to channelStatus["mono"],
             "channelPcmStereoConfigured" to channelStatus["pcmStereoConfigured"],
             "channelProcessorFormat" to channelStatus["channelProcessorFormat"],
+            "nativePreparedHandoffStrategy" to PREPARED_HANDOFF_STRATEGY,
+            "nativeGaplessGuarantee" to false,
         )
     }
 
@@ -541,7 +542,6 @@ class AudioPlayerManager(
         prebufferPlayer.release()
         managerJob.cancel()
     }
-
 
     private fun playPreparedNextTrackIfReady(
         trackId: String,
@@ -571,14 +571,17 @@ class AudioPlayerManager(
         applyCurrentTrack(NotificationTrackSnapshot(trackId = safeTrackId, title = safeTitle, url = hlsUrl))
         currentTrackLoaded = true
 
-        previousPrimaryPlayer.playWhenReady = false
-        previousPrimaryPlayer.pause()
-        previousPrimaryPlayer.stop()
-        previousPrimaryPlayer.clearMediaItems()
+        // Keep the old primary audible while the already-prepared player is
+        // promoted. Detach old callbacks first so pausing it cannot publish a
+        // false Paused state for the incoming track.
         previousPrimaryPlayer.removeListener(playerListener)
         previousPrimaryPlayer.removeAnalyticsListener(analyticsListener)
 
+        // ReplayGain metadata belongs to the outgoing track. Clear that state
+        // before attaching the incoming session so an untagged next track can
+        // never inherit the previous track's gain.
         nativeDspController.clearReplayGain(previousPrimaryPlayer)
+
         preparedPlayer.removeListener(prebufferListener)
         configurePrimaryPlayer(preparedPlayer)
         preparedPlayer.addListener(playerListener)
@@ -586,8 +589,6 @@ class AudioPlayerManager(
 
         player = preparedPlayer
         prebufferPlayer = previousPrimaryPlayer
-        configurePrebufferPlayer(prebufferPlayer)
-        prebufferPlayer.addListener(prebufferListener)
         mediaSession?.setPlayer(player)
         applyReplayGainFromTracks(player.currentTracks)
 
@@ -603,14 +604,26 @@ class AudioPlayerManager(
         if (source == PreparedHandoffSource.AutoAdvance) {
             publish(metricsTracker.markAutoAdvancePreparedSucceeded(safeTrackId))
         }
-        clearNativePrebufferState()
 
+        // This is the actual cutover. Everything expensive is already done:
+        // the incoming player is READY, owns primary playback behaviour, has
+        // the active EQ/ReplayGain/channel state and is attached to MediaSession.
+        // Keep the silence window down to the two adjacent playback commands.
+        previousPrimaryPlayer.playWhenReady = false
+        previousPrimaryPlayer.pause()
         player.playWhenReady = true
         mutablePlaybackState.value = PlaybackState(
             status = PlaybackStatus.Ready,
             trackTitle = currentTrackTitle,
         )
         startPositionUpdates()
+
+        // Only recycle the old primary after the incoming player has been told
+        // to play. This avoids the old stop()/clearMediaItems() work becoming an
+        // artificial gap before the prepared track starts.
+        configurePrebufferPlayer(prebufferPlayer)
+        prebufferPlayer.addListener(prebufferListener)
+        clearNativePrebufferState()
         return true
     }
 
@@ -789,6 +802,6 @@ class AudioPlayerManager(
         const val LOUDNESS_NORMALIZATION_KEY = "loudness_normalization_enabled"
         const val CHANNEL_BALANCE_KEY = "channel_balance"
         const val MONO_OUTPUT_KEY = "mono_output_enabled"
+        const val PREPARED_HANDOFF_STRATEGY = "prepared_player_min_gap"
     }
 }
-
