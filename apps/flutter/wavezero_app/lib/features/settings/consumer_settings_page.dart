@@ -7,6 +7,7 @@ import '../../catalog/audio_quality.dart';
 import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../downloads/downloads_presentation.dart';
+import 'crossfade_controls.dart';
 import 'legal_licenses_page.dart';
 
 class WzConsumerSettingsPage extends StatelessWidget {
@@ -81,6 +82,11 @@ class WzConsumerSettingsPage extends StatelessWidget {
                       )
                       .toList(growable: false),
                 ),
+              ),
+              const _SettingsDivider(),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(14, 13, 14, 14),
+                child: WzCrossfadeControls(),
               ),
             ],
           ),
