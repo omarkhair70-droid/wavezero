@@ -140,7 +140,7 @@ class AudioPlayerManager(
                 Player.STATE_ENDED -> {
                     playCommandInFlight = false
                     positionJob?.cancel()
-                    publish(metricsTracker.markNotPlaying(player.currentPosition))
+                    publish(metricsTracker.markEnded(player.currentPosition))
                     mutablePlaybackState.value = PlaybackState(
                         status = PlaybackStatus.Ended,
                         trackTitle = currentTrackTitle,
@@ -171,6 +171,7 @@ class AudioPlayerManager(
                     trackTitle = currentTrackTitle,
                 )
             } else {
+                if (player.playbackState == Player.STATE_ENDED) return
                 if (!player.playWhenReady) positionJob?.cancel()
                 publish(metricsTracker.markNotPlaying(player.currentPosition))
                 if (mutablePlaybackState.value.status == PlaybackStatus.Playing) {

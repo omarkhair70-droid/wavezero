@@ -30,22 +30,30 @@ WzAutoAdvanceTriggerDecision evaluateWzAutoAdvanceTrigger({
     );
   }
 
-  final durationMs = metricsDurationMs ?? manifestDurationMs;
-  if (durationMs == null || durationMs <= 0) {
-    return const WzAutoAdvanceTriggerDecision(
-      shouldAdvance: false,
-      clearLastTrackGuard: false,
-    );
-  }
-
-  final remainingMs = durationMs - currentPositionMs;
-  final nearEnd = currentPositionMs > 0 && remainingMs <= thresholdMs;
   final ended = lastEvent == 'ended' || lastEvent == 'playback_ended';
-  if (!nearEnd && !ended) {
-    return WzAutoAdvanceTriggerDecision(
-      shouldAdvance: false,
-      clearLastTrackGuard: currentPositionMs < durationMs - (thresholdMs * 2),
-    );
+  final durationMs = metricsDurationMs ?? manifestDurationMs;
+
+  // A real native end event is authoritative even when the source does not
+  // expose a usable duration. For unknown-duration tracks, clear the initial
+  // dedupe guard once playback has made meaningful forward progress so the
+  // eventual end event can advance exactly once.
+  if (durationMs == null || durationMs <= 0) {
+    if (!ended) {
+      return WzAutoAdvanceTriggerDecision(
+        shouldAdvance: false,
+        clearLastTrackGuard: currentPositionMs > thresholdMs,
+      );
+    }
+  } else {
+    final remainingMs = durationMs - currentPositionMs;
+    final nearEnd = currentPositionMs > 0 && remainingMs <= thresholdMs;
+    if (!nearEnd && !ended) {
+      return WzAutoAdvanceTriggerDecision(
+        shouldAdvance: false,
+        clearLastTrackGuard:
+            currentPositionMs < durationMs - (thresholdMs * 2),
+      );
+    }
   }
 
   if (currentTrackId == null || currentTrackId == lastAutoAdvanceTrackId) {

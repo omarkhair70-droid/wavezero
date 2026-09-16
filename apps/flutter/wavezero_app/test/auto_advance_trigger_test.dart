@@ -35,9 +35,9 @@ void main() {
     expect(busy.clearLastTrackGuard, isFalse);
   });
 
-  test('requires a valid duration and falls back to manifest duration', () {
-    final missing = decide(metricsDurationMs: null, manifestDurationMs: null, currentPositionMs: 9500);
-    final invalid = decide(metricsDurationMs: 0, currentPositionMs: 9500);
+  test('requires a valid duration for near-end checks and falls back to manifest duration', () {
+    final missing = decide(metricsDurationMs: null, manifestDurationMs: null, currentPositionMs: 1000);
+    final invalid = decide(metricsDurationMs: 0, currentPositionMs: 1000);
     final fallback = decide(metricsDurationMs: null, manifestDurationMs: 10000, currentPositionMs: 9000);
 
     expect(missing.shouldAdvance, isFalse);
@@ -59,6 +59,36 @@ void main() {
     expect(decide(currentPositionMs: 0, lastEvent: 'playback_ended').shouldAdvance, isTrue);
   });
 
+  test('real ended events remain authoritative when duration is unknown', () {
+    final ended = decide(
+      metricsDurationMs: null,
+      manifestDurationMs: null,
+      currentPositionMs: 184000,
+      lastEvent: 'playback_ended',
+    );
+
+    expect(ended.shouldAdvance, isTrue);
+    expect(ended.trackId, 'track-1');
+  });
+
+  test('unknown-duration playback clears its initial dedupe guard after progress', () {
+    final early = decide(
+      metricsDurationMs: null,
+      manifestDurationMs: null,
+      currentPositionMs: 1200,
+      lastAutoAdvanceTrackId: 'track-1',
+    );
+    final progressed = decide(
+      metricsDurationMs: null,
+      manifestDurationMs: null,
+      currentPositionMs: 1201,
+      lastAutoAdvanceTrackId: 'track-1',
+    );
+
+    expect(early.clearLastTrackGuard, isFalse);
+    expect(progressed.clearLastTrackGuard, isTrue);
+  });
+
   test('clears the dedupe guard only after playback moves well away from the end', () {
     final clear = decide(currentPositionMs: 7599, lastAutoAdvanceTrackId: 'track-1');
     final keep = decide(currentPositionMs: 7600, lastAutoAdvanceTrackId: 'track-1');
@@ -71,9 +101,17 @@ void main() {
 
   test('does not retrigger the same track or advance without a current track id', () {
     final duplicate = decide(currentPositionMs: 9500, lastAutoAdvanceTrackId: 'track-1');
+    final duplicateEnded = decide(
+      metricsDurationMs: null,
+      manifestDurationMs: null,
+      currentPositionMs: 10000,
+      lastEvent: 'playback_ended',
+      lastAutoAdvanceTrackId: 'track-1',
+    );
     final missingId = decide(currentPositionMs: 9500, currentTrackId: null);
 
     expect(duplicate.shouldAdvance, isFalse);
+    expect(duplicateEnded.shouldAdvance, isFalse);
     expect(missingId.shouldAdvance, isFalse);
   });
 }
