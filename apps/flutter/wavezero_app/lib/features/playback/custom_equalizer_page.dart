@@ -79,7 +79,7 @@ class _WzCustomEqualizerPageState extends State<WzCustomEqualizerPage> {
           final frequency = raw['frequencyHz'];
           final gain = raw['gainDb'];
           if (frequency is num && gain is num) {
-            byFrequency[frequency.toInt()] = gain.toDouble().clamp(-6.0, 6.0);
+            byFrequency[frequency.toInt()] = gain.toDouble().clamp(-6.0, 6.0).toDouble();
           }
         }
         _bands = _frequencies
