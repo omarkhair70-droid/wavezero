@@ -35,6 +35,7 @@ void main() {
     expect(activity, isNot(contains('Native Android DSP is not enabled in this safe foundation build')));
     expect(manifest, contains('android.permission.MODIFY_AUDIO_SETTINGS'));
     expect(bridge, contains("invokeMapMethod<Object?, Object?>('audioEffectStatus')"));
+    expect(bridge, contains("Mock playback has no native DSP session."));
   });
 
   test('native profile keeps clipping headroom and frequency regions explicit', () {
