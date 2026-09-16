@@ -44,6 +44,10 @@ void main() {
       triggerGate,
     );
     expect(repeatBranch, greaterThan(triggerGate));
+    expect(
+      autoAdvance.substring(triggerGate, repeatBranch),
+      isNot(contains('_lastAutoAdvanceTrackId = trigger.trackId;')),
+    );
     expect(firstGuardWrite, greaterThan(repeatBranch));
     expect(autoAdvance, contains('if (shuffled) {'));
     expect(autoAdvance, contains('if (_canNext) {'));
