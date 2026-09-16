@@ -60,6 +60,10 @@ class AudioPlayerManager(
     private val appContext = context.applicationContext
     private val soundEnginePreferences = appContext.getSharedPreferences(SOUND_ENGINE_PREFS, Context.MODE_PRIVATE)
     private var loudnessNormalizationEnabled = soundEnginePreferences.getBoolean(LOUDNESS_NORMALIZATION_KEY, false)
+    private val channelAudioState = WaveZeroChannelAudioState(
+        initialBalance = soundEnginePreferences.getFloat(CHANNEL_BALANCE_KEY, 0f).toDouble(),
+        initialMono = soundEnginePreferences.getBoolean(MONO_OUTPUT_KEY, false),
+    )
 
     private var player: ExoPlayer = buildPrimaryPlayer()
 
@@ -470,9 +474,25 @@ class AudioPlayerManager(
 
     fun loudnessNormalizationStatusMap(): Map<String, Any?> = nativeDspController.statusMap()
 
+    fun setChannelBalance(balance: Double): Map<String, Any?> {
+        val safeBalance = balance.coerceIn(-1.0, 1.0)
+        channelAudioState.setBalance(safeBalance)
+        soundEnginePreferences.edit().putFloat(CHANNEL_BALANCE_KEY, safeBalance.toFloat()).apply()
+        return channelAudioState.statusMap()
+    }
+
+    fun setMonoOutput(enabled: Boolean): Map<String, Any?> {
+        channelAudioState.setMono(enabled)
+        soundEnginePreferences.edit().putBoolean(MONO_OUTPUT_KEY, enabled).apply()
+        return channelAudioState.statusMap()
+    }
+
+    fun channelAudioStatusMap(): Map<String, Any?> = channelAudioState.statusMap()
+
     fun metricsSnapshotMap(): Map<String, Any?> {
         val durationMs = currentTrack.durationMs ?: player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
         val dspStatus = nativeDspController.statusMap()
+        val channelStatus = channelAudioState.statusMap()
         return metricsTracker.snapshot().toMap() + mapOf(
             "durationMs" to durationMs,
             "currentTrackId" to currentTrack.trackId,
@@ -503,6 +523,10 @@ class AudioPlayerManager(
             "appliedNormalizationGainDb" to dspStatus["appliedNormalizationGainDb"],
             "loudnessEnhancerActive" to dspStatus["loudnessEnhancerActive"],
             "loudnessNormalizationMessage" to dspStatus["loudnessNormalizationMessage"],
+            "channelBalance" to channelStatus["balance"],
+            "monoOutputEnabled" to channelStatus["mono"],
+            "channelPcmStereoConfigured" to channelStatus["pcmStereoConfigured"],
+            "channelProcessorFormat" to channelStatus["channelProcessorFormat"],
         )
     }
 
@@ -643,9 +667,15 @@ class AudioPlayerManager(
         }
     }
 
-    private fun buildPrimaryPlayer(): ExoPlayer = ExoPlayer.Builder(appContext).build().also(::configurePrimaryPlayer)
+    private fun buildPrimaryPlayer(): ExoPlayer = ExoPlayer.Builder(
+        appContext,
+        WaveZeroAudioRenderersFactory(appContext, channelAudioState),
+    ).build().also(::configurePrimaryPlayer)
 
-    private fun buildPrebufferPlayer(): ExoPlayer = ExoPlayer.Builder(appContext).build().also(::configurePrebufferPlayer)
+    private fun buildPrebufferPlayer(): ExoPlayer = ExoPlayer.Builder(
+        appContext,
+        WaveZeroAudioRenderersFactory(appContext, channelAudioState),
+    ).build().also(::configurePrebufferPlayer)
 
     private fun configurePrimaryPlayer(exoPlayer: ExoPlayer) {
         exoPlayer.setAudioAttributes(
@@ -757,6 +787,8 @@ class AudioPlayerManager(
         const val MEDIA_SESSION_ID = "wavezero-playback"
         const val SOUND_ENGINE_PREFS = "wavezero_sound_engine"
         const val LOUDNESS_NORMALIZATION_KEY = "loudness_normalization_enabled"
+        const val CHANNEL_BALANCE_KEY = "channel_balance"
+        const val MONO_OUTPUT_KEY = "mono_output_enabled"
     }
 }
 
