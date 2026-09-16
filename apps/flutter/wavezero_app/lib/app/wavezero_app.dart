@@ -75,6 +75,7 @@ import '../features/queue/queue_session_restore.dart';
 import '../features/queue/queue_mutations.dart';
 import '../features/queue/queue_position.dart';
 import '../features/queue/queue_panel.dart';
+import '../features/queue/playback_context.dart';
 import '../features/queue/smart_queue_policy.dart';
 import 'navigation/wavezero_navigation.dart';
 import 'theme/wavezero_theme.dart';
@@ -744,6 +745,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     CloudVaultTrack track, {
     bool autoPlay = true,
   }) async {
+    _adoptPlaybackContextForTrackId(track.trackId);
     if (!track.isResolvable) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Cloud playback is not connected yet.')),
@@ -2530,6 +2532,31 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     return null;
   }
 
+  void _adoptPlaybackContextForTrackId(String trackId) {
+    if (!mounted ||
+        trackId.isEmpty ||
+        _queue.any((track) => track.trackId == trackId)) {
+      return;
+    }
+
+    final context = wzPlaybackContextForTrack(
+      preferredTracks: _filteredCatalog,
+      fallbackTracks: _resolvableLibraryTracks,
+      currentTrackId: trackId,
+      maxTracks: _initialVisibleTrackCount,
+    );
+    if (context.isEmpty) return;
+
+    setState(() {
+      _queue = context;
+      _queueCurrentTrackId = trackId;
+      _queueStatus = 'Playing from your music.';
+      _sessionStatus = 'Session saved.';
+    });
+    unawaited(_saveSession());
+    unawaited(_pushNotificationQueueSnapshot());
+  }
+
   Future<void> _loadDeviceMusicTrack(
     DeviceMusicTrack track, {
     bool autoPlay = false,
@@ -2537,6 +2564,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
     String? status,
   }) {
     return _runOperation(operation, () async {
+      _adoptPlaybackContextForTrackId(track.trackId);
       await _clearNativeNextPrebuffer();
       if (!mounted) return;
       final manifest = wzDeviceManifest(track);
@@ -2595,6 +2623,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
         _selectedTrackId ??
         (_catalog.isNotEmpty ? _catalog.first.trackId : null);
     if (id == null) return Future<void>.value();
+    _adoptPlaybackContextForTrackId(id);
     final deviceTrack = _findDeviceTrack(id);
     if (deviceTrack != null)
       return _loadDeviceMusicTrack(
@@ -3884,7 +3913,7 @@ class _PlayerScreenState extends State<_PlayerScreen> {
               unawaited(_updatePredictivePreloadCandidate());
             },
             onPlayTrack: (track) =>
-                _playQueueTrack(track, autoStart: _metrics.isPlaying),
+                _playQueueTrack(track, autoStart: true),
             onMoveUp: (track) => _moveQueueTrack(track, -1),
             onMoveDown: (track) => _moveQueueTrack(track, 1),
             onPlayNext: _playTrackNext,
@@ -3985,7 +4014,10 @@ class _PlayerScreenState extends State<_PlayerScreen> {
             onOpenCloudVault: _openCloudVaultPage,
             onRefresh: () => _loadCatalog(),
             onImportDeviceMusic: _importDeviceMusic,
-            onSelectTrack: (track) => _loadCatalogTrack(trackId: track.trackId),
+            onSelectTrack: (track) => _loadCatalogTrack(
+              trackId: track.trackId,
+              autoPlay: true,
+            ),
             onPlayCuratedPick: (pick) => _loadCatalogTrack(
               trackId: pick.track.trackId,
               autoPlay: true,

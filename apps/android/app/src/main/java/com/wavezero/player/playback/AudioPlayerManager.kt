@@ -140,7 +140,7 @@ class AudioPlayerManager(
                 Player.STATE_ENDED -> {
                     playCommandInFlight = false
                     positionJob?.cancel()
-                    publish(metricsTracker.markNotPlaying(player.currentPosition))
+                    publish(metricsTracker.markEnded(player.currentPosition))
                     mutablePlaybackState.value = PlaybackState(
                         status = PlaybackStatus.Ended,
                         trackTitle = currentTrackTitle,

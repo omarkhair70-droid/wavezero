@@ -246,6 +246,13 @@ class PlaybackMetricsTracker(
         }
     }
 
+    fun markEnded(positionMs: Long): PlaybackMetrics {
+        nativeHandoffStartedAtMs = null
+        return update("playback_ended") {
+            copy(isPlaying = false, currentPositionMs = positionMs.coerceAtLeast(0))
+        }
+    }
+
     fun markSeekStarted(targetPositionMs: Long): PlaybackMetrics {
         lastSeekAtMs = nowMs()
         return update("seek_started") {
