@@ -49,10 +49,13 @@ void main() {
     final manager = File(
       '../../android/app/src/main/java/com/wavezero/player/playback/AudioPlayerManager.kt',
     ).readAsStringSync();
+    final metrics = File(
+      '../../android/app/src/main/java/com/wavezero/player/playback/PlaybackMetrics.kt',
+    ).readAsStringSync();
 
     expect(manager, contains('PREPARED_HANDOFF_STRATEGY = "prepared_player_min_gap"'));
     expect(manager, contains('"nativePreparedHandoffStrategy" to PREPARED_HANDOFF_STRATEGY'));
     expect(manager, contains('"nativeGaplessGuarantee" to false'));
-    expect(manager, contains('nativeHandoffToPlayingMs'));
+    expect(metrics, contains('nativeHandoffToPlayingMs'));
   });
 }
