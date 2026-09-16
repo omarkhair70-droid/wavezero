@@ -171,6 +171,7 @@ class AudioPlayerManager(
                     trackTitle = currentTrackTitle,
                 )
             } else {
+                if (player.playbackState == Player.STATE_ENDED) return
                 if (!player.playWhenReady) positionJob?.cancel()
                 publish(metricsTracker.markNotPlaying(player.currentPosition))
                 if (mutablePlaybackState.value.status == PlaybackStatus.Playing) {

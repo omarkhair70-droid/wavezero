@@ -23,6 +23,10 @@ void main() {
     );
     expect(metrics, contains('fun markEnded(positionMs: Long)'));
     expect(metrics, contains('update("playback_ended")'));
+    expect(
+      manager,
+      contains('if (player.playbackState == Player.STATE_ENDED) return'),
+    );
   });
 
   test('direct track taps play immediately instead of only selecting', () {
