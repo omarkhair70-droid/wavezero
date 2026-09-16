@@ -35,10 +35,30 @@ class AudioPlayerManager(
     private val appStartedAtMs: Long = SystemClock.elapsedRealtime(),
     enableMediaSession: Boolean = true,
 ) {
+    private data class ActiveCrossfade(
+        val trackId: String,
+        val title: String,
+        val url: String,
+        val outgoing: ExoPlayer,
+        val incoming: ExoPlayer,
+        val durationMs: Long,
+        var progress: Float = 0f,
+        var acknowledged: Boolean = false,
+    )
+
+    private data class PendingPrebuffer(
+        val trackId: String,
+        val title: String,
+        val url: String,
+    )
+
     private val managerJob = SupervisorJob()
     private val scope = CoroutineScope(managerJob + Dispatchers.Main.immediate)
     private val metricsTracker = PlaybackMetricsTracker(nowMs = SystemClock::elapsedRealtime)
     private var positionJob: Job? = null
+    private var crossfadeJob: Job? = null
+    private var activeCrossfade: ActiveCrossfade? = null
+    private var pendingPrebuffer: PendingPrebuffer? = null
     private var currentTrack = NotificationTrackSnapshot.manual(DemoTrack.title, hlsUrl)
     private var currentTrackTitle: String = currentTrack.title
     private var currentHlsUrl: String = currentTrack.url
@@ -60,6 +80,10 @@ class AudioPlayerManager(
     private val appContext = context.applicationContext
     private val soundEnginePreferences = appContext.getSharedPreferences(SOUND_ENGINE_PREFS, Context.MODE_PRIVATE)
     private var loudnessNormalizationEnabled = soundEnginePreferences.getBoolean(LOUDNESS_NORMALIZATION_KEY, false)
+    private var crossfadeDurationMs = soundEnginePreferences
+        .getLong(CROSSFADE_DURATION_KEY, CROSSFADE_OFF_MS)
+        .takeIf(ALLOWED_CROSSFADE_DURATIONS::contains)
+        ?: CROSSFADE_OFF_MS
     private val channelAudioState = WaveZeroChannelAudioState(
         initialBalance = soundEnginePreferences.getFloat(CHANNEL_BALANCE_KEY, 0f).toDouble(),
         initialMono = soundEnginePreferences.getBoolean(MONO_OUTPUT_KEY, false),
@@ -159,7 +183,7 @@ class AudioPlayerManager(
         }
 
         override fun onTracksChanged(tracks: Tracks) {
-            applyReplayGainFromTracks(tracks)
+            applyReplayGainFromTracks(tracks, player)
         }
 
         override fun onMetadata(metadata: Metadata) {
@@ -174,6 +198,7 @@ class AudioPlayerManager(
                 return
             }
 
+            cancelActiveCrossfade(keepAcknowledgedIncoming = true)
             positionJob?.cancel()
             clearNativePrebuffer(NativePrebufferClearReason.NativePlaybackError)
             playCommandInFlight = false
@@ -196,6 +221,8 @@ class AudioPlayerManager(
                     ) {
                         return
                     }
+                    nativeDspController.onAudioSessionChanged(prebufferPlayer.audioSessionId, prebufferPlayer)
+                    applyReplayGainFromTracks(prebufferPlayer.currentTracks, prebufferPlayer)
                     val startedAt = nativePrebufferStartedAtMs ?: SystemClock.elapsedRealtime()
                     publish(metricsTracker.markNativePrebufferReady(trackId, SystemClock.elapsedRealtime() - startedAt))
                 }
@@ -205,7 +232,20 @@ class AudioPlayerManager(
             }
         }
 
+        override fun onTracksChanged(tracks: Tracks) {
+            applyReplayGainFromTracks(tracks, prebufferPlayer)
+        }
+
+        override fun onMetadata(metadata: Metadata) {
+            ReplayGainMetadata.parse(metadata)?.let { info ->
+                nativeDspController.setReplayGain(info, prebufferPlayer)
+            }
+        }
+
         override fun onPlayerError(error: PlaybackException) {
+            if (activeCrossfade?.incoming === prebufferPlayer) {
+                cancelActiveCrossfade(keepAcknowledgedIncoming = false)
+            }
             clearNativePrebuffer(NativePrebufferClearReason.NativePlaybackError)
         }
     }
@@ -249,6 +289,7 @@ class AudioPlayerManager(
     }
 
     fun loadTrack(track: NotificationTrackSnapshot) {
+        cancelActiveCrossfade(keepAcknowledgedIncoming = true)
         clearNativePrebuffer(NativePrebufferClearReason.TrackLoaded)
         nativeDspController.clearReplayGain(player)
         applyCurrentTrack(track)
@@ -299,6 +340,16 @@ class AudioPlayerManager(
             clearNativePrebuffer(NativePrebufferClearReason.InvalidCandidate)
             return
         }
+
+        val crossfade = activeCrossfade
+        if (crossfade != null) {
+            if (crossfade.trackId == safeTrackId && crossfade.url == hlsUrl) return
+            if (crossfade.acknowledged) {
+                pendingPrebuffer = PendingPrebuffer(safeTrackId, safeTitle, hlsUrl)
+                return
+            }
+        }
+
         if (
             nativePrebufferTrackId == safeTrackId &&
             nativePrebufferUrl == hlsUrl &&
@@ -311,6 +362,7 @@ class AudioPlayerManager(
         nativePrebufferTitle = safeTitle
         nativePrebufferUrl = hlsUrl
         nativePrebufferStartedAtMs = SystemClock.elapsedRealtime()
+        nativeDspController.onSecondaryPlayerChanged(prebufferPlayer)
         prebufferPlayer.playWhenReady = false
         prebufferPlayer.stop()
         prebufferPlayer.clearMediaItems()
@@ -338,6 +390,9 @@ class AudioPlayerManager(
     }
 
     fun clearNextTrackPrebuffer() {
+        if (activeCrossfade?.acknowledged != true) {
+            cancelActiveCrossfade(keepAcknowledgedIncoming = false)
+        }
         clearNativePrebuffer(NativePrebufferClearReason.FlutterRequested)
     }
 
@@ -382,6 +437,7 @@ class AudioPlayerManager(
     }
 
     fun pause() {
+        cancelActiveCrossfade(keepAcknowledgedIncoming = true)
         softStopped = false
         playCommandInFlight = false
         player.pause()
@@ -406,6 +462,7 @@ class AudioPlayerManager(
     fun playNextFromNotification(): Boolean = playQueueOffsetFromNotification(1, "next")
 
     fun stop() {
+        cancelActiveCrossfade(keepAcknowledgedIncoming = true)
         softStopped = true
         playCommandInFlight = false
         player.playWhenReady = false
@@ -422,6 +479,7 @@ class AudioPlayerManager(
     }
 
     fun retry() {
+        cancelActiveCrossfade(keepAcknowledgedIncoming = true)
         softStopped = false
         clearNativePrebuffer(NativePrebufferClearReason.Retry)
         nativeDspController.clearReplayGain(player)
@@ -435,6 +493,7 @@ class AudioPlayerManager(
     }
 
     fun seekTo(positionMs: Long) {
+        cancelActiveCrossfade(keepAcknowledgedIncoming = true)
         softStopped = false
         val durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
         val safePosition = if (durationMs == null) {
@@ -488,10 +547,35 @@ class AudioPlayerManager(
 
     fun channelAudioStatusMap(): Map<String, Any?> = channelAudioState.statusMap()
 
+    fun setCrossfadeDurationMs(durationMs: Long): Map<String, Any?> {
+        require(ALLOWED_CROSSFADE_DURATIONS.contains(durationMs)) {
+            "Crossfade duration must be Off, 2s, 4s, or 6s."
+        }
+        crossfadeDurationMs = durationMs
+        soundEnginePreferences.edit().putLong(CROSSFADE_DURATION_KEY, durationMs).apply()
+        return crossfadeStatusMap()
+    }
+
+    fun crossfadeStatusMap(): Map<String, Any?> {
+        val active = activeCrossfade
+        return mapOf(
+            "enabled" to (crossfadeDurationMs > 0L),
+            "durationMs" to crossfadeDurationMs,
+            "active" to (active != null),
+            "progress" to (active?.progress ?: 0f),
+            "incomingTrackId" to active?.trackId,
+            "acknowledged" to (active?.acknowledged ?: false),
+            "autoMode" to "prepared_natural_end",
+            "manualSkipMode" to "immediate_prepared",
+            "gainComposition" to "dsp_base_x_transition_envelope",
+        )
+    }
+
     fun metricsSnapshotMap(): Map<String, Any?> {
         val durationMs = currentTrack.durationMs ?: player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
         val dspStatus = nativeDspController.statusMap()
         val channelStatus = channelAudioState.statusMap()
+        val crossfadeStatus = crossfadeStatusMap()
         return metricsTracker.snapshot().toMap() + mapOf(
             "durationMs" to durationMs,
             "currentTrackId" to currentTrack.trackId,
@@ -516,6 +600,8 @@ class AudioPlayerManager(
             "nativeAudioEffectProfileId" to dspStatus["profileId"],
             "nativeAudioEffectMessage" to dspStatus["message"],
             "nativeAudioEffectSessionId" to dspStatus["audioSessionId"],
+            "nativeDspPlayerCount" to dspStatus["activeDspPlayerCount"],
+            "nativeTransitionGain" to dspStatus["transitionGain"],
             "loudnessNormalizationEnabled" to dspStatus["loudnessNormalizationEnabled"],
             "replayGainTrackDb" to dspStatus["replayGainTrackDb"],
             "replayGainAlbumDb" to dspStatus["replayGainAlbumDb"],
@@ -528,11 +614,19 @@ class AudioPlayerManager(
             "channelProcessorFormat" to channelStatus["channelProcessorFormat"],
             "nativePreparedHandoffStrategy" to PREPARED_HANDOFF_STRATEGY,
             "nativeGaplessGuarantee" to false,
+            "crossfadeEnabled" to crossfadeStatus["enabled"],
+            "crossfadeDurationMs" to crossfadeStatus["durationMs"],
+            "crossfadeActive" to crossfadeStatus["active"],
+            "crossfadeProgress" to crossfadeStatus["progress"],
+            "crossfadeIncomingTrackId" to crossfadeStatus["incomingTrackId"],
+            "crossfadeManualSkipMode" to crossfadeStatus["manualSkipMode"],
+            "crossfadeGainComposition" to crossfadeStatus["gainComposition"],
         )
     }
 
     fun release() {
         positionJob?.cancel()
+        crossfadeJob?.cancel()
         nativeDspController.release()
         player.removeListener(playerListener)
         player.removeAnalyticsListener(analyticsListener)
@@ -555,6 +649,12 @@ class AudioPlayerManager(
         if (source == PreparedHandoffSource.AutoAdvance) {
             publish(metricsTracker.markAutoAdvancePreparedAttempted())
         }
+
+        val crossfade = activeCrossfade
+        if (crossfade != null && crossfade.trackId == safeTrackId && crossfade.url == hlsUrl) {
+            return promoteActiveCrossfade(crossfade, source, forceComplete = source == PreparedHandoffSource.ExplicitNext)
+        }
+
         if (!isPreparedNextTrackReady(safeTrackId, hlsUrl)) {
             recordNextTrackPrebufferOutcome(safeTrackId, usedPreparedPath = false)
             if (source == PreparedHandoffSource.AutoAdvance) {
@@ -571,16 +671,8 @@ class AudioPlayerManager(
         applyCurrentTrack(NotificationTrackSnapshot(trackId = safeTrackId, title = safeTitle, url = hlsUrl))
         currentTrackLoaded = true
 
-        // Keep the old primary audible while the already-prepared player is
-        // promoted. Detach old callbacks first so pausing it cannot publish a
-        // false Paused state for the incoming track.
         previousPrimaryPlayer.removeListener(playerListener)
         previousPrimaryPlayer.removeAnalyticsListener(analyticsListener)
-
-        // ReplayGain metadata belongs to the outgoing track. Clear that state
-        // before attaching the incoming session so an untagged next track can
-        // never inherit the previous track's gain.
-        nativeDspController.clearReplayGain(previousPrimaryPlayer)
 
         preparedPlayer.removeListener(prebufferListener)
         configurePrimaryPlayer(preparedPlayer)
@@ -590,41 +682,208 @@ class AudioPlayerManager(
         player = preparedPlayer
         prebufferPlayer = previousPrimaryPlayer
         mediaSession?.setPlayer(player)
-        applyReplayGainFromTracks(player.currentTracks)
+        applyReplayGainFromTracks(player.currentTracks, player)
 
-        publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
-        publish(metricsTracker.markPlayTapped())
-        publish(metricsTracker.markReady())
-        publish(
-            metricsTracker.markNativePrebufferHandoffSucceeded(
-                trackId = safeTrackId,
-                explicitNext = source == PreparedHandoffSource.ExplicitNext,
-            ),
-        )
-        if (source == PreparedHandoffSource.AutoAdvance) {
-            publish(metricsTracker.markAutoAdvancePreparedSucceeded(safeTrackId))
-        }
+        publishPreparedHandoffSuccess(safeTrackId, source)
 
-        // This is the actual cutover. Everything expensive is already done:
-        // the incoming player is READY, owns primary playback behaviour, has
-        // the active EQ/ReplayGain/channel state and is attached to MediaSession.
-        // Keep the silence window down to the two adjacent playback commands.
         previousPrimaryPlayer.playWhenReady = false
         previousPrimaryPlayer.pause()
         player.playWhenReady = true
+        nativeDspController.clearReplayGain(previousPrimaryPlayer)
         mutablePlaybackState.value = PlaybackState(
             status = PlaybackStatus.Ready,
             trackTitle = currentTrackTitle,
         )
         startPositionUpdates()
 
-        // Only recycle the old primary after the incoming player has been told
-        // to play. This avoids the old stop()/clearMediaItems() work becoming an
-        // artificial gap before the prepared track starts.
         configurePrebufferPlayer(prebufferPlayer)
         prebufferPlayer.addListener(prebufferListener)
         clearNativePrebufferState()
         return true
+    }
+
+    private fun maybeStartNaturalCrossfade() {
+        if (crossfadeDurationMs <= 0L || activeCrossfade != null || !player.isPlaying) return
+        val trackId = nativePrebufferTrackId ?: return
+        val title = nativePrebufferTitle ?: "Up next"
+        val url = nativePrebufferUrl ?: return
+        if (!isPreparedNextTrackReady(trackId, url)) return
+
+        val durationMs = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: return
+        val positionMs = player.currentPosition.coerceAtLeast(0L)
+        if (positionMs <= 0L) return
+        val remainingMs = (durationMs - positionMs).coerceAtLeast(0L)
+        if (remainingMs <= 0L || remainingMs > crossfadeDurationMs) return
+
+        startNaturalCrossfade(trackId, title, url, remainingMs.coerceAtMost(crossfadeDurationMs))
+    }
+
+    private fun startNaturalCrossfade(trackId: String, title: String, url: String, durationMs: Long) {
+        if (activeCrossfade != null || durationMs <= 0L) return
+        if (!isPreparedNextTrackReady(trackId, url)) return
+
+        val outgoing = player
+        val incoming = prebufferPlayer
+        nativeDspController.onAudioSessionChanged(incoming.audioSessionId, incoming)
+        applyReplayGainFromTracks(incoming.currentTracks, incoming)
+        nativeDspController.setTransitionGain(outgoing, 1f)
+        nativeDspController.setTransitionGain(incoming, 0f)
+
+        val transition = ActiveCrossfade(
+            trackId = trackId,
+            title = title,
+            url = url,
+            outgoing = outgoing,
+            incoming = incoming,
+            durationMs = durationMs.coerceAtLeast(CROSSFADE_TICK_MS),
+        )
+        activeCrossfade = transition
+        incoming.playWhenReady = true
+        crossfadeJob = scope.launch {
+            val startedAtMs = SystemClock.elapsedRealtime()
+            while (isActive && activeCrossfade === transition) {
+                val elapsedMs = (SystemClock.elapsedRealtime() - startedAtMs).coerceAtLeast(0L)
+                val progress = (elapsedMs.toDouble() / transition.durationMs.toDouble())
+                    .coerceIn(0.0, 1.0)
+                    .toFloat()
+                transition.progress = progress
+                nativeDspController.setTransitionGain(outgoing, 1f - progress)
+                nativeDspController.setTransitionGain(incoming, progress)
+                if (progress >= 1f) break
+                delay(CROSSFADE_TICK_MS)
+            }
+            if (activeCrossfade !== transition) return@launch
+            transition.progress = 1f
+            nativeDspController.setTransitionGain(outgoing, 0f)
+            nativeDspController.setTransitionGain(incoming, 1f)
+            outgoing.playWhenReady = false
+            outgoing.pause()
+            crossfadeJob = null
+            if (transition.acknowledged) {
+                completeAcknowledgedCrossfade(transition)
+            }
+        }
+    }
+
+    private fun promoteActiveCrossfade(
+        transition: ActiveCrossfade,
+        source: PreparedHandoffSource,
+        forceComplete: Boolean,
+    ): Boolean {
+        if (activeCrossfade !== transition) return false
+        if (transition.acknowledged) return true
+
+        positionJob?.cancel()
+        softStopped = false
+        playCommandInFlight = false
+        applyCurrentTrack(
+            NotificationTrackSnapshot(
+                trackId = transition.trackId,
+                title = transition.title,
+                url = transition.url,
+            ),
+        )
+        currentTrackLoaded = true
+
+        transition.outgoing.removeListener(playerListener)
+        transition.outgoing.removeAnalyticsListener(analyticsListener)
+        transition.incoming.removeListener(prebufferListener)
+        configurePrimaryPlayer(transition.incoming, preserveTransitionGain = true)
+        transition.incoming.addListener(playerListener)
+        transition.incoming.addAnalyticsListener(analyticsListener)
+
+        player = transition.incoming
+        prebufferPlayer = transition.outgoing
+        mediaSession?.setPlayer(player)
+        applyReplayGainFromTracks(player.currentTracks, player)
+        transition.acknowledged = true
+        clearNativePrebufferMetadata()
+        publishPreparedHandoffSuccess(transition.trackId, source)
+        publish(metricsTracker.markPlaying(player.currentPosition))
+        mutablePlaybackState.value = PlaybackState(
+            status = PlaybackStatus.Playing,
+            trackTitle = currentTrackTitle,
+        )
+        startPositionUpdates()
+
+        if (forceComplete) {
+            crossfadeJob?.cancel()
+            crossfadeJob = null
+            transition.progress = 1f
+            nativeDspController.setTransitionGain(transition.outgoing, 0f)
+            nativeDspController.setTransitionGain(transition.incoming, 1f)
+            transition.outgoing.playWhenReady = false
+            transition.outgoing.pause()
+            completeAcknowledgedCrossfade(transition)
+        } else if (transition.progress >= 1f || crossfadeJob == null) {
+            completeAcknowledgedCrossfade(transition)
+        }
+        return true
+    }
+
+    private fun publishPreparedHandoffSuccess(trackId: String, source: PreparedHandoffSource) {
+        publish(metricsTracker.loadTrack(currentTrackTitle, currentHlsUrl))
+        publish(metricsTracker.markPlayTapped())
+        publish(metricsTracker.markReady())
+        publish(
+            metricsTracker.markNativePrebufferHandoffSucceeded(
+                trackId = trackId,
+                explicitNext = source == PreparedHandoffSource.ExplicitNext,
+            ),
+        )
+        if (source == PreparedHandoffSource.AutoAdvance) {
+            publish(metricsTracker.markAutoAdvancePreparedSucceeded(trackId))
+        }
+    }
+
+    private fun completeAcknowledgedCrossfade(transition: ActiveCrossfade) {
+        if (activeCrossfade !== transition || !transition.acknowledged) return
+        transition.outgoing.playWhenReady = false
+        transition.outgoing.pause()
+        transition.outgoing.stop()
+        transition.outgoing.clearMediaItems()
+        nativeDspController.releasePlayer(transition.outgoing)
+        configurePrebufferPlayer(transition.outgoing)
+        if (prebufferPlayer === transition.outgoing) {
+            prebufferPlayer.removeListener(prebufferListener)
+            prebufferPlayer.addListener(prebufferListener)
+        }
+        activeCrossfade = null
+        crossfadeJob = null
+        val pending = pendingPrebuffer
+        pendingPrebuffer = null
+        if (pending != null) {
+            prepareNextTrack(pending.trackId, pending.title, pending.url)
+        }
+    }
+
+    private fun cancelActiveCrossfade(keepAcknowledgedIncoming: Boolean) {
+        val transition = activeCrossfade ?: return
+        crossfadeJob?.cancel()
+        crossfadeJob = null
+
+        if (transition.acknowledged && keepAcknowledgedIncoming) {
+            nativeDspController.setTransitionGain(transition.incoming, 1f)
+            nativeDspController.setTransitionGain(transition.outgoing, 0f)
+            transition.outgoing.playWhenReady = false
+            transition.outgoing.pause()
+            completeAcknowledgedCrossfade(transition)
+            return
+        }
+
+        nativeDspController.setTransitionGain(transition.outgoing, 1f)
+        nativeDspController.setTransitionGain(transition.incoming, 0f)
+        transition.incoming.playWhenReady = false
+        transition.incoming.pause()
+        transition.incoming.stop()
+        transition.incoming.clearMediaItems()
+        nativeDspController.releasePlayer(transition.incoming)
+        if (prebufferPlayer === transition.incoming) {
+            configurePrebufferPlayer(prebufferPlayer)
+        }
+        activeCrossfade = null
+        pendingPrebuffer = null
+        clearNativePrebufferMetadata()
     }
 
     private fun clearNativePrebuffer(reason: NativePrebufferClearReason) {
@@ -633,13 +892,19 @@ class AudioPlayerManager(
     }
 
     private fun clearNativePrebufferState() {
+        clearNativePrebufferMetadata()
+        if (activeCrossfade?.outgoing === prebufferPlayer) return
+        prebufferPlayer.playWhenReady = false
+        prebufferPlayer.stop()
+        prebufferPlayer.clearMediaItems()
+        nativeDspController.onSecondaryPlayerChanged(prebufferPlayer)
+    }
+
+    private fun clearNativePrebufferMetadata() {
         nativePrebufferTrackId = null
         nativePrebufferTitle = null
         nativePrebufferUrl = null
         nativePrebufferStartedAtMs = null
-        prebufferPlayer.playWhenReady = false
-        prebufferPlayer.stop()
-        prebufferPlayer.clearMediaItems()
     }
 
     private fun isPreparedNextTrackReady(trackId: String, hlsUrl: String): Boolean {
@@ -652,13 +917,14 @@ class AudioPlayerManager(
             prebufferPlayer.currentMediaItem?.mediaId == trackId
     }
 
-    private fun applyReplayGainFromTracks(tracks: Tracks) {
+    private fun applyReplayGainFromTracks(tracks: Tracks, targetPlayer: ExoPlayer) {
+        nativeDspController.clearReplayGain(targetPlayer)
         for (group in tracks.groups) {
             if (group.type != C.TRACK_TYPE_AUDIO || !group.isSelected) continue
             for (index in 0 until group.length) {
                 if (!group.isTrackSelected(index)) continue
                 val info = ReplayGainMetadata.parse(group.getTrackFormat(index).metadata) ?: continue
-                nativeDspController.setReplayGain(info, player)
+                nativeDspController.setReplayGain(info, targetPlayer)
                 return
             }
         }
@@ -675,6 +941,7 @@ class AudioPlayerManager(
         positionJob = scope.launch {
             while (isActive) {
                 publish(metricsTracker.markPosition(player.currentPosition))
+                maybeStartNaturalCrossfade()
                 delay(POSITION_UPDATE_MS)
             }
         }
@@ -690,7 +957,7 @@ class AudioPlayerManager(
         WaveZeroAudioRenderersFactory(appContext, channelAudioState),
     ).build().also(::configurePrebufferPlayer)
 
-    private fun configurePrimaryPlayer(exoPlayer: ExoPlayer) {
+    private fun configurePrimaryPlayer(exoPlayer: ExoPlayer, preserveTransitionGain: Boolean = false) {
         exoPlayer.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
@@ -699,8 +966,11 @@ class AudioPlayerManager(
             /* handleAudioFocus = */ true,
         )
         exoPlayer.setHandleAudioBecomingNoisy(true)
-        exoPlayer.volume = 1f
-        nativeDspController.onPrimaryPlayerChanged(exoPlayer)
+        if (preserveTransitionGain) {
+            nativeDspController.promoteSecondaryPlayer(exoPlayer)
+        } else {
+            nativeDspController.onPrimaryPlayerChanged(exoPlayer)
+        }
     }
 
     private fun configurePrebufferPlayer(exoPlayer: ExoPlayer) {
@@ -713,7 +983,7 @@ class AudioPlayerManager(
         )
         exoPlayer.setHandleAudioBecomingNoisy(false)
         exoPlayer.playWhenReady = false
-        exoPlayer.volume = 0f
+        nativeDspController.onSecondaryPlayerChanged(exoPlayer)
     }
 
     private fun mediaItemFor(track: NotificationTrackSnapshot): MediaItem {
@@ -797,11 +1067,15 @@ class AudioPlayerManager(
 
     private companion object {
         const val POSITION_UPDATE_MS = 250L
+        const val CROSSFADE_TICK_MS = 50L
         const val MEDIA_SESSION_ID = "wavezero-playback"
         const val SOUND_ENGINE_PREFS = "wavezero_sound_engine"
         const val LOUDNESS_NORMALIZATION_KEY = "loudness_normalization_enabled"
         const val CHANNEL_BALANCE_KEY = "channel_balance"
         const val MONO_OUTPUT_KEY = "mono_output_enabled"
+        const val CROSSFADE_DURATION_KEY = "crossfade_duration_ms"
+        const val CROSSFADE_OFF_MS = 0L
         const val PREPARED_HANDOFF_STRATEGY = "prepared_player_min_gap"
+        val ALLOWED_CROSSFADE_DURATIONS = setOf(0L, 2_000L, 4_000L, 6_000L)
     }
 }
