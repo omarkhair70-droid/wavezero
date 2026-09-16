@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('native playback publishes an explicit end event', () {
+  test('native playback publishes and preserves an explicit end event', () {
     final manager = File(
       '../../android/app/src/main/java/com/wavezero/player/playback/AudioPlayerManager.kt',
     ).readAsStringSync();
