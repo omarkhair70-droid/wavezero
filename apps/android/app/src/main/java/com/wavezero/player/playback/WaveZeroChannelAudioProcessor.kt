@@ -1,10 +1,16 @@
 package com.wavezero.player.playback
 
+import android.content.Context
 import androidx.media3.common.C
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -19,6 +25,8 @@ class WaveZeroChannelAudioState(
     initialBalance: Double = 0.0,
     initialMono: Boolean = false,
 ) {
+    private val configuredStereoProcessorCount = AtomicInteger(0)
+
     @Volatile
     var balance: Double = initialBalance.coerceIn(-1.0, 1.0)
         private set
@@ -28,12 +36,11 @@ class WaveZeroChannelAudioState(
         private set
 
     @Volatile
-    var pcmStereoConfigured: Boolean = false
-        internal set
-
-    @Volatile
     var lastFormatLabel: String = "waiting_for_stereo_pcm"
         internal set
+
+    val pcmStereoConfigured: Boolean
+        get() = configuredStereoProcessorCount.get() > 0
 
     fun setBalance(value: Double) {
         balance = value.coerceIn(-1.0, 1.0)
@@ -43,12 +50,45 @@ class WaveZeroChannelAudioState(
         mono = enabled
     }
 
+    internal fun markStereoProcessorConfigured() {
+        configuredStereoProcessorCount.incrementAndGet()
+        lastFormatLabel = "stereo_pcm16"
+    }
+
+    internal fun markStereoProcessorReleased() {
+        configuredStereoProcessorCount.updateAndGet { count -> (count - 1).coerceAtLeast(0) }
+    }
+
     fun statusMap(): Map<String, Any?> = mapOf(
         "balance" to balance,
         "mono" to mono,
         "pcmStereoConfigured" to pcmStereoConfigured,
         "channelProcessorFormat" to lastFormatLabel,
     )
+}
+
+/**
+ * Creates a fresh channel processor for each ExoPlayer audio sink. Stateful
+ * AudioProcessors must never be shared between WaveZero's primary and prebuffer
+ * players, but both processors intentionally read the same live settings.
+ */
+@UnstableApi
+class WaveZeroAudioRenderersFactory(
+    context: Context,
+    private val channelState: WaveZeroChannelAudioState,
+) : DefaultRenderersFactory(context) {
+    override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioTrackPlaybackParams: Boolean,
+    ): AudioSink {
+        val processor = WaveZeroChannelAudioProcessor(channelState)
+        return DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            .setAudioProcessors(arrayOf<AudioProcessor>(processor))
+            .build()
+    }
 }
 
 /**
@@ -62,11 +102,12 @@ class WaveZeroChannelAudioState(
 class WaveZeroChannelAudioProcessor(
     private val state: WaveZeroChannelAudioState,
 ) : BaseAudioProcessor() {
+    private var countedAsStereo = false
 
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
         val supported = inputAudioFormat.encoding == C.ENCODING_PCM_16BIT &&
             inputAudioFormat.channelCount == 2
-        state.pcmStereoConfigured = supported
+        updateConfiguredStereoState(supported)
         state.lastFormatLabel = if (supported) {
             "stereo_pcm16"
         } else {
@@ -114,6 +155,20 @@ class WaveZeroChannelAudioProcessor(
             output.put(inputBuffer.get())
         }
         output.flip()
+    }
+
+    override fun onReset() {
+        updateConfiguredStereoState(false)
+    }
+
+    private fun updateConfiguredStereoState(configured: Boolean) {
+        if (configured == countedAsStereo) return
+        countedAsStereo = configured
+        if (configured) {
+            state.markStereoProcessorConfigured()
+        } else {
+            state.markStereoProcessorReleased()
+        }
     }
 
     private fun scalePcm16(sample: Int, gain: Double): Short {
