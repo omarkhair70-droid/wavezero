@@ -33,12 +33,15 @@ void main() {
     expect(manager, contains('configurePrimaryPlayer(transition.incoming, preserveTransitionGain = true)'));
   });
 
-  test('Flutter bridge exposes persisted crossfade setting and status', () {
+  test('Flutter bridge and consumer settings expose persisted crossfade controls', () {
     final activity = File(
       'android/app/src/main/kotlin/com/omarkhair/wavezero/MainActivity.kt',
     ).readAsStringSync();
     final controls = File(
       'lib/features/settings/crossfade_controls.dart',
+    ).readAsStringSync();
+    final consumerSettings = File(
+      'lib/features/settings/consumer_settings_page.dart',
     ).readAsStringSync();
 
     expect(activity, contains('"setCrossfadeDuration"'));
@@ -47,5 +50,7 @@ void main() {
     expect(controls, contains("'setCrossfadeDuration'"));
     expect(controls, contains('<int>[0, 2000, 4000, 6000]'));
     expect(controls, contains('Manual Next / Previous stay immediate.'));
+    expect(consumerSettings, contains("import 'crossfade_controls.dart';"));
+    expect(consumerSettings, contains('child: WzCrossfadeControls()'));
   });
 }
