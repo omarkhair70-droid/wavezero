@@ -3,6 +3,7 @@ package com.wavezero.player.playback
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import androidx.media3.exoplayer.ExoPlayer
+import java.util.IdentityHashMap
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
@@ -10,72 +11,139 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * Session-scoped native sound engine for WaveZero.
+ * Native sound-engine owner for WaveZero.
  *
- * EQ and ReplayGain normalization are deliberately owned together because both
- * affect the final gain stage. EQ headroom and negative ReplayGain are combined
- * through ExoPlayer volume, while positive ReplayGain uses Android's
- * session-scoped LoudnessEnhancer with a conservative cap supplied by
- * ReplayGainInfo.
+ * EQ, ReplayGain and the transition envelope are composed here so crossfade
+ * never becomes a second absolute-volume owner. During a transition both
+ * ExoPlayers may temporarily keep their own session-scoped effects while the
+ * global profile and normalization preference remain shared.
  */
 class NativeDspController {
-    private var equalizer: Equalizer? = null
-    private var equalizerAudioSessionId: Int? = null
-    private var loudnessEnhancer: LoudnessEnhancer? = null
-    private var loudnessAudioSessionId: Int? = null
+    private data class PlayerDspState(
+        var equalizer: Equalizer? = null,
+        var equalizerAudioSessionId: Int? = null,
+        var loudnessEnhancer: LoudnessEnhancer? = null,
+        var loudnessAudioSessionId: Int? = null,
+        var replayGainInfo: ReplayGainInfo? = null,
+        var appliedNormalizationGainDb: Double = 0.0,
+        var normalizationMessage: String = "Loudness normalization is off.",
+        var transitionGain: Float = 1f,
+        var eqResult: NativeDspApplyResult = NativeDspApplyResult.off(),
+    )
+
+    private val playerStates = IdentityHashMap<ExoPlayer, PlayerDspState>()
+    private var primaryPlayer: ExoPlayer? = null
     private var activeProfile: NativeEqProfile = NativeEqProfile.off()
     private var lastResult: NativeDspApplyResult = NativeDspApplyResult.off()
     private var normalizationEnabled: Boolean = false
-    private var replayGainInfo: ReplayGainInfo? = null
-    private var appliedNormalizationGainDb: Double = 0.0
-    private var normalizationMessage: String = "Loudness normalization is off."
 
     fun setProfile(profile: NativeEqProfile, player: ExoPlayer): NativeDspApplyResult {
         activeProfile = profile
-        lastResult = applyToPrimaryPlayer(player)
+        ensurePrimaryPlayer(player)
+        applyToKnownPlayers()
+        lastResult = stateFor(player).eqResult
         return lastResult
     }
 
     fun setLoudnessNormalizationEnabled(enabled: Boolean, player: ExoPlayer): Map<String, Any?> {
         normalizationEnabled = enabled
-        applyGainStages(player, player.audioSessionId, effectiveProfilePreampDb())
-        return normalizationStatusMap()
+        ensurePrimaryPlayer(player)
+        applyToKnownPlayers()
+        return normalizationStatusMap(stateFor(player))
     }
 
     fun setReplayGain(info: ReplayGainInfo?, player: ExoPlayer): Map<String, Any?> {
-        replayGainInfo = info
-        applyGainStages(player, player.audioSessionId, effectiveProfilePreampDb())
-        return normalizationStatusMap()
+        val state = stateFor(player)
+        state.replayGainInfo = info
+        applyGainStages(player, player.audioSessionId, effectiveProfilePreampDb(state), state)
+        return normalizationStatusMap(state)
     }
 
     fun clearReplayGain(player: ExoPlayer): Map<String, Any?> = setReplayGain(null, player)
 
     fun onAudioSessionChanged(audioSessionId: Int, player: ExoPlayer): NativeDspApplyResult {
-        lastResult = applyToSession(audioSessionId, player)
-        return lastResult
+        val result = applyToSession(audioSessionId, player)
+        if (player === primaryPlayer) lastResult = result
+        return result
     }
 
+    /** Normal promotion: the player should be fully audible. */
     fun onPrimaryPlayerChanged(player: ExoPlayer): NativeDspApplyResult {
-        releaseEqualizer()
-        releaseLoudnessEnhancer()
+        primaryPlayer = player
+        val state = stateFor(player)
+        state.transitionGain = 1f
         lastResult = applyToPrimaryPlayer(player)
         return lastResult
     }
 
-    fun statusMap(): Map<String, Any?> = lastResult.toMap() + mapOf(
-        "profileId" to activeProfile.id,
-        "audioSessionId" to equalizerAudioSessionId,
-    ) + normalizationStatusMap()
+    /** Crossfade promotion: preserve the envelope already in progress. */
+    fun promoteSecondaryPlayer(player: ExoPlayer): NativeDspApplyResult {
+        primaryPlayer = player
+        lastResult = applyToPrimaryPlayer(player)
+        return lastResult
+    }
+
+    /** Recycles a player into WaveZero's silent prepared-next role. */
+    fun onSecondaryPlayerChanged(player: ExoPlayer) {
+        releasePlayer(player)
+        val state = stateFor(player)
+        state.transitionGain = 0f
+        applyGainStages(player, player.audioSessionId, profilePreampGainDb = 0.0, state = state)
+    }
+
+    fun setTransitionGain(player: ExoPlayer, gain: Float): Map<String, Any?> {
+        val state = stateFor(player)
+        state.transitionGain = gain.coerceIn(0f, 1f)
+        applyGainStages(player, player.audioSessionId, effectiveProfilePreampDb(state), state)
+        return transitionStatusMap(player, state)
+    }
+
+    fun transitionGain(player: ExoPlayer): Float = playerStates[player]?.transitionGain ?: 1f
+
+    fun releasePlayer(player: ExoPlayer) {
+        val state = playerStates.remove(player) ?: return
+        releaseEqualizer(state)
+        releaseLoudnessEnhancer(state)
+        if (primaryPlayer === player) primaryPlayer = null
+    }
+
+    fun statusMap(): Map<String, Any?> {
+        val player = primaryPlayer
+        val state = player?.let(playerStates::get)
+        val result = state?.eqResult ?: lastResult
+        return result.toMap() + mapOf(
+            "profileId" to activeProfile.id,
+            "audioSessionId" to state?.equalizerAudioSessionId,
+            "activeDspPlayerCount" to playerStates.size,
+            "transitionGain" to (state?.transitionGain ?: 1f),
+        ) + normalizationStatusMap(state)
+    }
 
     fun release() {
-        releaseEqualizer()
-        releaseLoudnessEnhancer()
+        playerStates.values.toList().forEach { state ->
+            releaseEqualizer(state)
+            releaseLoudnessEnhancer(state)
+        }
+        playerStates.clear()
+        primaryPlayer = null
         activeProfile = NativeEqProfile.off()
         normalizationEnabled = false
-        replayGainInfo = null
-        appliedNormalizationGainDb = 0.0
-        normalizationMessage = "Loudness normalization is off."
         lastResult = NativeDspApplyResult.off()
+    }
+
+    private fun ensurePrimaryPlayer(player: ExoPlayer) {
+        if (primaryPlayer == null) primaryPlayer = player
+        stateFor(player)
+    }
+
+    private fun stateFor(player: ExoPlayer): PlayerDspState =
+        playerStates[player] ?: PlayerDspState().also { playerStates[player] = it }
+
+    private fun applyToKnownPlayers() {
+        playerStates.keys.toList().forEach { knownPlayer ->
+            val result = applyToSession(knownPlayer.audioSessionId, knownPlayer)
+            if (knownPlayer === primaryPlayer) lastResult = result
+        }
     }
 
     private fun applyToPrimaryPlayer(player: ExoPlayer): NativeDspApplyResult {
@@ -83,45 +151,46 @@ class NativeDspController {
     }
 
     private fun applyToSession(audioSessionId: Int, player: ExoPlayer): NativeDspApplyResult {
+        val state = stateFor(player)
         if (audioSessionId <= 0) {
-            releaseEqualizer()
-            releaseLoudnessEnhancer()
-            // Do not attenuate for an EQ that is not attached yet. ReplayGain is
-            // applied once a real audio session or usable static metadata exists.
-            applyGainStages(player, audioSessionId, profilePreampGainDb = 0.0)
-            return if (activeProfile.isOff) {
+            releaseEqualizer(state)
+            releaseLoudnessEnhancer(state)
+            applyGainStages(player, audioSessionId, profilePreampGainDb = 0.0, state = state)
+            state.eqResult = if (activeProfile.isOff) {
                 NativeDspApplyResult.off()
             } else {
                 NativeDspApplyResult.pending(
                     "${activeProfile.label} is waiting for the Media3 audio session.",
                 )
             }
+            return state.eqResult
         }
 
         val eqResult = if (activeProfile.isOff) {
-            releaseEqualizer()
+            releaseEqualizer(state)
             NativeDspApplyResult.off()
         } else {
-            applyEqualizer(audioSessionId)
+            applyEqualizer(audioSessionId, state)
         }
+        state.eqResult = eqResult
         val profilePreampGainDb = if (eqResult.status == "applied") {
             activeProfile.preampGainDb
         } else {
             0.0
         }
-        applyGainStages(player, audioSessionId, profilePreampGainDb)
+        applyGainStages(player, audioSessionId, profilePreampGainDb, state)
         return eqResult
     }
 
-    private fun applyEqualizer(audioSessionId: Int): NativeDspApplyResult {
+    private fun applyEqualizer(audioSessionId: Int, state: PlayerDspState): NativeDspApplyResult {
         try {
-            val eq = if (equalizer != null && equalizerAudioSessionId == audioSessionId) {
-                equalizer!!
+            val eq = if (state.equalizer != null && state.equalizerAudioSessionId == audioSessionId) {
+                state.equalizer!!
             } else {
-                releaseEqualizer()
+                releaseEqualizer(state)
                 Equalizer(PRIORITY, audioSessionId).also {
-                    equalizer = it
-                    equalizerAudioSessionId = audioSessionId
+                    state.equalizer = it
+                    state.equalizerAudioSessionId = audioSessionId
                 }
             }
 
@@ -156,17 +225,17 @@ class NativeDspController {
                 bands = appliedBands,
             )
         } catch (error: UnsupportedOperationException) {
-            releaseEqualizer()
+            releaseEqualizer(state)
             return NativeDspApplyResult.unsupported(
                 "This Android audio output does not expose a usable Equalizer: ${error.message ?: error.javaClass.simpleName}",
             )
         } catch (error: IllegalArgumentException) {
-            releaseEqualizer()
+            releaseEqualizer(state)
             return NativeDspApplyResult.failed(
                 "Could not attach EQ to audio session $audioSessionId: ${error.message ?: error.javaClass.simpleName}",
             )
         } catch (error: RuntimeException) {
-            releaseEqualizer()
+            releaseEqualizer(state)
             return NativeDspApplyResult.failed(
                 "Native EQ failed safely: ${error.message ?: error.javaClass.simpleName}",
             )
@@ -177,102 +246,122 @@ class NativeDspController {
         player: ExoPlayer,
         audioSessionId: Int,
         profilePreampGainDb: Double,
+        state: PlayerDspState,
     ) {
         val requestedNormalizationDb = if (normalizationEnabled) {
-            replayGainInfo?.preferredTrackGainDb() ?: 0.0
+            state.replayGainInfo?.preferredTrackGainDb() ?: 0.0
         } else {
             0.0
         }
-        appliedNormalizationGainDb = requestedNormalizationDb
+        state.appliedNormalizationGainDb = requestedNormalizationDb
 
         val attenuationDb = profilePreampGainDb + min(requestedNormalizationDb, 0.0)
-        player.volume = dbToLinear(attenuationDb)
+        val baseGain = dbToLinear(attenuationDb)
+        player.volume = (baseGain * state.transitionGain).coerceIn(0f, 1f)
 
         val positiveGainDb = max(requestedNormalizationDb, 0.0)
         if (!normalizationEnabled) {
-            releaseLoudnessEnhancer()
-            normalizationMessage = "Loudness normalization is off."
+            releaseLoudnessEnhancer(state)
+            state.normalizationMessage = "Loudness normalization is off."
             return
         }
-        if (replayGainInfo == null) {
-            releaseLoudnessEnhancer()
-            normalizationMessage = "No ReplayGain tag found; normalization leaves this track unchanged."
+        if (state.replayGainInfo == null) {
+            releaseLoudnessEnhancer(state)
+            state.normalizationMessage = "No ReplayGain tag found; normalization leaves this track unchanged."
             return
         }
         if (positiveGainDb <= 0.0) {
-            releaseLoudnessEnhancer()
-            normalizationMessage = "ReplayGain ${formatDb(requestedNormalizationDb)} applied as safe attenuation."
+            releaseLoudnessEnhancer(state)
+            state.normalizationMessage = "ReplayGain ${formatDb(requestedNormalizationDb)} applied as safe attenuation."
             return
         }
         if (audioSessionId <= 0) {
-            releaseLoudnessEnhancer()
-            normalizationMessage = "ReplayGain is waiting for the Media3 audio session."
+            releaseLoudnessEnhancer(state)
+            state.normalizationMessage = "ReplayGain is waiting for the Media3 audio session."
             return
         }
 
         try {
-            val enhancer = if (loudnessEnhancer != null && loudnessAudioSessionId == audioSessionId) {
-                loudnessEnhancer!!
+            val enhancer = if (state.loudnessEnhancer != null && state.loudnessAudioSessionId == audioSessionId) {
+                state.loudnessEnhancer!!
             } else {
-                releaseLoudnessEnhancer()
+                releaseLoudnessEnhancer(state)
                 LoudnessEnhancer(audioSessionId).also {
-                    loudnessEnhancer = it
-                    loudnessAudioSessionId = audioSessionId
+                    state.loudnessEnhancer = it
+                    state.loudnessAudioSessionId = audioSessionId
                 }
             }
             enhancer.enabled = false
             enhancer.setTargetGain((positiveGainDb * 100.0).roundToInt())
             enhancer.enabled = true
-            normalizationMessage = "ReplayGain ${formatDb(requestedNormalizationDb)} applied with native loudness gain."
+            state.normalizationMessage = "ReplayGain ${formatDb(requestedNormalizationDb)} applied with native loudness gain."
         } catch (_: RuntimeException) {
-            releaseLoudnessEnhancer()
-            appliedNormalizationGainDb = 0.0
-            normalizationMessage = "ReplayGain boost unavailable on this output; normalization leaves the level unchanged."
+            releaseLoudnessEnhancer(state)
+            state.appliedNormalizationGainDb = 0.0
+            state.normalizationMessage = "ReplayGain boost unavailable on this output; normalization leaves the level unchanged."
         }
     }
 
     private fun effectiveProfilePreampDb(): Double {
-        return if (equalizer?.enabled == true && !activeProfile.isOff) {
+        val state = primaryPlayer?.let(playerStates::get) ?: return 0.0
+        return effectiveProfilePreampDb(state)
+    }
+
+    private fun effectiveProfilePreampDb(state: PlayerDspState): Double {
+        return if (state.equalizer?.enabled == true && !activeProfile.isOff) {
             activeProfile.preampGainDb
         } else {
             0.0
         }
     }
 
-    private fun normalizationStatusMap(): Map<String, Any?> = mapOf(
+    private fun normalizationStatusMap(state: PlayerDspState? = primaryPlayer?.let(playerStates::get)): Map<String, Any?> = mapOf(
         "loudnessNormalizationEnabled" to normalizationEnabled,
-        "replayGainTrackDb" to replayGainInfo?.trackGainDb,
-        "replayGainAlbumDb" to replayGainInfo?.albumGainDb,
-        "replayGainTrackPeak" to replayGainInfo?.trackPeak,
-        "appliedNormalizationGainDb" to appliedNormalizationGainDb,
-        "loudnessEnhancerActive" to (loudnessEnhancer?.enabled == true),
-        "loudnessNormalizationMessage" to normalizationMessage,
+        "replayGainTrackDb" to state?.replayGainInfo?.trackGainDb,
+        "replayGainAlbumDb" to state?.replayGainInfo?.albumGainDb,
+        "replayGainTrackPeak" to state?.replayGainInfo?.trackPeak,
+        "appliedNormalizationGainDb" to (state?.appliedNormalizationGainDb ?: 0.0),
+        "loudnessEnhancerActive" to (state?.loudnessEnhancer?.enabled == true),
+        "loudnessNormalizationMessage" to (state?.normalizationMessage ?: if (normalizationEnabled) "No active playback session." else "Loudness normalization is off."),
     )
 
+    private fun transitionStatusMap(player: ExoPlayer, state: PlayerDspState): Map<String, Any?> = mapOf(
+        "transitionGain" to state.transitionGain,
+        "audioSessionId" to player.audioSessionId,
+        "profileId" to activeProfile.id,
+        "dspPlayerCount" to playerStates.size,
+    )
+
+    // Kept as a primary-state helper for the existing sound-engine contract and
+    // for callers that need to explicitly tear down current session effects.
     private fun releaseEqualizer() {
-        try {
-            equalizer?.enabled = false
-        } catch (_: RuntimeException) {
-        }
-        try {
-            equalizer?.release()
-        } catch (_: RuntimeException) {
-        }
-        equalizer = null
-        equalizerAudioSessionId = null
+        primaryPlayer?.let(playerStates::get)?.let(::releaseEqualizer)
     }
 
-    private fun releaseLoudnessEnhancer() {
+    private fun releaseEqualizer(state: PlayerDspState) {
         try {
-            loudnessEnhancer?.enabled = false
+            state.equalizer?.enabled = false
         } catch (_: RuntimeException) {
         }
         try {
-            loudnessEnhancer?.release()
+            state.equalizer?.release()
         } catch (_: RuntimeException) {
         }
-        loudnessEnhancer = null
-        loudnessAudioSessionId = null
+        state.equalizer = null
+        state.equalizerAudioSessionId = null
+    }
+
+    private fun releaseLoudnessEnhancer(state: PlayerDspState) {
+        try {
+            state.loudnessEnhancer?.enabled = false
+        } catch (_: RuntimeException) {
+        }
+        try {
+            state.loudnessEnhancer?.release()
+        } catch (_: RuntimeException) {
+        }
+        state.loudnessEnhancer = null
+        state.loudnessAudioSessionId = null
     }
 
     private fun dbToLinear(db: Double): Float {

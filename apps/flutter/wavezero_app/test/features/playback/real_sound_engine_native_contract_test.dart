@@ -15,7 +15,8 @@ void main() {
     expect(dsp, contains('Equalizer(PRIORITY, audioSessionId)'));
     expect(dsp, contains('eq.setBandLevel'));
     expect(dsp, contains('eq.enabled = true'));
-    expect(dsp, contains('player.volume = dbToLinear(attenuationDb)'));
+    expect(dsp, contains('val baseGain = dbToLinear(attenuationDb)'));
+    expect(dsp, contains('player.volume = (baseGain * state.transitionGain).coerceIn(0f, 1f)'));
     expect(dsp, contains('eqResult.status == "applied"'));
     expect(dsp, contains('activeProfile.preampGainDb'));
     expect(dsp, contains('releaseEqualizer()'));

@@ -350,6 +350,17 @@ class PlaybackMethodChannelHandler(
 
                 "channelAudioStatus" -> result.success(audioPlayerManager.channelAudioStatusMap())
 
+                "setCrossfadeDuration" -> {
+                    val durationMs = call.argument<Number>("durationMs")?.toLong()
+                    if (durationMs == null) {
+                        result.error("invalid_arguments", "setCrossfadeDuration requires durationMs", null)
+                        return
+                    }
+                    result.success(audioPlayerManager.setCrossfadeDurationMs(durationMs))
+                }
+
+                "crossfadeStatus" -> result.success(audioPlayerManager.crossfadeStatusMap())
+
                 "metricsSnapshot" -> result.success(audioPlayerManager.metricsSnapshotMap())
 
                 "getDeviceMusicPermissionStatus" -> result.success(deviceMusicPermissionStatusMap())

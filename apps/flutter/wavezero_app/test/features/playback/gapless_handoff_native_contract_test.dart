@@ -40,7 +40,7 @@ void main() {
 
     expect(handoff, contains('nativeDspController.clearReplayGain(previousPrimaryPlayer)'));
     expect(handoff, contains('configurePrimaryPlayer(preparedPlayer)'));
-    expect(handoff, contains('applyReplayGainFromTracks(player.currentTracks)'));
+    expect(handoff, contains('applyReplayGainFromTracks(player.currentTracks, player)'));
     expect(manager, contains('WaveZeroAudioRenderersFactory(appContext, channelAudioState)'));
     expect(RegExp(r'NativeDspController\(\)').allMatches(manager).length, 1);
   });
