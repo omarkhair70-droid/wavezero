@@ -1,0 +1,102 @@
+name: Play Alpha One Shot 1.1.0+3
+
+on:
+  push:
+    branches:
+      - release/alpha-1.1.0-3-20260916
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build signed AAB and publish WaveZero 1.1.0+3 to Google Play alpha
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: apps/flutter/wavezero_app
+    env:
+      WAVEZERO_UPLOAD_KEYSTORE_BASE64: ${{ secrets.WAVEZERO_UPLOAD_KEYSTORE_BASE64 }}
+      WAVEZERO_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.WAVEZERO_UPLOAD_KEYSTORE_PASSWORD }}
+      WAVEZERO_UPLOAD_KEY_PASSWORD: ${{ secrets.WAVEZERO_UPLOAD_KEY_PASSWORD }}
+      WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify release secrets exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in \
+            WAVEZERO_UPLOAD_KEYSTORE_BASE64 \
+            WAVEZERO_UPLOAD_KEYSTORE_PASSWORD \
+            WAVEZERO_UPLOAD_KEY_PASSWORD \
+            WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON
+          do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not configured in GitHub Actions secrets."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Install Flutter 3.47.1
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          cache: true
+
+      - name: Prepare Android upload signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/wavezero-upload-key.jks"
+          printf '%s' "$WAVEZERO_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          cat > android/key.properties <<EOF
+          storePassword=$WAVEZERO_UPLOAD_KEYSTORE_PASSWORD
+          keyPassword=$WAVEZERO_UPLOAD_KEY_PASSWORD
+          keyAlias=upload
+          storeFile=$KEYSTORE
+          EOF
+
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+      - name: Build signed production AAB
+        run: >-
+          flutter build appbundle --release
+          --dart-define=WAVEZERO_APP_ENV=production
+          --dart-define=WAVEZERO_CONTENT_MODE_LABEL="Device music"
+
+      - name: Verify AAB signature
+        shell: bash
+        run: jarsigner -verify -verbose -certs build/app/outputs/bundle/release/app-release.aab
+
+      - name: Upload signed AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wavezero-play-alpha-1.1.0-3-aab
+          path: apps/flutter/wavezero_app/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish to Google Play alpha
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.WAVEZERO_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.omarkhair.wavezero
+          releaseFiles: apps/flutter/wavezero_app/build/app/outputs/bundle/release/app-release.aab
+          track: alpha
+          status: completed
