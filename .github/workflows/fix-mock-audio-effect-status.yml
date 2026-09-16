@@ -1,0 +1,28 @@
+name: Fix mock audio effect status
+
+on:
+  push:
+    branches:
+      - feat/real-sound-engine-eq-20260916
+    paths:
+      - .github/workflows/fix-mock-audio-effect-status.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/real-sound-engine-eq-20260916
+          fetch-depth: 0
+      - run: python3 scripts/fix_mock_audio_effect_status.py
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm scripts/fix_mock_audio_effect_status.py .github/workflows/fix-mock-audio-effect-status.yml
+          git add apps/flutter/wavezero_app/lib/playback/playback_bridge.dart
+          git commit -m "Implement mock audio effect status"
+          git push origin HEAD:feat/real-sound-engine-eq-20260916
