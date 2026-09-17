@@ -54,6 +54,8 @@ class WzWebBrowserPage extends StatefulWidget {
 }
 
 class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
+  static const MethodChannel _handsFreeChannel = MethodChannel('wavezero/handsfree');
+
   final WzWebDownloadService _downloadService = WzWebDownloadService();
   final DeviceMusicService _deviceMusicService = DeviceMusicService();
   final WzWebLibraryService _webLibraryService = const WzWebLibraryService();
@@ -65,6 +67,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
   WzWebLibraryState _webLibrary = const WzWebLibraryState();
   String _currentUrl = '';
   String _pageTitle = '';
+  String? _pendingVoiceUrl;
   int _progress = 0;
   bool _canGoBack = false;
   bool _canGoForward = false;
@@ -81,6 +84,9 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
       text: widget.initialQuery.trim().isEmpty ? _currentUrl : widget.initialQuery.trim(),
     );
     unawaited(_loadWebLibrary());
+    if (widget.initialQuery.trim().isEmpty) {
+      unawaited(_adoptPendingVoiceAcquisition());
+    }
   }
 
   @override
@@ -97,9 +103,48 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
     setState(() => _webLibrary = state);
   }
 
+  Future<void> _adoptPendingVoiceAcquisition() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final pending = await _handsFreeChannel.invokeMapMethod<Object?, Object?>(
+        'consumePendingAcquisition',
+      );
+      final query = pending?['query']?.toString().trim() ?? '';
+      if (!mounted || query.isEmpty) return;
+      final url = wzResolveWebLocation(query);
+      setState(() {
+        _addressController.text = query;
+        _currentUrl = url;
+        _pageError = null;
+        _pendingVoiceUrl = url;
+      });
+      final channel = _webChannel;
+      if (channel != null) {
+        _pendingVoiceUrl = null;
+        await channel.invokeMethod<void>('loadUrl', {'url': url});
+      }
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Voice request: searching the Web for “$query”')),
+        );
+      });
+    } on MissingPluginException {
+      // Non-Android/test hosts simply keep the normal Web start page.
+    } on PlatformException {
+      // A stale/missing voice request must never block the browser itself.
+    }
+  }
+
   void _onWebViewCreated(int id) {
     final channel = MethodChannel('wavezero/webview/$id');
     channel.setMethodCallHandler(_handleWebEvent);
+    final pendingVoiceUrl = _pendingVoiceUrl;
+    if (pendingVoiceUrl != null) {
+      _pendingVoiceUrl = null;
+      unawaited(channel.invokeMethod<void>('loadUrl', {'url': pendingVoiceUrl}));
+    }
     if (!mounted) return;
     setState(() => _webChannel = channel);
   }
