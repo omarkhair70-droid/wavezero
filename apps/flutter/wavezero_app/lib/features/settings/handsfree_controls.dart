@@ -75,6 +75,7 @@ class _WzHandsFreeControlsState extends State<WzHandsFreeControls>
     setState(() {
       _busy = true;
       _error = null;
+      if (!enabled) _enabled = false;
     });
     try {
       final result = await _channel.invokeMapMethod<Object?, Object?>(
@@ -83,13 +84,16 @@ class _WzHandsFreeControlsState extends State<WzHandsFreeControls>
       );
       if (!mounted) return;
       setState(() {
-        _enabled = result?['enabled'] == true;
+        _enabled = enabled && (result?['startRequested'] == true || result?['enabled'] == true);
         _microphoneGranted = result?['microphoneGranted'] == true;
         _recognitionAvailable = result?['recognitionAvailable'] != false;
         _onDeviceRecognitionAvailable = result?['onDeviceRecognitionAvailable'] == true;
       });
-      if (enabled && !_microphoneGranted) {
-        unawaited(Future<void>.delayed(const Duration(milliseconds: 700), _refresh));
+      if (enabled) {
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 450), _refresh));
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 1200), _refresh));
+      } else {
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 250), _refresh));
       }
     } on PlatformException catch (error) {
       if (!mounted) return;
