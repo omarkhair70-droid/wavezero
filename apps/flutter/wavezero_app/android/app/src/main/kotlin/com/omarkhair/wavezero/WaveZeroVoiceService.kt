@@ -32,6 +32,10 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
     private var armedForCommand = false
     private var lastTranscript: String? = null
     private var recognitionAvailable = true
+    private var duckOriginalVolume: Int? = null
+    private var activeLoopStartMs: Long? = null
+    private var activeLoopEndMs: Long? = null
+    private var activeLoopTrackKey: String? = null
 
     private val player by lazy { WaveZeroPlaybackSession.getOrCreate(applicationContext) }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
@@ -70,6 +74,9 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
     override fun onDestroy() {
         destroyed = true
         listening = false
+        armedForCommand = false
+        cancelActiveLoop(silent = true)
+        restoreListeningDuck()
         mainHandler.removeCallbacksAndMessages(null)
         recognizer?.cancel()
         recognizer?.destroy()
@@ -96,6 +103,7 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
         listening = false
         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
             setEnabled(false)
+            restoreListeningDuck()
             stopSelf()
             return
         }
@@ -127,19 +135,33 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
     private fun handleTranscript(raw: String) {
         val (containsWake, remainder) = WaveZeroVoiceCommandParser.splitWakePhrase(raw)
         if (containsWake) {
+            beginListeningDuck()
             if (remainder.isBlank()) {
                 armedForCommand = true
+                mainHandler.removeCallbacks(commandTimeoutRunnable)
+                mainHandler.postDelayed(commandTimeoutRunnable, COMMAND_WINDOW_MS)
                 updateNotification("Yes — listening for your command")
                 return
             }
             armedForCommand = false
+            mainHandler.removeCallbacks(commandTimeoutRunnable)
+            restoreListeningDuck()
             execute(WaveZeroVoiceCommandParser.parse(remainder))
             return
         }
 
         if (!armedForCommand) return
         armedForCommand = false
+        mainHandler.removeCallbacks(commandTimeoutRunnable)
+        restoreListeningDuck()
         execute(WaveZeroVoiceCommandParser.parse(raw))
+    }
+
+    private val commandTimeoutRunnable = Runnable {
+        if (!armedForCommand || destroyed) return@Runnable
+        armedForCommand = false
+        restoreListeningDuck()
+        updateNotification("Listening for “Wave Zero”")
     }
 
     private fun execute(command: WaveZeroVoiceCommand) {
@@ -155,11 +177,13 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
                 feedback("Paused")
             }
             WaveZeroVoiceCommand.Next -> {
+                cancelActiveLoop(silent = true)
                 val moved = player.playNextFromNotification()
                 if (moved) WaveZeroPlaybackSession.showMediaControls(this)
                 feedback(if (moved) "Next track" else "No next track in the current queue")
             }
             WaveZeroVoiceCommand.Previous -> {
+                cancelActiveLoop(silent = true)
                 val moved = player.playPreviousFromNotification()
                 if (moved) WaveZeroPlaybackSession.showMediaControls(this)
                 feedback(if (moved) "Previous track" else "No previous track in the current queue")
@@ -172,16 +196,19 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
                 audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
                 feedback("Volume down")
             }
+            WaveZeroVoiceCommand.StopLoop -> cancelActiveLoop(silent = false)
             is WaveZeroVoiceCommand.SeekBy -> {
-                val currentMs = (player.metricsSnapshotMap()["currentPositionMs"] as? Number)?.toLong() ?: 0L
+                val currentMs = currentPositionMs()
                 player.seekTo((currentMs + command.deltaMs).coerceAtLeast(0L))
                 val seconds = kotlin.math.abs(command.deltaMs / 1000L)
                 feedback(if (command.deltaMs < 0) "Back $seconds seconds" else "Forward $seconds seconds")
             }
             is WaveZeroVoiceCommand.PlayLocalTrack -> {
+                cancelActiveLoop(silent = true)
                 val match = findLocalTrack(command.query)
                 if (match == null) {
-                    feedback("Not found on this device: ${command.query}")
+                    queueWebAcquisition(command.query)
+                    feedback("Not on this device — queued for WaveZero Web: ${command.query}")
                 } else {
                     player.loadTrack(match)
                     player.play()
@@ -189,8 +216,141 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
                     feedback("Playing ${match.title}")
                 }
             }
+            is WaveZeroVoiceCommand.SaveMoment -> saveMoment(command.name)
+            is WaveZeroVoiceCommand.GoToMoment -> goToMoment(command.name)
+            is WaveZeroVoiceCommand.LoopFromHere -> startLoopFromHere(command.durationMs)
             is WaveZeroVoiceCommand.Unknown -> feedback("I didn't catch that command")
         }
+    }
+
+    private fun beginListeningDuck() {
+        if (duckOriginalVolume != null) return
+        val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        duckOriginalVolume = current
+        if (current <= 1) return
+        val target = (current * LISTENING_DUCK_PERCENT / 100).coerceAtLeast(1)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
+    }
+
+    private fun restoreListeningDuck() {
+        val original = duckOriginalVolume ?: return
+        duckOriginalVolume = null
+        val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, original.coerceIn(0, max), 0)
+    }
+
+    private fun saveMoment(name: String) {
+        val metrics = player.metricsSnapshotMap()
+        val trackKey = trackIdentity(metrics)
+        if (trackKey == null) {
+            feedback("No active track to save a moment for")
+            return
+        }
+        val positionMs = (metrics["currentPositionMs"] as? Number)?.toLong()?.coerceAtLeast(0L) ?: 0L
+        momentsPrefs().edit()
+            .putLong(momentPreferenceKey(trackKey, name), positionMs)
+            .apply()
+        feedback("Saved ${name.trim()} at ${formatPosition(positionMs)}")
+    }
+
+    private fun goToMoment(name: String) {
+        val metrics = player.metricsSnapshotMap()
+        val trackKey = trackIdentity(metrics)
+        if (trackKey == null) {
+            feedback("No active track")
+            return
+        }
+        val key = momentPreferenceKey(trackKey, name)
+        if (!momentsPrefs().contains(key)) {
+            feedback("I don't have a saved moment called ${name.trim()} for this track")
+            return
+        }
+        val positionMs = momentsPrefs().getLong(key, 0L).coerceAtLeast(0L)
+        player.seekTo(positionMs)
+        feedback("Back to ${name.trim()}")
+    }
+
+    private fun startLoopFromHere(durationMs: Long) {
+        val metrics = player.metricsSnapshotMap()
+        val trackKey = trackIdentity(metrics)
+        if (trackKey == null) {
+            feedback("No active track to loop")
+            return
+        }
+        val startMs = (metrics["currentPositionMs"] as? Number)?.toLong()?.coerceAtLeast(0L) ?: 0L
+        val durationLimit = (metrics["durationMs"] as? Number)?.toLong()?.takeIf { it > 0L }
+        val requestedEnd = startMs + durationMs.coerceIn(3_000L, 120_000L)
+        val endMs = durationLimit?.let { requestedEnd.coerceAtMost(it) } ?: requestedEnd
+        if (endMs - startMs < 1_000L) {
+            feedback("There isn't enough track left to loop from here")
+            return
+        }
+
+        activeLoopStartMs = startMs
+        activeLoopEndMs = endMs
+        activeLoopTrackKey = trackKey
+        mainHandler.removeCallbacks(loopRunnable)
+        mainHandler.post(loopRunnable)
+        feedback("Looping ${((endMs - startMs) / 1000L).coerceAtLeast(1L)} seconds from here")
+    }
+
+    private val loopRunnable = object : Runnable {
+        override fun run() {
+            if (destroyed) return
+            val startMs = activeLoopStartMs ?: return
+            val endMs = activeLoopEndMs ?: return
+            val expectedTrack = activeLoopTrackKey ?: return
+            val metrics = player.metricsSnapshotMap()
+            if (trackIdentity(metrics) != expectedTrack) {
+                cancelActiveLoop(silent = true)
+                return
+            }
+            val positionMs = (metrics["currentPositionMs"] as? Number)?.toLong() ?: return
+            if (positionMs >= endMs - LOOP_REWIND_GUARD_MS) {
+                player.seekTo(startMs)
+            }
+            mainHandler.postDelayed(this, LOOP_POLL_MS)
+        }
+    }
+
+    private fun cancelActiveLoop(silent: Boolean) {
+        val wasActive = activeLoopStartMs != null
+        activeLoopStartMs = null
+        activeLoopEndMs = null
+        activeLoopTrackKey = null
+        mainHandler.removeCallbacks(loopRunnable)
+        if (!silent) feedback(if (wasActive) "Loop stopped" else "No loop is active")
+    }
+
+    private fun currentPositionMs(): Long {
+        return (player.metricsSnapshotMap()["currentPositionMs"] as? Number)?.toLong()?.coerceAtLeast(0L) ?: 0L
+    }
+
+    private fun trackIdentity(metrics: Map<String, Any?>): String? {
+        val id = metrics["currentTrackId"]?.toString()?.takeIf { it.isNotBlank() }
+        val url = metrics["currentTrackUrl"]?.toString()?.takeIf { it.isNotBlank() }
+        val title = metrics["currentTrackTitle"]?.toString()?.takeIf { it.isNotBlank() }
+        return id ?: url ?: title
+    }
+
+    private fun momentPreferenceKey(trackKey: String, name: String): String {
+        val normalizedName = WaveZeroVoiceCommandParser.normalize(name).ifBlank { "moment" }
+        return "moment.${trackKey.hashCode()}.$normalizedName"
+    }
+
+    private fun momentsPrefs() = getSharedPreferences(MOMENTS_PREFS, Context.MODE_PRIVATE)
+
+    private fun queueWebAcquisition(query: String) {
+        getSharedPreferences(ACQUISITION_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PENDING_ACQUISITION_QUERY, query.trim())
+            .putLong(PENDING_ACQUISITION_AT_MS, System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun formatPosition(positionMs: Long): String {
+        val totalSeconds = (positionMs / 1000L).coerceAtLeast(0L)
+        return "%d:%02d".format(totalSeconds / 60L, totalSeconds % 60L)
     }
 
     private fun findLocalTrack(query: String): NotificationTrackSnapshot? {
@@ -292,7 +452,7 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
     private fun feedback(message: String) {
         updateNotification(message)
         mainHandler.postDelayed({
-            if (!destroyed) updateNotification("Listening for “Wave Zero”")
+            if (!destroyed && !armedForCommand) updateNotification("Listening for “Wave Zero”")
         }, 2_000L)
     }
 
@@ -369,6 +529,14 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
         private const val NOTIFICATION_ID = 7202
         private const val PREFS = "wavezero_handsfree"
         private const val PREF_ENABLED = "enabled"
+        private const val MOMENTS_PREFS = "wavezero_voice_moments"
+        private const val ACQUISITION_PREFS = "wavezero_voice_acquisition"
+        private const val PENDING_ACQUISITION_QUERY = "pending_query"
+        private const val PENDING_ACQUISITION_AT_MS = "pending_at_ms"
+        private const val COMMAND_WINDOW_MS = 7_000L
+        private const val LISTENING_DUCK_PERCENT = 18
+        private const val LOOP_POLL_MS = 120L
+        private const val LOOP_REWIND_GUARD_MS = 100L
 
         fun isEnabled(context: Context): Boolean {
             return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
