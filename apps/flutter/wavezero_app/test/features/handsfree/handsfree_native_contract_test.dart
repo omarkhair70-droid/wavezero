@@ -29,6 +29,26 @@ void main() {
     expect(parser, contains('"شغلي '));
   });
 
+  test('voice layer supports named moments and a bounded repeat-from-here loop', () {
+    final parser = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroVoiceCommandParser.kt',
+    ).readAsStringSync();
+    final service = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroVoiceService.kt',
+    ).readAsStringSync();
+
+    expect(parser, contains('data class SaveMoment'));
+    expect(parser, contains('data class GoToMoment'));
+    expect(parser, contains('data class LoopFromHere'));
+    expect(parser, contains('data object StopLoop'));
+    expect(parser, contains('"احفظ الحته دي باسم '));
+    expect(parser, contains('"كرر"'));
+    expect(service, contains('momentPreferenceKey'));
+    expect(service, contains('activeLoopStartMs'));
+    expect(service, contains('LOOP_POLL_MS'));
+    expect(service, contains('player.seekTo(startMs)'));
+  });
+
   test('voice service controls the existing native WaveZero playback session', () {
     final service = File(
       'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroVoiceService.kt',
@@ -44,7 +64,20 @@ void main() {
     expect(service, contains('AudioManager.ADJUST_RAISE'));
   });
 
-  test('local song request searches MediaStore and plays through the same engine', () {
+  test('wake/listen window ducks media and restores the exact stream level', () {
+    final service = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroVoiceService.kt',
+    ).readAsStringSync();
+
+    expect(service, contains('duckOriginalVolume'));
+    expect(service, contains('LISTENING_DUCK_PERCENT'));
+    expect(service, contains('beginListeningDuck()'));
+    expect(service, contains('restoreListeningDuck()'));
+    expect(service, contains('COMMAND_WINDOW_MS'));
+    expect(service, contains('AudioManager.STREAM_MUSIC'));
+  });
+
+  test('local song request searches MediaStore and queues a Web fallback when absent', () {
     final service = File(
       'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroVoiceService.kt',
     ).readAsStringSync();
@@ -53,5 +86,7 @@ void main() {
     expect(service, contains('NotificationTrackSnapshot.SOURCE_DEVICE'));
     expect(service, contains('player.loadTrack(match)'));
     expect(service, contains('WaveZeroPlaybackSession.showMediaControls(this)'));
+    expect(service, contains('queueWebAcquisition(command.query)'));
+    expect(service, contains('PENDING_ACQUISITION_QUERY'));
   });
 }
