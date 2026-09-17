@@ -68,6 +68,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
   String _currentUrl = '';
   String _pageTitle = '';
   String? _pendingVoiceUrl;
+  String? _voiceAcquisitionQuery;
   int _progress = 0;
   bool _canGoBack = false;
   bool _canGoForward = false;
@@ -113,6 +114,7 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
       if (!mounted || query.isEmpty) return;
       final url = wzResolveWebLocation(query);
       setState(() {
+        _voiceAcquisitionQuery = query;
         _addressController.text = query;
         _currentUrl = url;
         _pageError = null;
@@ -231,9 +233,18 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
         if (!task.isTerminal) return;
         _downloadPoller?.cancel();
         if (task.isSuccessful) {
-          unawaited(_deviceMusicService.scanDeviceAudioLibrary());
+          await _deviceMusicService.scanDeviceAudioLibrary();
+          if (!mounted) return;
+          final playedTitle = await _autoPlayVoiceAcquisition();
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${task.fileName} is ready in WaveZero Device Music.')),
+            SnackBar(
+              content: Text(
+                playedTitle == null
+                    ? '${task.fileName} is ready in WaveZero Device Music.'
+                    : '$playedTitle is ready and playing in WaveZero.',
+              ),
+            ),
           );
         }
       } catch (_) {
@@ -241,6 +252,34 @@ class _WzWebBrowserPageState extends State<WzWebBrowserPage> {
         // polling failure should not cancel a download already in progress.
       }
     });
+  }
+
+  Future<String?> _autoPlayVoiceAcquisition() async {
+    final query = _voiceAcquisitionQuery?.trim();
+    if (query == null || query.isEmpty || !Platform.isAndroid) return null;
+
+    for (var attempt = 0; attempt < 4; attempt += 1) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(milliseconds: 450 + (attempt * 250)));
+        await _deviceMusicService.scanDeviceAudioLibrary();
+      }
+      try {
+        final result = await _handsFreeChannel.invokeMapMethod<Object?, Object?>(
+          'playBestLocalMatch',
+          <String, Object?>{'query': query},
+        );
+        if (result?['played'] == true) {
+          final title = result?['title']?.toString().trim();
+          if (mounted) setState(() => _voiceAcquisitionQuery = null);
+          return title?.isNotEmpty == true ? title : query;
+        }
+      } on MissingPluginException {
+        return null;
+      } on PlatformException {
+        return null;
+      }
+    }
+    return null;
   }
 
   void _updateDownloadRate(WzWebDownloadTask task) {
