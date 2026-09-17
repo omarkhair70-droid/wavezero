@@ -100,4 +100,37 @@ void main() {
     expect(service, contains('queueWebAcquisition(command.query)'));
     expect(service, contains('PENDING_ACQUISITION_QUERY'));
   });
+
+  test('hands-free state is exposed to Flutter and surfaced in Settings', () {
+    final bridge = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroHandsFreeBridge.kt',
+    ).readAsStringSync();
+    final webBridge = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroWebViewBridge.kt',
+    ).readAsStringSync();
+    final controls = File('lib/features/settings/handsfree_controls.dart').readAsStringSync();
+    final settings = File('lib/features/settings/consumer_settings_page.dart').readAsStringSync();
+
+    expect(bridge, contains('const val CHANNEL_NAME = "wavezero/handsfree"'));
+    expect(bridge, contains('"status"'));
+    expect(bridge, contains('"setEnabled"'));
+    expect(webBridge, contains('WaveZeroHandsFreeBridge.register(context, messenger)'));
+    expect(controls, contains("MethodChannel('wavezero/handsfree')"));
+    expect(controls, contains("'Hands-free WaveZero'"));
+    expect(settings, contains("title: 'Voice device'"));
+    expect(settings, contains('WzHandsFreeControls()'));
+  });
+
+  test('WaveZero Web consumes a pending voice acquisition request', () {
+    final bridge = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroHandsFreeBridge.kt',
+    ).readAsStringSync();
+    final webPage = File('lib/features/web/web_browser_page.dart').readAsStringSync();
+
+    expect(bridge, contains('"consumePendingAcquisition"'));
+    expect(bridge, contains('PENDING_ACQUISITION_QUERY'));
+    expect(webPage, contains("'consumePendingAcquisition'"));
+    expect(webPage, contains('_adoptPendingVoiceAcquisition'));
+    expect(webPage, contains('Voice request: searching the Web'));
+  });
 }
