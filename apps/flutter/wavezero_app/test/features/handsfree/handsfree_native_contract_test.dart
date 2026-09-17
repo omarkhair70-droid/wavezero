@@ -77,6 +77,17 @@ void main() {
     expect(service, contains('AudioManager.STREAM_MUSIC'));
   });
 
+  test('speech recognition prefers Android on-device recognition when available', () {
+    final service = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroVoiceService.kt',
+    ).readAsStringSync();
+
+    expect(service, contains('SpeechRecognizer.isOnDeviceRecognitionAvailable(this)'));
+    expect(service, contains('SpeechRecognizer.createOnDeviceSpeechRecognizer(this)'));
+    expect(service, contains('SpeechRecognizer.createSpeechRecognizer(this)'));
+    expect(service, contains('RecognizerIntent.EXTRA_PREFER_OFFLINE'));
+  });
+
   test('local song request searches MediaStore and queues a Web fallback when absent', () {
     final service = File(
       'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroVoiceService.kt',
