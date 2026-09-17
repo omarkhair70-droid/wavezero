@@ -8,6 +8,7 @@ import '../../catalog/catalog_track_manifest.dart';
 import '../../design/wavezero_design_system.dart';
 import '../downloads/downloads_presentation.dart';
 import 'crossfade_controls.dart';
+import 'handsfree_controls.dart';
 import 'legal_licenses_page.dart';
 
 class WzConsumerSettingsPage extends StatelessWidget {
@@ -88,6 +89,13 @@ class WzConsumerSettingsPage extends StatelessWidget {
                 padding: EdgeInsets.fromLTRB(14, 13, 14, 14),
                 child: WzCrossfadeControls(),
               ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const _SettingsGroup(
+            title: 'Voice device',
+            children: [
+              WzHandsFreeControls(),
             ],
           ),
           const SizedBox(height: 20),

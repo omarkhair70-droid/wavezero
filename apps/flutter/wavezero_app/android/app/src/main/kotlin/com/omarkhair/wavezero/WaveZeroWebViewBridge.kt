@@ -29,6 +29,7 @@ class WaveZeroWebViewFactory(
     private val messenger: BinaryMessenger,
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     init {
+        WaveZeroHandsFreeBridge.register(context, messenger)
         MethodChannel(messenger, WAVEZERO_WEB_DOWNLOAD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "enqueueDirectAudio" -> {
