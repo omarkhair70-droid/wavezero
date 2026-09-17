@@ -51,7 +51,9 @@ class WaveZeroHandsFreeTileService : TileService() {
         qsTile?.apply {
             state = if (enabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
             label = "WaveZero voice"
-            subtitle = if (enabled) "Listening" else "Off"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                subtitle = if (enabled) "Listening" else "Off"
+            }
             updateTile()
         }
     }
