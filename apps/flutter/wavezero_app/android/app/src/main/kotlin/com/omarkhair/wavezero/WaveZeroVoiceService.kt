@@ -31,6 +31,7 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
     private var destroyed = false
     private var armedForCommand = false
     private var lastTranscript: String? = null
+    private var recognitionAvailable = true
 
     private val player by lazy { WaveZeroPlaybackSession.getOrCreate(applicationContext) }
     private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
@@ -38,10 +39,8 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            stopSelf()
-            return
-        }
+        recognitionAvailable = SpeechRecognizer.isRecognitionAvailable(this)
+        if (!recognitionAvailable) return
         recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
     }
 
@@ -56,7 +55,7 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
             else -> return START_NOT_STICKY
         }
 
-        if (!hasRecordAudioPermission()) {
+        if (!hasRecordAudioPermission() || !recognitionAvailable) {
             setEnabled(false)
             stopSelf()
             return START_NOT_STICKY
@@ -324,7 +323,7 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
-            .addAction(Notification.Action.Builder(null, "Stop", stopIntent).build())
+            .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "Stop", stopIntent).build())
             .build()
     }
 
@@ -386,7 +385,7 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
         }
 
         fun stop(context: Context) {
-            context.startService(Intent(context, WaveZeroVoiceService::class.java).setAction(ACTION_STOP))
+            context.stopService(Intent(context, WaveZeroVoiceService::class.java))
         }
     }
 }
