@@ -45,7 +45,18 @@ class WaveZeroVoiceService : Service(), RecognitionListener {
         createNotificationChannel()
         recognitionAvailable = SpeechRecognizer.isRecognitionAvailable(this)
         if (!recognitionAvailable) return
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this).also { it.setRecognitionListener(this) }
+        recognizer = createRecognizer().also { it.setRecognitionListener(this) }
+    }
+
+    private fun createRecognizer(): SpeechRecognizer {
+        return if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        ) {
+            SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+        } else {
+            SpeechRecognizer.createSpeechRecognizer(this)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
