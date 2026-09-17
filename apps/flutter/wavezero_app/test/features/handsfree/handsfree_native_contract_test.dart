@@ -117,6 +117,7 @@ void main() {
     expect(webBridge, contains('WaveZeroHandsFreeBridge.register(context, messenger)'));
     expect(controls, contains("MethodChannel('wavezero/handsfree')"));
     expect(controls, contains("'Hands-free WaveZero'"));
+    expect(controls, contains('Duration(milliseconds: 450)'));
     expect(settings, contains("title: 'Voice device'"));
     expect(settings, contains('WzHandsFreeControls()'));
   });
@@ -132,5 +133,22 @@ void main() {
     expect(webPage, contains("'consumePendingAcquisition'"));
     expect(webPage, contains('_adoptPendingVoiceAcquisition'));
     expect(webPage, contains('Voice request: searching the Web'));
+  });
+
+  test('voice-acquired downloads can rescan and auto-play the matching local track', () {
+    final bridge = File(
+      'android/app/src/main/kotlin/com/omarkhair/wavezero/WaveZeroHandsFreeBridge.kt',
+    ).readAsStringSync();
+    final webPage = File('lib/features/web/web_browser_page.dart').readAsStringSync();
+
+    expect(bridge, contains('"playBestLocalMatch"'));
+    expect(bridge, contains('MediaStore.Audio.Media.EXTERNAL_CONTENT_URI'));
+    expect(bridge, contains('player.loadTrack(match)'));
+    expect(bridge, contains('player.play()'));
+    expect(webPage, contains('_voiceAcquisitionQuery'));
+    expect(webPage, contains('_autoPlayVoiceAcquisition'));
+    expect(webPage, contains("'playBestLocalMatch'"));
+    expect(webPage, contains('scanDeviceAudioLibrary()'));
+    expect(webPage, contains('is ready and playing in WaveZero'));
   });
 }
