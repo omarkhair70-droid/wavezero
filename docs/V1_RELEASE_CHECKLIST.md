@@ -142,6 +142,7 @@ Use a real Samsung phone on the Android version intended for first release testi
 - [ ] Play, pause, seek forward/back, and resume.
 - [ ] Lock the phone; confirm lock-screen/media controls identify WaveZero and the current track.
 - [ ] From the media notification/system media panel: Pause, Play, Next, and Previous.
+- [ ] Tap the notification card/track title and the Samsung media panel: WaveZero opens the existing app task, retains the current track and position, and does not duplicate the Flutter activity.
 - [ ] While paused, press Next/Previous from media controls and confirm playback stays paused.
 - [ ] During a buffering/start transition, rapidly tap Play/Pause and confirm the final intent wins.
 - [ ] Background WaveZero for at least one minute; playback and controls remain healthy.
