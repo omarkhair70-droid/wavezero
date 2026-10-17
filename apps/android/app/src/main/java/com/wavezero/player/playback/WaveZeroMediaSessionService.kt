@@ -93,6 +93,7 @@ class WaveZeroMediaSessionService : MediaSessionService() {
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(title)
             .setContentText(subtitle)
+            .setContentIntent(WaveZeroAppLaunchIntent.pendingIntent(this))
             .setSubText(snapshot["currentTrackAlbum"] as? String)
             .setOngoing(isPlaying)
             .setShowWhen(false)
