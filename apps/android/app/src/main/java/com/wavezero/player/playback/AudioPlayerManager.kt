@@ -94,9 +94,10 @@ class AudioPlayerManager(
     private var prebufferPlayer: ExoPlayer = buildPrebufferPlayer()
 
     val mediaSession: MediaSession? = if (enableMediaSession) {
-        MediaSession.Builder(appContext, player)
+        val sessionBuilder = MediaSession.Builder(appContext, player)
             .setId(MEDIA_SESSION_ID)
-            .build()
+        WaveZeroAppLaunchIntent.pendingIntent(appContext)?.let { sessionBuilder.setSessionActivity(it) }
+        sessionBuilder.build()
     } else {
         null
     }
